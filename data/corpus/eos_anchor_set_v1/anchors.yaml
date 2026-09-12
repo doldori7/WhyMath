@@ -1,0 +1,221 @@
+# EOS 검증 앵커 세트 v1 — G0 동결본 (1급 등록 · EOS-56)
+#
+# 지위
+# ----
+# 12월 내부 검증(EOS 전환)의 **측정 조인 축** 정본이다. 앵커 = "성취기준 코드의 동결된
+# 묶음"이며, 원자·오개념·문항·op-code 자산은 전부 이 코드 축으로 앵커에 귀속된다.
+#
+# 동결 근거
+# ---------
+#   · 게이트: G-eos-g0-verification-design-freeze (2026-08-30 Kiki 서명 clear)
+#   · 설계 정본: docs/standards/eos_verification_design_v1.md §1-1(앵커 6개 확정)·§2(앵커 표)
+#   · 실측 근거: docs/reviews/eos_anchor_asset_audit_2026-09.md (EOS-52 자산 실사)
+#
+# 단방향 관례 (CLAUDE.md "YAML=소스 · DB=산출물")
+# ----------------------------------------------
+# 이 파일이 소스다. DB·리포트·감사 스크립트는 전부 이 파일을 **읽기만** 한다. 역방향
+# (DB에서 앵커 정의를 되읽어 이 파일을 갱신)은 금지 — 이중 진실 원천이 된다.
+#
+# scope 축 — 왜 8건이 실려 있는가
+# --------------------------------
+# G0에서 확정된 12월 검증 대상은 **6개(A1~A6)**다. A7·A8은 2027-01 이월인데도 여기 남기는
+# 이유는, 이월이 *데이터*여야 하기 때문이다 — 목록에서 지우면 "왜 대학 앵커가 빠졌는가"의
+# 근거(전환 설계서 옵션 ② 명시 손실: 대학 범위 자동검증 한계선의 12월 확인)가 코드·문서
+# 어디에도 남지 않고, EOS-52 실사 문서(8앵커 기준)의 재현도 깨진다.
+#   december_2026     — 12월 검증 대상 (6건 · G0 확정)
+#   deferred_2027_01  — 2027-01 이월 (2건 · 오개념·문항·기계판정 채널이 전부 0에서 시작)
+#
+# 필드
+# ----
+#   codes     — 동결 성취기준 코드셋. 학교급은 2022 개정(data/corpus/standards_v1),
+#               대학은 와이매스 자체작성(data/corpus/standards_university_v1).
+#   excluded  — 인접 코드를 **왜 뺐는지** 명시(재현 가능성). 경계가 문서에만 있으면
+#               6개월 뒤 아무도 A4에서 인수분해를 뺀 이유를 복원할 수 없다.
+#   baseline  — 기준선 앵커(A3·A4·중등). F-Ⅰ(HIT 중앙값 > 12분/CU) 판정 대상.
+#   depth     — 깊이 앵커(A4 단독). 폐쇄루프 완결 판정 대상.
+#   production_cu / review_cu — §2 표의 생산·인간 검수 CU 물량(이월분은 null).
+#
+# 무결성 게이트
+# -------------
+# codes 전건이 성취기준 코퍼스에 실재하는지 CI가 매 PR 검사한다(코드 소멸 시 적색):
+#   tests/backend/l1/test_eos_anchor_registry.py
+# 트리거 배선: .github/workflows/ci.yml 의 backend 경로 필터가 `data/corpus/` 를 포함하므로
+# 성취기준 코퍼스 단독 수정 PR에서도 이 검사가 실행된다(게이트가 자기 입력 변경에 깨어난다).
+#
+# 소비 지점 — 집행 별항 (EOS-56 acceptance ③)
+# -------------------------------------------
+# "정본화 ≠ 집행"이므로, 이 파일을 *실제로 읽는 코드*를 여기 열거한다. 등록만 해 두고 아무도
+# 읽지 않으면 하드코딩 상수가 사실상의 정본으로 남는다.
+#
+#   [착지] scripts/analysis/eos_anchor_asset_audit.py — ANCHOR_DEFS 상수 소멸. 이 파일을 읽어
+#          8앵커를 감사한다(EOS-52 실사 문서 재현성 유지). 되살아남 차단 =
+#          tests/backend/l1/test_eos_anchor_registry.py::TestAuditScriptReadsTheRegistry
+#   [착지] whymath_backend.l1.standards.anchor_registry — 백엔드 읽기 API·판정 CLI(exit 0/1)
+#   [착지] tests/backend/harness/test_golden_benchmark.py — 골든 벤치마크의 ANCHOR_IDS 6종이
+#          이 등록의 december_2026 집합과 일치하는지 동결(이월 판정도 scope 필드로 한다)
+#
+#   [후속] whymath_backend.harness.golden_benchmark.ANCHOR_IDS — 아직 모듈 상수다. 지금은 위
+#          동결 테스트가 드리프트를 막지만, 런타임 파생으로 바꾸면 상수 자체가 사라진다.
+#          import 시점 파일 I/O를 들이는 판단이 필요해 별건으로 남긴다(EOS-60 골든 계약 소유).
+#   [후속] 생산 배치 — 앵커별 생성·검수·집계를 도는 배치는 아직 없다. 만들어질 때 앵커 목록을
+#          다시 하드코딩하지 말고 이 등록을 읽는다. 좌석: EOS-58(앵커 E2E 생성 증명)·
+#          EOS-64(앵커 E2E 야간 골든)·EOS-61(검증 스코어카드 집계)·MISC-07(기계판정 채널).
+
+schema_version: 1
+registry_id: eos_anchor_set_v1
+frozen_at: "2026-08-30"
+frozen_by_gate: G-eos-g0-verification-design-freeze
+design_doc: docs/standards/eos_verification_design_v1.md
+mapping_axis: "성취기준 코드 단일 축 (2022 개정 학교급 + 와이매스 자체작성 대학)"
+standards_sources:
+  # 앵커 코드가 실재해야 하는 코퍼스 — 무결성 게이트의 조회 대상.
+  - path: data/corpus/standards_v1/standards.json
+    curriculum_revision: "2022 개정"   # 895행은 2022·2015 혼재 — 앵커는 2022만 인정
+  - path: data/corpus/standards_university_v1/standards.json
+    curriculum_revision: null          # 자체작성(개정 축 없음)
+scopes:
+  december_2026: "12월 내부 검증 대상 — G0 확정 6앵커"
+  deferred_2027_01: "2027-01 이월 — 전환 설계서 옵션 ② 명시 손실(대학 범위 자동검증 한계선)"
+
+anchors:
+- id: A1
+  title: 초3 분수의 이해와 크기 비교
+  scope: december_2026
+  school_level: 초등
+  grade_hint: 초3
+  role: 폭(언어·그림 모델)
+  production_cu: 60
+  review_cu: 25
+  baseline: false
+  depth: false
+  codes:
+  - '[4수01-09]'
+  - '[4수01-10]'
+  - '[4수01-11]'
+  excluded:
+    '[4수01-12]': 소수 한 자리 수 — 별도 소단원(소수)
+    '[4수01-15]': 분모 같은 분수 덧뺄셈 — 별도 소단원(연산)
+  note: 2022 개정은 3~4학년군 단위(초3 구분 없음) — 도입·종류·크기비교 3코드
+- id: A2
+  title: 초6 비와 비율
+  scope: december_2026
+  school_level: 초등
+  grade_hint: 초6
+  role: 폭(실생활 맥락)
+  production_cu: 60
+  review_cu: 25
+  baseline: false
+  depth: false
+  codes:
+  - '[6수02-02]'
+  - '[6수02-03]'
+  excluded:
+    '[6수02-01]': 대응 관계 — 별도 단원
+    '[6수02-04]': 비례식 — 초6 별도 단원(비례식과 비례배분)
+    '[6수02-05]': 비례배분 — 초6 별도 단원(비례식과 비례배분)
+  note: 비([6수02-02])+비율과 백분율([6수02-03])만 — 앵커명 '비와 비율' 문언 준수
+- id: A3
+  title: 중2 경우의 수와 확률
+  scope: december_2026
+  school_level: 중등
+  grade_hint: 중2
+  role: 폭·기준선(비대수 — SymPy 불통 검증 대안)
+  production_cu: 60
+  review_cu: 25
+  baseline: true
+  depth: false
+  codes:
+  - '[9수04-05]'
+  - '[9수04-06]'
+  excluded: {}
+  note: 2022 개정 '자료와 가능성' 코드 — 2015 개정 [9수05-04/05]는 미사용
+- id: A4
+  title: 중3 이차방정식 (깊이 앵커)
+  scope: december_2026
+  school_level: 중등
+  grade_hint: 중3
+  role: 깊이★ 폐쇄루프
+  production_cu: 150
+  review_cu: 60
+  baseline: true
+  depth: true
+  codes:
+  - '[9수02-20]'
+  excluded:
+    '[9수02-19]': 다항식의 곱셈과 인수분해 — 선수 소단원(별도 코드)
+    '[9수02-21]': 이차함수의 개념 — 이차함수 단원
+    '[9수02-22]': 이차함수의 그래프 — 이차함수 단원
+  note: 2022 개정 중3 이차방정식은 단일 코드
+- id: A5
+  title: 고1 이차함수의 최대·최소
+  scope: december_2026
+  school_level: 고등
+  grade_hint: 고1
+  role: 폭(그래프·조건 누락)
+  production_cu: 60
+  review_cu: 25
+  baseline: false
+  depth: false
+  codes:
+  - '[10공수1-02-06]'
+  - '[10기수1-02-05]'
+  excluded:
+    '[10공수1-02-04]': 이차방정식과 이차함수의 관계 — 인접 소단원
+    '[10공수1-02-05]': 이차함수의 그래프와 직선 — 인접 소단원
+    '[10공수1-02-11]': 이차부등식 — 별도 소단원
+  note: 공통수학1+기본수학1(병행과목) — sub_domain '이차함수의 최대, 최소' 전수
+- id: A6
+  title: 고2 도함수의 활용
+  scope: december_2026
+  school_level: 고등
+  grade_hint: 고2
+  role: 폭(정답 유일성·다단계)
+  production_cu: 60
+  review_cu: 25
+  baseline: false
+  depth: false
+  codes:
+  - '[12미적Ⅰ-02-05]'
+  - '[12미적Ⅰ-02-06]'
+  - '[12미적Ⅰ-02-07]'
+  - '[12미적Ⅰ-02-08]'
+  - '[12미적Ⅰ-02-09]'
+  - '[12미적Ⅰ-02-10]'
+  excluded:
+    '[12미적Ⅰ-02-01~04]': 미분계수·미분가능성·도함수 — '미분계수와 도함수' 소단원
+    '[12심수Ⅰ05-19]': 심화수학Ⅰ 도함수의 활용 — 진로선택 과목(앵커는 미적분Ⅰ)
+  note: 미적분Ⅰ '도함수의 활용' 6코드(접선·평균값·증감극값·개형·방부등식·속도)
+- id: A7
+  title: 대학 미적분 ε-δ 극한·연속
+  scope: deferred_2027_01
+  school_level: 대학
+  grade_hint: 대학(미적분학 I)
+  role: 대학 범위 자동검증 한계선 — 2027-01 이월
+  production_cu: null
+  review_cu: null
+  baseline: false
+  depth: false
+  codes:
+  - '[CALC1-01-02]'
+  - '[CALC1-01-03]'
+  excluded:
+    '[CALC1-01-04]': 무한대 극한 — 앵커 문언(ε-δ 극한·연속) 밖
+    해석학 I: ε-δ 연속을 다루나 별도 과목 — 앵커는 미적분학
+  note: standards_university_v1(와이매스 자체작성) 미적분학 I — ε-δ 극한 정의+연속 2코드
+- id: A8
+  title: 대학 선형대수 일차독립과 기저
+  scope: deferred_2027_01
+  school_level: 대학
+  grade_hint: 대학(선형대수학 I)
+  role: 대학 범위 자동검증 한계선 — 2027-01 이월
+  production_cu: null
+  review_cu: null
+  baseline: false
+  depth: false
+  codes:
+  - '[LINA1-04-02]'
+  - '[LINA1-04-03]'
+  excluded:
+    '[LINA1-04-01]': 부분공간 — 인접 소단원
+    '[LINA1-04-04]': 차원(dimension) — 인접 소단원(앵커 문언은 일차독립·기저)
+  note: standards_university_v1 선형대수학 I — 일차독립+기저 2코드

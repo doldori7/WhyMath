@@ -132,6 +132,45 @@ class TestBrief:
         assert "abc1234 merge: 953m1e 흡수" in text
         assert "미해결 장기 미머지 브랜치" not in text, "결정 대기 0건인데 강조 섹션이 뜨면 안 된다"
 
+    def test_partial_landing_hint_is_shown_under_isolated(self):
+        """test_부분_착지_단서는_고립_줄_아래에_표기 (HARN-37 ②)
+
+        흡수 흔적이 있는데 전건은 아닌 브랜치를 ported로 부르면 잔여 코드가 '결정 불요'
+        뒤에 숨고(오탐), 흔적을 통째로 버리면 사람이 같은 조사를 다시 한다. 그래서 status는
+        고립으로 두되 단서를 함께 보여 준다.
+        """
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                (
+                    "claude/whymath-partial-abc123",
+                    9.0,
+                    12,
+                    "isolated",
+                    "",
+                    "1/3 파일 · abc1234 부분 회수",
+                )
+            ],
+        )
+        assert "부분 착지: 1/3 파일 · abc1234 부분 회수" in text
+        assert "잔여분 확인 필요" in text
+        assert "이미 포팅됨" not in text, "부분 착지를 '결정 불요'로 부르면 고립이 숨는다"
+
+    def test_five_tuple_callers_still_render(self):
+        """test_구_5튜플_호출부도_그대로_렌더 — 필드 추가가 기존 소비자를 깨지 않는다."""
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[("claude/whymath-legacy-tuple", 9.0, 3, "isolated", "")],
+        )
+        assert "claude/whymath-legacy-tuple" in text
+        assert "부분 착지" not in text
+
     def test_active_classification_shown_as_informational(self):
         """test_진행중_분류는_참고_섹션에_정보성으로_표기"""
         text = report.render_brief(
@@ -146,10 +185,13 @@ class TestBrief:
         assert "claude/whymath-active-example" in text
         assert "미해결 장기 미머지 브랜치" not in text
 
-    def test_mixed_classifications_leave_only_unresolved_highlighted(self):
-        """test_3분류가_섞이면_미해결만_강조_섹션에_남는다
+    def test_mixed_classifications_leave_only_isolated_highlighted(self):
+        """test_4분류가_섞이면_고립만_강조_섹션에_남는다
 
-        미해결·포팅됨·진행중이 섞인 브리핑에서 Kiki가 실제로 훑어야 하는 줄만 상단에 뜬다.
+        고립·PR제출·포팅됨·진행중이 섞인 브리핑에서 Kiki가 실제로 *조치*해야 하는 줄만
+        상단에 뜬다(HARN-47). 이 분리 전에는 고립과 PR제출이 한 덩어리로 "Kiki 결정
+        필요"였고, 실측 결과 그 덩어리의 61%가 이미 PR·처분 라벨을 가진 항목이었다 —
+        경고가 이미 결정된 것을 다시 결정하라고 요구하면 목록 전체가 무시된다.
         """
         text = report.render_brief(
             _backlog(),
@@ -157,20 +199,101 @@ class TestBrief:
             "branch-x",
             date(2026, 7, 20),
             stale_branches=[
-                ("claude/whymath-unresolved-example", 27.0, 513, "unresolved", ""),
+                ("claude/whymath-isolated-example", 27.0, 513, "isolated", ""),
+                ("claude/whymath-prfiled-example", 12.0, 7, "pr_filed", "PR #846"),
                 ("claude/whymath-ported-example", 6.0, 48, "ported", "def5678 merge: 흡수"),
                 ("claude/whymath-active-example", 7.0, 44, "active", ""),
             ],
         )
-        assert "미해결 장기 미머지 브랜치 (Kiki 결정 필요) — 1건" in text
-        assert "claude/whymath-unresolved-example" in text
+        assert "고립 브랜치 — PR로 노출된 적 없음" in text and "1건" in text
+        assert "claude/whymath-isolated-example" in text
+        # PR 제출분은 강조 섹션이 아니라 참고 섹션에, **번호와 함께** 나와야 한다.
+        assert "PR 제출됨" in text and "claude/whymath-prfiled-example" in text
+        assert "PR #846" in text
         assert "이미 포팅됨" in text and "claude/whymath-ported-example" in text
         assert "타 세션 진행중" in text and "claude/whymath-active-example" in text
 
-    def test_legacy_4tuple_input_treated_as_all_unresolved(self):
-        """test_4튜플_구버전_입력은_전부_미해결로_취급
+    def test_pr_filed_is_not_counted_as_isolated(self):
+        """test_PR제출분은_고립_건수에_들어가지_않는다
 
-        하위호환 — status·evidence 없는 기존 3-튜플 호출부는 unresolved로 안전 폴백.
+        변별력의 핵심 축. 두 분류가 다른 *섹션*에 나오는 것만으로는 부족하다 — 고립
+        건수 자체가 오염되면 "고립 7건"이 "고립 18건"으로 부풀고 진짜 고립이 다시
+        소음에 묻힌다. 건수를 직접 붙든다.
+        """
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                ("claude/iso-1", 27.0, 5, "isolated", ""),
+                ("claude/pr-1", 12.0, 7, "pr_filed", "PR #846"),
+                ("claude/pr-2", 13.0, 9, "pr_filed", "PR #847"),
+            ],
+        )
+        assert "고립 브랜치 — PR로 노출된 적 없음 (회수 또는 삭제 필요) — 1건" in text
+        assert "PR 제출됨(열림 확인) — 처분은 해당 PR에서 — 2건" in text
+
+    def test_pr_closed_gets_action_required_framing_like_isolated(self):
+        """test_PR닫힘_미머지는_고립과_같은_강조_위계로_뜬다 (HARN-78)
+
+        PR이 있었다는 사실이 처분 완료를 뜻하지 않는다 — `pr_closed`는 `pr_filed`의
+        "참고, 결정 불요" 섹션이 아니라 `isolated`처럼 행동을 요구하는 섹션에 나와야
+        한다. 재현 대상: PR #967(closed·merged=false)이 `pr_filed`로 뭉개져 "결정
+        불요"처럼 보였던 사고.
+        """
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                (
+                    "gates/deploy-environment-approval",
+                    26.0,
+                    3,
+                    "pr_closed",
+                    "PR #967 닫힘(미머지)",
+                ),
+            ],
+        )
+        assert "PR 닫힘(미머지)" in text and "재작업 또는 폐기 판단 필요" in text
+        assert "gates/deploy-environment-approval" in text
+        assert "PR #967 닫힘(미머지)" in text
+        # '처분은 해당 PR에서'(결정 불요 프레이밍)에 섞이면 안 된다.
+        assert "처분은 해당 PR에서" not in text
+
+    def test_pr_filed_header_says_unconfirmed_when_state_lookup_failed(self):
+        """test_상태_조회_실패시_문구가_확인됨이_아니라_미확인으로_바뀐다 (HARN-78)
+
+        성공(상태 확인됨)과 실패(미확인)가 다른 글자를 내야 한다 — 실패했는데도
+        "처분은 해당 PR에서"(마치 열림이 확인된 것처럼)라고 말하면 열려 있다고
+        가정하는 것과 같은 오판정이다(모른다 ≠ 아니다).
+        """
+        text = report.render_brief(
+            _backlog(),
+            [],
+            "branch-x",
+            date(2026, 7, 20),
+            stale_branches=[
+                ("claude/pr-1", 12.0, 7, "pr_filed", "PR #846"),
+            ],
+            pr_state_lookup_ok=False,
+            pr_state_lookup_error="NoTokenError: GITHUB_TOKEN/GH_TOKEN 미설정",
+        )
+        assert "상태 미확인" in text
+        assert "NoTokenError" in text
+        assert "PR 번호로 열림/닫힘을 확인하라" in text
+        assert "처분은 해당 PR에서" not in text
+        assert "claude/pr-1" in text and "PR #846" in text
+
+    def test_legacy_3tuple_input_falls_back_to_undetermined(self):
+        """test_3튜플_구버전_입력은_고립_여부_미판정으로_취급
+
+        하위호환 — status·evidence 없는 기존 3-튜플 호출부는 unresolved로 안전 폴백한다.
+        HARN-47 이후 unresolved의 의미는 "PR 대조를 수행하지 못해 고립 여부를 모른다"이며,
+        구버전 입력에는 PR 정보가 애초에 없으므로 정확히 그 상태다. **고립으로 승격하지
+        않는다** — 모르는 것을 아는 것처럼 말하면 측정 실패가 경보로 위장된다.
         """
         text = report.render_brief(
             _backlog(),
@@ -179,7 +302,8 @@ class TestBrief:
             date(2026, 7, 20),
             stale_branches=[("claude/old-orphan", 9.3, 42)],
         )
-        assert "미해결 장기 미머지 브랜치 (Kiki 결정 필요) — 1건" in text
+        assert "미머지 브랜치 (PR 조회 실패로 고립 여부 미판정) — 1건" in text
+        assert "고립 브랜치" not in text
 
     def test_no_stale_branches_omits_warning(self):
         """test_장기_미머지_브랜치_없으면_경고_생략"""

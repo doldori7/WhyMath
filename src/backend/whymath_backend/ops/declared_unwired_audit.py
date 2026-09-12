@@ -845,6 +845,11 @@ _CONTENT_RIGHT = (
 )
 _INTERNAL_TOOL = "by-design:내부 도구·하네스 소비 표면 — 학생 클라이언트 대상이 아니다"
 
+_HUMAN_REVIEW_TOOL = (
+    "by-design:사람이 대면 실행하는 검수 도구 — CI가 부를 수 있는 종류가 아니다. 자동 실행은 "
+    "사람 판정 없는 검수 이벤트를 만들어 HIT를 오염시킨다(측정하려는 대상이 인간 개입 시간 "
+    "자체이므로, 무인 실행은 0에 가까운 가짜 표본이 된다)"
+)
 _BATCH_GENERATOR = (
     "by-design:코퍼스 생성·가공 배치 — 운영자가 입력·비용·판단을 쥐고 손으로 돌리는 것이 "
     "정상이다. CI 상시 실행은 LLM 비용을 매 PR마다 태우는 설계가 된다"
@@ -917,18 +922,15 @@ _MANIFEST: dict[str, dict[str, str]] = {
         # + `data/auth_sessions_api.dart`)과 401 자동 갱신 인터셉터(`core/auth_interceptor.dart`
         # + `core/token_refresh_api.dart`)를 배선해 5개 라우트 전부 dart 호출로 reached 전환됐다.
         # 항목을 남겨 두면 stale-waiver로 잡히므로 제거한다.
-        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다.
-        # retake·school-progress는 이미 테스트가 호출해 reached — 나머지 4종만 잔존)
-        # SEC-24(원 SEC-15) 이식 메모: 원 브랜치는 이 4건을 "PB-04 도달 관측 테스트가 6경로를
-        # 전부 호출하므로 stale"이라며 제거했으나, PB-04(`api/_l6_mode_reach_state.py`)는 main에
-        # 미착지라 그 전제가 성립하지 않는다. `test_gating.py`가 6경로를 다 부르긴 하지만
-        # 수신자가 `_client([...]).get(...)` 형태(호출식)라 감사기의 리터럴 정규식
-        # (`_TEST_CLIENT_CALL` — 식별자 수신자만 매칭)이 못 본다 — 실측으로 여전히 unclassified.
-        # 따라서 면제를 유지한다(제거하면 감사 exit 1).
-        "GET /v1/gating/gifted": _INTERNAL_TOOL,
-        "GET /v1/gating/metacognition": _INTERNAL_TOOL,
-        "GET /v1/gating/suneung": _INTERNAL_TOOL,
-        "GET /v1/gating/thinking": _INTERNAL_TOOL,
+        # 내부 도구·게이팅 축(정책 판정 표면 — 학생 클라이언트가 직접 조회할 화면이 아직 없다).
+        # MOB-18 회수(2026-09-07): **면제 4건을 제거했다.** 위 SEC-24 이식 메모가 면제 유지의
+        # 근거로 삼은 전제("PB-04가 main에 미착지")가 이 회수로 해소됐다 — `api/
+        # _l6_mode_reach_state.py`가 착지하고 `test_l6_mode_reach_observability.py`가 6경로를
+        # `client.get("/v1/gating/...")` 형태(식별자 수신자)로 호출하므로 감사기의
+        # `_TEST_CLIENT_CALL` 정규식이 실제로 본다. 실측으로 확인했다: 이식 직후 감사가
+        # 이 4건을 stale-waiver로 잡아 exit 1을 냈고(추론이 아니라 도구 출력), 제거 후 exit 0이다.
+        # gifted·metacognition·suneung·thinking 4종이 여기 있었다(retake·school-progress는
+        # 이전부터 test_gating.py 경유로 reached였다).
         # 스킬 축 숙달 곡선 — api/me.py docstring이 "Phase 2b-2"로 명시(개념 축 /v1/me/mastery는
         # 이미 reached·스킬 축은 아직 화면 미착수)
         "GET /v1/me/skill-mastery": (
@@ -991,6 +993,36 @@ _MANIFEST: dict[str, dict[str, str]] = {
     # ── 축 4. harness/ops CLI ───────────────────────────────────────────
     AXIS_CLI: {
         # 코퍼스 생성·가공 배치 — 운영자 실행이 정상(입력·비용·판단이 사람 몫)
+        "harness.binomial_distribution_batch": _BATCH_GENERATOR,
+        "harness.calculus1_integral_batch": _BATCH_GENERATOR,
+        "harness.calculus2_trig_integral_batch": _BATCH_GENERATOR,
+        "harness.combination_binomial_batch": _BATCH_GENERATOR,
+        "harness.complex_number_arithmetic_batch": _BATCH_GENERATOR,
+        "harness.conic_section_focus_batch": _BATCH_GENERATOR,
+        "harness.coordinate_geometry_batch": _BATCH_GENERATOR,
+        "harness.discrete_ev_batch": _BATCH_GENERATOR,
+        "harness.elementary_addsub_batch": _BATCH_GENERATOR,
+        "harness.elementary_area_measure_batch": _BATCH_GENERATOR,
+        "harness.elementary_division_remainder_batch": _BATCH_GENERATOR,
+        "harness.elementary_gcd_lcm_batch": _BATCH_GENERATOR,
+        "harness.elementary_rounding_batch": _BATCH_GENERATOR,
+        "harness.elementary_volume_measure_batch": _BATCH_GENERATOR,
+        "harness.highschool_quotient_rule_batch": _BATCH_GENERATOR,
+        "harness.linear_inequality_system_batch": _BATCH_GENERATOR,
+        "harness.matrix_ops_batch": _BATCH_GENERATOR,
+        "harness.measurement_unit_conversion_batch": _BATCH_GENERATOR,
+        "harness.middle_function_batch": _BATCH_GENERATOR,
+        "harness.permutation_combination_batch": _BATCH_GENERATOR,
+        "harness.polynomial_arithmetic_batch": _BATCH_GENERATOR,
+        "harness.polynomial_factoring_batch": _BATCH_GENERATOR,
+        "harness.probability_law_batch": _BATCH_GENERATOR,
+        "harness.quad_ineq_batch": _BATCH_GENERATOR,
+        "harness.radian_conversion_batch": _BATCH_GENERATOR,
+        "harness.sample_mean_distribution_batch": _BATCH_GENERATOR,
+        "harness.sequence_sigma_batch": _BATCH_GENERATOR,
+        "harness.university_calc1_batch": _BATCH_GENERATOR,
+        "harness.university_calc1_chain_quotient_batch": _BATCH_GENERATOR,
+        "harness.vector_operations_batch": _BATCH_GENERATOR,
         "harness.conceptual_count_mc_batch": _BATCH_GENERATOR,
         "harness.finite_probability_batch": _BATCH_GENERATOR,
         "harness.misconception_mc_batch": _BATCH_GENERATOR,
@@ -1017,8 +1049,37 @@ _MANIFEST: dict[str, dict[str, str]] = {
         ),
         "harness.root_aggregate_batch": _BATCH_GENERATOR,
         "harness.reviewer_sample_package": _BATCH_GENERATOR,
+        # 검수 세션(EOS-78) — 판정을 받으며 HIT 타이머를 생산한다. `reviewer_sample_package`
+        # (표본 *제시*)와 달리 사람의 판정을 되받는 대면 도구라 배치 사유를 빌려 쓰지 않는다.
+        "harness.review_session": _HUMAN_REVIEW_TOOL,
+        # MP-05(2026-09-07): 카나리 구간 절단 — 입력이 *특정 회차의 사이드카 4종*(대장·genlog·
+        # 코퍼스·검수 큐)이라 상주 입력이 없다. 회차를 돌려야 생기는 파일들이고(레포에
+        # 상주하지 않는다), 산출은 그 회차를 검수하려는 사람의 큐다. CI가 매 커밋마다 돌릴
+        # 성질이 아니다 — 대상 회차 없이 돌리면 도구가 측정 실패(exit 1)로 거부한다.
+        # 판정 로직(적재 순서 계약·canary_size 대장 판독·미해결 3종 구분·review_session 형식
+        # 호환)은 backend 잡이 수집하는 tests/backend/harness/test_canary_slice.py가 상시
+        # 검증한다 — "안 도는 코드"가 아니라 "회차를 검수할 때 사람이 돌리는 절단 도구"다.
+        "harness.canary_slice": (
+            "by-design:회차 사이드카 4종이 입력인 카나리 구간 절단 도구(MP-05) — 상주 입력이 "
+            "없고, 카나리를 검수하려는 시점에 운영자가 돌려 review_session에 먹일 큐를 만든다"
+        ),
         # 운영 집계 배치 — COLLAB-03(done)이 신설한 일별 학습지표 롤업 실행기
         "harness.learning_metrics_rollup_cli": _OPERATIONS_BATCH,
+        # OPS-56(2026-09-11): 주간 KPI 6종 집계 cron — `ci_executed_modules()`가 `.github/
+        # workflows/ci.yml`만 스캔하는데(함수 docstring 참조), 이 모듈은 **별도** 워크플로
+        # `.github/workflows/weekly-metrics.yml`이 `python -m whymath_backend.ops.
+        # weekly_metrics_report`로 실행한다 — 탐지기의 스캔 범위 밖일 뿐 실제 미배선이
+        # 아니다(harness.learning_metrics_rollup_cli의 실 배치 실행과 달리 이쪽은 실제로
+        # 매주 스케줄 발화가 있다). 그 별도 워크플로의 배선 실재성(cron 값·fail-open 아님·
+        # 최소 경보)은 tests/infra/test_weekly_metrics_cron_wiring.py가 결함 주입 8종으로
+        # 상시 검증한다 — "안 도는 코드"가 아니라 "이 축이 보지 않는 워크플로 파일에서 도는
+        # 코드"다.
+        "ops.weekly_metrics_report": (
+            "by-design:주간 KPI 6종 집계 cron(OPS-56) — ci.yml이 아니라 전용 workflow "
+            "weekly-metrics.yml이 스케줄 실행한다(ci_executed_modules()의 스캔 범위가 "
+            "ci.yml 한정이라 이 축에서는 미도달로 보인다). 실 배선·fail-open 아님은 "
+            "tests/infra/test_weekly_metrics_cron_wiring.py가 별도로 동결"
+        ),
         # 라이브 의존 — CI에 키·GPU·실 PG가 없어 원리적으로 못 돈다
         "ops.cost_probe": _LIVE_DEPENDENT,
         "ops.cost_report": _LIVE_DEPENDENT,
@@ -1027,12 +1088,115 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "ops.wh1_shadow_probe": _LIVE_DEPENDENT,
         "harness.wh1_shadow_harvest": _LIVE_DEPENDENT,
         "harness.residue_cross_verify_eval": _LIVE_DEPENDENT,
+        # EOS-54(2026-08-30): HIT·CU 생산 계측 판독기 — 검수 타이머 *실이벤트*(JSONL) 의존.
+        # 계측 표본이 쌓이기 전에는 입력 0 = 측정 실패(exit 1)가 설계값(미측정≠0 승격)이라 CI
+        # 상시 배선 비대상 — G2(10/25) 기준선·G5 판정 시점에 운영자가 돌린다(answer_distribution_
+        # battle "사람이 판단 시점에 돌린다"와 동형). 판정 소비처는 tests/backend/ops/
+        # test_hit_cu_metrics.py(backend 잡 수집 — exit 0/1 양쪽 실측). 검수 UI 결선 별항은
+        # ADMIN-07 후속(정본화≠집행 — 모듈 docstring).
+        # EOS-61(2026-09-01): 12월 검증 결론 판정기 — 입력이 EOS-54 HIT·EOS-55 Run 로그·
+        # EOS-60 골든 혼동행렬의 *산출물*이라 위 셋과 같은 이유로 CI 상시 배선 비대상이다.
+        # 오히려 이 도구는 **입력이 없을 때 GO를 내지 않는 것이 기능**이다: 빈 입력에서
+        # 미측정 12종·판정 불가 게이트 5건을 세고 exit 1을 낸다(측정 실패 ≠ 기준 미달).
+        # 판정 로직(Hard Gate 우선·F-Ⅳ 3/2 경계·미측정 비통과·단일 점수 금지)은 backend 잡이
+        # 수집하는 tests/backend/ops/test_validation_scorecard.py가 상시 검증한다 —
+        # "안 도는 코드"가 아니라 "실측이 있을 때 사람이 G5에서 돌리는 판정기"다.
+        "ops.validation_scorecard": (
+            "by-design:12월 검증 결론 판정기(EOS-61) — 입력이 EOS-54/55/60 산출물이라 실측 축적 "
+            "전에는 전 지표 미측정(exit 1)이 설계값. G5(12/31) 판정 시점에 운영자가 "
+            "`--hit-cu-json`·`--qa-matrix-json`으로 생산자 산출을 직접 먹여 돌린다"
+        ),
+        "ops.hit_cu_metrics": (
+            "by-design:검수 타이머 실표본 의존 판독기(EOS-54) — 계측 이벤트 축적 전에는 입력 0이 "
+            "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
+        ),
+        # EOS-60(2026-08-31): 골든 승격기 + QA 엔진 혼동행렬 — 둘 다 EOS-54 검수 *실이벤트*가
+        # 입력이다(별도 라벨링 캠페인 금지 규약의 귀결). 검수 판정이 쌓이기 전에는 승격 0건 =
+        # 측정 실패(exit 1)가 설계값이라 hit_cu_metrics와 같은 이유로 CI 상시 배선 비대상 —
+        # G2(10/25) 기준선·G5 판정 시점에 운영자가 돌린다. 판정 로직 자체(as-found fail-closed·
+        # 회전·digest·혼동행렬·게이트 변별력 양방향·재채점 금지)는 backend 잡이 수집하는
+        # tests/backend/harness/test_golden_benchmark.py·tests/backend/ops/
+        # test_qa_confusion_matrix.py가 상시 검증한다 — "안 도는 코드"가 아니라 "실표본이 있을
+        # 때 사람이 돌리는 판독기"다. 계약 정본 = docs/standards/golden_benchmark_contract.md.
+        "harness.golden_benchmark": (
+            "by-design:검수 실이벤트 의존 골든 승격기(EOS-60) — 검수 판정 축적 전에는 승격 0건이 "
+            "측정 실패(exit 1)로 설계돼 CI 상시 실행 비대상. 검수와 함께 운영자가 돌린다"
+        ),
+        "ops.qa_confusion_matrix": (
+            "by-design:골든 실표본 의존 혼동행렬 판독기(EOS-60) — 골든 0건·평가쌍 0건이 측정 "
+            "실패(exit 1)로 설계돼 CI 상시 실행 비대상. G2/G5 KPI 판정 시점에 운영자가 돌린다"
+        ),
+        # EOS-64(2026-09-01): 골든 승격 경로 게이트 — 입력이 *승격 제안*(사람이 "이것들을
+        # 올리겠다"고 내미는 목록)이라 제안이 없는 시점에는 돌릴 대상 자체가 없다. CI가 매
+        # 커밋마다 돌릴 성질이 아니고(제안 파일이 레포에 상주하지 않는다), 승격 판정 시점에
+        # 운영자가 돌리는 문지기다. 판정 로직(경로 밖 6종 차단·Wilson 상한 방향·측정 불가
+        # 비통과·사람 판정 우회 불가)은 backend 잡이 수집하는
+        # tests/backend/harness/test_golden_promotion_gate.py가 상시 검증한다.
+        "harness.golden_promotion_gate": (
+            "by-design:승격 제안 의존 경로 문지기(EOS-64 ③) — 제안 목록이 입력이라 상주 입력이 "
+            "없고, 승격 판정 시점에 운영자가 돌린다. 사람 검수를 대체하지 않는 확인 도구다"
+        ),
+        # EOS-97(2026-09-06): 생성 산출물 리콜 — 입력이 *생성 회차의 genlog 사이드카*이고
+        # 처분 대상이 *결함이 발견된 회차*다. 둘 다 상주하지 않는다: genlog는 배치를 돌려야
+        # 생기고(레포에 상주하지 않는다), 리콜은 "OP_03 정의에 결함을 발견했다" 같은 **사람의
+        # 판단이 선행**해야 시작된다. CI가 매 커밋마다 돌릴 성질이 아니다 — 셀렉터 없이 돌리면
+        # 전건 처분이라 도구 자신이 그 호출을 거부한다.
+        # 판정 로직(선별 정밀도 과다·과소 양방향·격리 불가 분리 계상·계약 3필드 기입·실패
+        # 미삼킴·파일 부재를 매치 0건으로 위장하지 않음)은 backend 잡이 수집하는
+        # tests/backend/ops/test_generation_recall.py가 상시 검증한다 — "안 도는 코드"가
+        # 아니라 "결함을 발견했을 때 사람이 돌리는 처분 도구"다.
+        "ops.generation_recall": (
+            "by-design:회차 genlog + 사람의 결함 판단이 입력인 리콜 도구(EOS-97) — 상주 입력이 "
+            "없고 셀렉터 없는 호출은 도구가 거부한다(전건 처분 방지). 결함 발견 시 운영자가 "
+            "돌리며, 되돌리기 어려운 처분은 --apply 명시로만 나간다(dry-run 기본)"
+        ),
         # 실 DB·실학생 표본 의존 리포트
         "harness.pilot_kpi_baseline": _NEEDS_LIVE_SAMPLE,
         "harness.surrogate_baseline_report": _NEEDS_LIVE_SAMPLE,
         # ASM-05(2026-08-10): 수요측 성취기준 도달 관측 — CMH(실학생 숙달 측정) 의존,
         # S3-01 파일럿 전에는 NO_DATA 정직 렌더가 설계값(acceptance ③)이라 CI 상시 배선 비대상.
         "harness.standard_attainment_report": _NEEDS_LIVE_SAMPLE,
+        # EOS-57(2026-08-30): `문제시도` 스킬 배열 기록률 리포트 — 실 PG의 *실제 채점 이력*이
+        # 분모다. CI의 PG는 매 잡마다 비어 있어 상시 실행하면 전 지표가 "측정 불가(분모 0)"만
+        # 낸다(그렇게 렌더하는 것이 이 리포트의 설계값이지, CI에서 확인할 값이 아니다).
+        # 판정 로직 자체(3분류 변별력·분모 0 처리·죽은 경로 보강·CLI exit 0/2)는
+        # tests/backend/harness/test_attempt_skill_event_reach_report.py가 CI에서 상시 검증한다
+        # — 즉 "안 도는 코드"가 아니라 "라이브 입력이 있을 때 사람이 돌리는 관측기"다.
+        "harness.attempt_skill_event_reach_report": _NEEDS_LIVE_SAMPLE,
+        # OPS-68(2026-09-07): 위 리포트의 짝 — 게이트 G-eos63-skill-event-reach-sample이
+        # 요구하는 *표본을 만드는* 프로브다. CI가 절대 돌려서는 안 되는 유일한 이유가 미도달
+        # 사유이기도 하다 — 이 도구는 대상 DB에 채점 행을 **쓴다**(problem_attempt·
+        # attempt_event·숙달 시계열). 상시 배선하면 CI가 매 잡마다 DB를 오염시키고, 그
+        # 오염이 곧 다른 리포트의 분모가 된다. 판정 로직(분모 0의 None 처리·실패 사유
+        # 타입명 집계·exit 0/2/3/4/5 변별)은 tests/backend/harness/
+        # test_attempt_skill_reach_probe.py가 CI에서 상시 검증한다.
+        "harness.attempt_skill_reach_probe": (
+            "by-design:실 PG에 표본을 *쓰는* 게이트 실행 도구 — 운영자가 측정 회차에 1회 "
+            "돌린다. CI 상시 실행은 DB 오염이라 금지"
+        ),
+        # OPS-72(2026-09-10): 호스트→prod DB 도달성 진단. 입력이 **살아 있는 docker 데몬 +
+        # 실행 중인 prod 컨테이너**라 CI에는 둘 다 없다(있더라도 CI의 PG는 서비스 컨테이너지
+        # whymath-pg가 아니다) — 상시 실행하면 전건 UNKNOWN(exit 2)만 난다. 그것이 이 도구의
+        # 설계값이지 CI에서 확인할 값이 아니다. **판정 로직은 순수 코어로 분리돼 있고**
+        # tests/backend/ops/test_db_host_reachability.py가 6상태 전건을 주입해 CI에서 상시
+        # 검증한다(REACHABLE/NOT_PUBLISHED/NO_BINDING/PUBLISHED_BUT_CLOSED/FOREIGN_LISTENER/
+        # UNKNOWN이 서로 다른 답으로 갈리는지까지). 운영 배선은 사람 경로다 —
+        # docs/standards/incident_response_slo.md §4-1의 실패 유형과 /demo-doctor 카탈로그
+        # W1행이 이 CLI를 1차 진단으로 지목한다.
+        "ops.db_host_reachability": _LIVE_DEPENDENT,
+        # EOS-73(2026-09-01): 생성 seed 적재율 리포트 — 분모가 *실제 생성 배치*의 genlog JSONL
+        # 이다. CI에는 그 산출물이 없어(LLM 배치를 매 PR마다 돌리지 않는다) 상시 실행하면 전
+        # 지표가 "측정 불가(분모 0)"만 난다 — 그렇게 렌더하는 것이 이 리포트의 설계값이지 CI에서
+        # 확인할 값이 아니다. 판정 로직(3분류 변별력·분모 0 처리·죽은 경로 보강·판별자 정합·
+        # CLI exit 0/2)은 tests/backend/harness/test_generation_seed_adoption_report.py가 CI에서
+        # 상시 검증한다 — "안 도는 코드"가 아니라 "생성 배치가 있을 때 사람이 돌리는 관측기"다.
+        "harness.generation_seed_adoption_report": _NEEDS_LIVE_SAMPLE,
+        # EOS-73(2026-09-01): 결정론 재생성 프로브 — 기록된 seed·입력 전문을 **라이브 Ollama**에
+        # 되먹여 회차 간 출력 동일성을 잰다. GPU·데몬 없이는 원리적으로 못 돈다. 판정 로직(3값
+        # 분류 변별력·좌표 복원 거부 사유·미측정 자인 렌더)은 tests/backend/harness/
+        # test_generation_seed_replay_probe.py가 상시 검증하며, 이 배포의 "같은 seed → 같은 출력"
+        # 성립 여부는 그 CLI를 돌리기 전까지 **미측정**이다(성립으로 승격 금지).
+        "harness.generation_seed_replay_probe": _LIVE_DEPENDENT,
         # 빌드타임 관측 리포트(게이트 아님) — 사람이 필요할 때 돌린다
         "harness.problem_bank_coverage": _OFFLINE_REPORT,
         # QUAL-01(2026-08-10): 코퍼스 JSONL만 읽는 빌드타임 관측 리포트(DB 0) — problem_bank_
@@ -1075,6 +1239,10 @@ _MANIFEST: dict[str, dict[str, str]] = {
         "ops.repeat_recommendation_report": _OFFLINE_REPORT,
         "ops.pedagogy_content_slot_reach_report": _OFFLINE_REPORT,
         "ops.role_grant_cli": _PRIVILEGE_ESCALATION_CLI,
+        # ADMIN-11(2026-08-31): 좌석 발급 경로의 *계정* 절반. role_grant_cli와 같은 봉인에
+        # 속한다 — 좌석을 줄 대상(user_profile)이 0행이라 grant가 성립하지 않던 구멍을 메운다.
+        # 같은 사유로 HTTP 미노출·CI 미배선이 설계 확정값이다(운영자가 실 PG 앞에서 1회 실행).
+        "ops.account_bootstrap_cli": _PRIVILEGE_ESCALATION_CLI,
         # PB-11(2026-08-11): 코퍼스 사이드카 생성·갱신 저작 CLI. `ops.provenance_audit`이 집행하는
         # 계약을 만족하는 파일을 만들어 주는 도구가 저장소에 0개였던 부재를 메운다 — 저자가 손으로
         # 돌리는 쓰기 도구이므로 CI 상시 실행 대상이 아니다(사유 상수 참조).

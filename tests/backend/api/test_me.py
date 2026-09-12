@@ -7,10 +7,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import math
+import os
 import uuid
-from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
@@ -20,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api import me as me_module
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api.me import (
     ConceptAbilityItem,
     _add_ability_snapshot_if_attempts,
@@ -29,6 +33,7 @@ from whymath_backend.api.me import (
     candidate_pool_order_by,
 )
 from whymath_backend.app import create_app
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
@@ -46,10 +51,15 @@ from whymath_backend.l2.learning_path import LearningPath, LearningStep
 from whymath_backend.l2.recommendation_evidence import (
     EVENT_TYPE_RECOMMENDATION_TREATMENT,
     META_KEY_APPLIED_WEIGHTS,
+    META_KEY_CANDIDATES,
     META_KEY_MODE,
+    META_KEY_POLICY_VERSION,
     META_KEY_POOL_SIZE,
     META_KEY_PROBLEM_ID,
+    POLICY_VERSION_CAT,
+    POLICY_VERSION_SUNEUNG,
 )
+from whymath_backend.l2.strong_concept_recommendation import StrongConceptRecommendation
 from whymath_backend.l2.weak_concept_recommendation import WeakConceptRecommendation
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
@@ -72,6 +82,7 @@ from whymath_backend.schema.enums import (
     AuditEventKind,
     AuditResourceType,
     Curriculum,
+    EventType,
     ExamType,
     Persona,
     Resolution,
@@ -882,6 +893,29 @@ def _attempts_client(session: _QueueSession) -> TestClient:
     return TestClient(app)
 
 
+@contextmanager
+def _student_work_key_env(key_b64: str | None) -> Iterator[None]:
+    """SEC-31: `WHYMATH_STUDENT_WORK_ENCRYPTION_KEY`를 env로 주입(또는 제거)하고 `get_settings`
+    캐시를 리셋·원복(`test_dialogue_content_encryption_integration.py`의 `_dialogue_key_env`
+    패턴 미러 — `submit_attempt`가 `get_settings()`를 직접 호출하므로 dependency_overrides로는
+    주입할 수 없다)."""
+    var = "WHYMATH_STUDENT_WORK_ENCRYPTION_KEY"
+    prev = os.environ.get(var)
+    if key_b64 is None:
+        os.environ.pop(var, None)
+    else:
+        os.environ[var] = key_b64
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        if prev is None:
+            os.environ.pop(var, None)
+        else:
+            os.environ[var] = prev
+        get_settings.cache_clear()
+
+
 class TestSubmitAttempt:
     def test_submit_with_assessed_concept(self) -> None:
         """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답."""
@@ -904,8 +938,18 @@ class TestSubmitAttempt:
         assert upd["mastery"] == 0.69  # 첫 관측·정답
         assert upd["sample_size"] == 1
         assert body["skill_mastery_updates"] == []  # 스킬 해소 0(미매핑)
-        # ProblemAttempt + 개념 숙달행 add·attempt commit 발생(스킬행 0)
-        assert len(session.added) == 2
+        # ProblemAttempt + 개념 숙달행 + EOS-57 `문제시도` 이벤트(스킬행 0).
+        # 카운트만 세면 신규 축이 숫자에 묻히므로 *종류*로 고정한다.
+        assert [type(o).__name__ for o in session.added] == [
+            "ProblemAttempt",
+            "ConceptMasteryHistory",
+            "AttemptEvent",
+        ]
+        event = session.added[-1]
+        assert event.event_type is EventType.문제시도
+        # 해소 0건은 `[]`로 적재된다 — None(미기록)으로 접히지 않는다(EOS-57 핵심 계약).
+        assert event.skill_ids == []
+        assert event.event_data == {"is_correct": True, "source": "attempt_submit"}
 
     def test_submit_no_mapped_concepts(self) -> None:
         """문제↔개념 매핑 없으면 attempt만 적재·mastery/skill 갱신 빈 리스트."""
@@ -919,7 +963,9 @@ class TestSubmitAttempt:
         assert resp.status_code == 201, resp.text
         assert resp.json()["mastery_updates"] == []
         assert resp.json()["skill_mastery_updates"] == []
-        assert len(session.added) == 1  # attempt만
+        # attempt + EOS-57 `문제시도` 이벤트(숙달행 0 — 개념 매핑 없음).
+        assert [type(o).__name__ for o in session.added] == ["ProblemAttempt", "AttemptEvent"]
+        assert session.added[-1].skill_ids == []  # 해소 0건도 기록된다(미기록 None과 구분)
 
     def test_submit_overconfident_returns_coaching(self) -> None:
         """과신 제출(틀림 + 확신≥0.7) → calibration_coaching.focus==overconfident(§11.4)."""
@@ -939,8 +985,8 @@ class TestSubmitAttempt:
         assert coaching is not None
         assert coaching["focus"] == "calibration_overconfident"
         assert coaching["socratic_category"] == "assumption"
-        # 적재 로직 불변 — attempt 1건만 add(개념 매핑 없음).
-        assert len(session.added) == 1
+        # 적재 로직 불변 — attempt + EOS-57 `문제시도` 이벤트(개념 매핑 없어 숙달행 0).
+        assert [type(o).__name__ for o in session.added] == ["ProblemAttempt", "AttemptEvent"]
 
     def test_submit_well_calibrated_no_coaching(self) -> None:
         """잘 보정됨(맞음 + 확신 높음) → calibration_coaching==null."""
@@ -969,6 +1015,160 @@ class TestSubmitAttempt:
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["calibration_coaching"] is None
+
+    def test_submit_stores_student_answer_plaintext_when_key_unset(self) -> None:
+        """SEC-31: 키 미설정(기존 동작) — student_answer는 평문 그대로·암호화 컬럼은 None."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        with _student_work_key_env(None):
+            resp = client.post(
+                "/v1/me/attempts",
+                json={
+                    "problem_id": str(uuid.uuid4()),
+                    "is_correct": False,
+                    "student_answer": "내 답은 3이야",
+                },
+            )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.student_answer == "내 답은 3이야"
+        assert attempt.student_answer_encrypted is None
+        assert attempt.student_answer_nonce is None
+
+    def test_submit_encrypts_student_answer_when_key_configured(self) -> None:
+        """SEC-31: 키 설정 시 — student_answer는 NULL·암호화 컬럼에 ciphertext/nonce가 실리고
+        그 ciphertext를 같은 키로 복호하면 원문이 그대로 나온다(dialogue_turn 선례 계약 미러)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        key_b64 = base64.b64encode(os.urandom(32)).decode()
+        with _student_work_key_env(key_b64):
+            resp = client.post(
+                "/v1/me/attempts",
+                json={
+                    "problem_id": str(uuid.uuid4()),
+                    "is_correct": False,
+                    "student_answer": "내 답은 5야",
+                },
+            )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.student_answer is None  # 평문 컬럼 비움
+        assert attempt.student_answer_encrypted is not None
+        assert attempt.student_answer_nonce is not None
+        cipher = SecretCipher(base64.b64decode(key_b64))
+        assert (
+            cipher.decrypt(attempt.student_answer_encrypted, attempt.student_answer_nonce)
+            == "내 답은 5야"
+        )
+
+    def test_submit_persists_reported_started_at_verbatim(self) -> None:
+        """PED-37: 클라 신고 발생 시각을 *그대로* 적재하고, 수신 시각은 ingested_at에 따로 남긴다.
+
+        이 컬럼이 비어 있던 동안 `harness/wh1_evaluation`의 since/until 집계와
+        `privacy/retention` 파기가 조용히 0행이었다 — 그래서 라우트 경유로 배선을 고정한다.
+        `started_at != ingested_at` 단언이 "서버 now 폴백 부재"의 증거다(같으면 폴백 잔존).
+        """
+        reported = datetime(2026, 3, 2, 9, 30, tzinfo=UTC)
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "duration_seconds": 240,
+                "started_at": reported.isoformat(),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert type(attempt).__name__ == "ProblemAttempt"
+        assert attempt.started_at == reported
+        assert attempt.ingested_at is not None
+        assert attempt.ingested_at > reported  # 신고는 과거·수신은 지금(복제가 아니다)
+        # 기존 계약 불변 — ended_at은 서버 now를 유지한다(수신 시각과 같은 값).
+        assert attempt.ended_at == attempt.ingested_at
+
+    def test_submit_without_started_at_leaves_null(self) -> None:
+        """PED-37: 미신고면 NULL=미측정으로 남긴다 — 서버 now로 메우지 않는다(날조 금지)."""
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False},
+        )
+        assert resp.status_code == 201, resp.text
+        attempt = session.added[0]
+        assert attempt.started_at is None
+        assert attempt.ingested_at is not None  # 수신 시각은 서버가 아는 사실이라 채운다
+
+    def test_submit_rejects_naive_started_at(self) -> None:
+        """P2(PR #1036 Codex): 오프셋 없는 값은 422 — asyncpg가 서버 로컬 TZ로 해석한다.
+
+        실측 경위: 초판은 `tz-aware 권장`이라고만 적고 검증하지 않아 `2026-09-07T10:00:00`이
+        `tzinfo=None`으로 수용됐다. 프로덕션 컨테이너가 UTC이므로 한국 로컬 시각이 **9시간
+        어긋나** 저장되고, 그러면 PED-37이 되살리려던 시간창 귀속이 오히려 조용히 망가진다.
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "started_at": "2026-09-07T10:00:00",  # Z도 ±HH:MM도 없다
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        assert not session.added, "거부된 요청이 행을 남기면 안 된다"
+
+    def test_submit_rejects_future_started_at(self) -> None:
+        """P1(PR #1036 Codex): 미래 시각은 422 — 보존기한 파기를 영원히 회피한다.
+
+        `privacy/retention`은 `started_at < cutoff`인 행만 지운다. 클라가 2076년을 신고하면
+        3년 보존기한이 지나도 그 조건을 **영원히** 만족하지 않아 미성년자 답안이 무기한
+        잔존한다(2026-09-07 실측: 검증 없이 수용됐고 cutoff 판정이 False였다).
+
+        이 PR *이전*에는 started_at이 항상 NULL이라 조작할 값 자체가 없었다 — 통로를 여는
+        변경이 공격 표면도 함께 만들었으므로 여는 쪽에서 닫는다.
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        far_future = datetime.now(UTC) + timedelta(days=365 * 50)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "started_at": far_future.isoformat(),
+            },
+        )
+        assert resp.status_code == 422, resp.text
+        assert not session.added, "거부된 요청이 행을 남기면 안 된다"
+
+    def test_submit_tolerates_small_clock_skew(self) -> None:
+        """대조군 — 몇 초 앞선 기기 시계는 **통과**한다.
+
+        이 대조가 없으면 위 두 거부가 "미래면 무조건 막는다"인지 "무한한 미래를 막는다"인지
+        구별되지 않는다. 학생 태블릿은 NTP 미동기로 실제로 몇 초~몇 분 어긋나므로, 엄격히
+        거부하면 정직한 제출이 튕겨 학습 기록이 통째로 유실된다 — 막아야 할 것은 시계 오차가
+        아니라 보존기한 회피다.
+        """
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        slightly_ahead = datetime.now(UTC) + timedelta(seconds=30)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "started_at": slightly_ahead.isoformat(),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert session.added[0].started_at == slightly_ahead
 
     def test_submit_requires_auth(self) -> None:
         """무토큰은 401(인증 게이트)."""
@@ -1627,6 +1827,21 @@ class TestNextProblem:
         assert META_KEY_MODE not in row.meta  # 기본 CAT은 mode 미기록
         assert session.commits == 1
 
+    def test_recommendation_records_candidates_and_policy_version(self) -> None:
+        """REC-11 — 기본 CAT 처치 기록에 candidates[]·policy_version=cat_v1이 함께 실린다."""
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, 1.0)])])
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_POLICY_VERSION] == POLICY_VERSION_CAT
+        candidates = row.meta[META_KEY_CANDIDATES]
+        assert {c["problem_id"] for c in candidates} == {str(pid_a), str(pid_b)}
+        # 점수 내림차순 — b=0(θ와 일치)이 정보량 최대이므로 pid_a(difficulty_to_logit(3.0)≈0)가
+        # pid_b(irt_b=1.0, θ=0에서 멀어 정보량 낮음)보다 위.
+        assert candidates[0]["problem_id"] == str(pid_a)
+
     def test_recommendation_records_applied_weights_true_when_weak_concept_used(
         self,
     ) -> None:
@@ -1983,6 +2198,25 @@ class TestNextProblemSuneungMode:
         assert row.meta[META_KEY_MODE] == "suneung"
         assert row.meta[META_KEY_PROBLEM_ID] == str(problem.problem_id)
         assert session.commits == 1
+
+    def test_recommendation_records_candidates_and_policy_version_suneung(self) -> None:
+        """REC-11 — 수능 모드 처치 기록에 candidates[]·policy_version=suneung_v1이 실린다.
+
+        적격(시그니처 보유)·부적격(수능 신호 전무) 후보를 함께 넣어 candidates[]가 부적격을
+        빼고 적격만 담는지(진실 게이트 재적용)까지 함께 확인한다.
+        """
+        eligible = _suneung_problem(signature_patterns=[SignaturePattern.COMPOUND_CHOICES])
+        ineligible = _suneung_problem()  # 수능 신호 전무 → is_suneung_eligible=False
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([_OrmProblemRow(eligible), _OrmProblemRow(ineligible)])]
+        )
+        client = _attempts_client(session)
+        client.get("/v1/me/next-problem?mode=suneung")
+        assert len(session.added) == 1
+        row = session.added[0]
+        assert row.meta[META_KEY_POLICY_VERSION] == POLICY_VERSION_SUNEUNG
+        candidates = row.meta[META_KEY_CANDIDATES]
+        assert {c["problem_id"] for c in candidates} == {str(eligible.problem_id)}
 
     def test_purpose_learning_applies_in_suneung_mode_too(self) -> None:
         """REC-04 — purpose는 mode와 직교한다: 수능 모드에서도 밴드 안 후보가 선택된다."""
@@ -2433,12 +2667,15 @@ class TestAssembleMeasurementAssessment:
         diagnoses: list[ConceptDiagnosis],
         hypotheses: list[MisconceptionHypothesis],
         weak: list[WeakConceptRecommendation],
+        strong: list[StrongConceptRecommendation] | None = None,
         gaps_calls: list[uuid.UUID] | None = None,
         path_steps: tuple[Any, ...] = (),
         ordering_basis: str = "empty",
         ordering_edge_count: int = 0,
         has_cycle: bool = False,
         path_calls: list[int] | None = None,
+        weak_diagnoses_calls: list[Any] | None = None,
+        strong_diagnoses_calls: list[Any] | None = None,
     ) -> None:
         async def _fake_diag(session: Any, user_id: Any) -> list[ConceptDiagnosis]:
             return diagnoses
@@ -2446,8 +2683,20 @@ class TestAssembleMeasurementAssessment:
         async def _fake_hyp(session: Any, user_id: Any) -> list[MisconceptionHypothesis]:
             return hypotheses
 
-        async def _fake_weak(session: Any, user_id: Any) -> list[WeakConceptRecommendation]:
+        async def _fake_weak(
+            session: Any, user_id: Any, *, diagnoses: Any = None
+        ) -> list[WeakConceptRecommendation]:
+            # PR #1018 Codex 리뷰 — 호출자가 넘긴 diagnoses 스냅샷을 실제로 받는지 캡처.
+            if weak_diagnoses_calls is not None:
+                weak_diagnoses_calls.append(diagnoses)
             return weak
+
+        async def _fake_strong(
+            session: Any, user_id: Any, *, diagnoses: Any = None
+        ) -> list[StrongConceptRecommendation]:
+            if strong_diagnoses_calls is not None:
+                strong_diagnoses_calls.append(diagnoses)
+            return strong or []
 
         async def _fake_gaps(
             session: Any, user_id: Any, concept_id: uuid.UUID, **kwargs: Any
@@ -2469,6 +2718,7 @@ class TestAssembleMeasurementAssessment:
         monkeypatch.setattr("whymath_backend.api.me.compute_concept_diagnoses", _fake_diag)
         monkeypatch.setattr("whymath_backend.api.me.get_active_hypotheses", _fake_hyp)
         monkeypatch.setattr("whymath_backend.api.me.recommend_weak_concepts", _fake_weak)
+        monkeypatch.setattr("whymath_backend.api.me.recommend_strong_concepts", _fake_strong)
         monkeypatch.setattr("whymath_backend.api.me.recommend_prerequisite_gaps", _fake_gaps)
         monkeypatch.setattr("whymath_backend.api.me.build_learning_path", _fake_path)
 
@@ -2591,6 +2841,72 @@ class TestAssembleMeasurementAssessment:
         assert gaps_calls == [weakest]
         assert len(schema.recommended_path) == 1
         assert schema.recommended_path[0]["concept_id"] == str(weakest)
+
+    def test_strong_points_from_recommend_strong_concepts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ASM-13 — `strong_points`는 `recommend_strong_concepts` 결과를 그대로 담는다.
+
+        `recommend_weak_concepts`(weak_points)와 마찬가지로 신규 계산 0 — 호출·매핑만 검증."""
+        strong_cid = uuid.uuid4()
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=[],
+            hypotheses=[],
+            weak=[],
+            strong=[
+                StrongConceptRecommendation(concept_id=strong_cid, mastery=0.95, agreement="agree")
+            ],
+        )
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(schema.strong_points) == 1
+        assert schema.strong_points[0]["concept_id"] == str(strong_cid)
+        assert schema.strong_points[0]["mastery"] == 0.95
+
+    def test_weak_and_strong_share_one_diagnoses_snapshot(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PR #1018 Codex 리뷰 — weak·strong이 각자 재조회하면 동시 mastery 갱신 시 서로 다른
+        스냅샷을 볼 수 있었다. 이제 위에서 한 번 구한 `diagnoses`를 그대로 넘겨받는지 확인한다
+        (둘 다 *같은 리스트 객체*를 받아야 한다 — 값만 같은 사본이 아니라 identity로 못 박는다).
+        """
+        cid = uuid.uuid4()
+        shared = [
+            ConceptDiagnosis(concept_id=cid, response_count=1, agreement="agree"),
+        ]
+        weak_calls: list[Any] = []
+        strong_calls: list[Any] = []
+        self._patch_l2_outputs(
+            monkeypatch,
+            diagnoses=shared,
+            hypotheses=[],
+            weak=[],
+            strong=[],
+            weak_diagnoses_calls=weak_calls,
+            strong_diagnoses_calls=strong_calls,
+        )
+        asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert len(weak_calls) == 1 and weak_calls[0] is shared
+        assert len(strong_calls) == 1 and strong_calls[0] is shared
+
+    def test_strong_points_empty_when_no_recommendations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._patch_l2_outputs(monkeypatch, diagnoses=[], hypotheses=[], weak=[], strong=[])
+        schema = asyncio.run(
+            me_module._assemble_measurement_assessment(
+                cast(AsyncSession, FakeSession()), _UID, now=datetime(2026, 1, 1, tzinfo=UTC)
+            )
+        )
+        assert schema.strong_points == []
 
 
 class TestCapturedPathOrderingHonesty:

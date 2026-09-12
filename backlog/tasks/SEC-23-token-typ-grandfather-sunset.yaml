@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - src/backend/whymath_backend/security.py
   - tests/backend/test_security.py
 session: null
-notes: "docs/architecture/account_security_gap_review_r2.md G4→D11. 실측: security.py:29 '후방호환: typ 없는 토큰은 액세스로 간주' + _decode_token(:75-80) docstring 'expected_type==access면 typ가 refresh만 거부한다(typ 없는 기존 액세스 토큰은 허용)'. 일몰 조건이 없다. 실질 위험은 낮다(우리가 발급하는 모든 토큰에 typ가 있다) — 그래서 priority 4다. 그러나 CLAUDE.md '만료 없는 유예·제외 금지'(2026-08-03: 유예는 반드시 만료 또는 재확인 지점을 동반한다)에 정면 해당하고, 그 규칙의 1차 집행은 산문이 아니라 코드여야 한다(PB-02 그랜드파더 만료 계약 선례)."
-updated: 2026-08-11
+notes: "docs/architecture/account_security_gap_review_r2.md G4→D11. 실측: security.py:29 '후방호환: typ 없는 토큰은 액세스로 간주' + _decode_token(:75-80) docstring 'expected_type==access면 typ가 refresh만 거부한다(typ 없는 기존 액세스 토큰은 허용)'. 일몰 조건이 없다. 실질 위험은 낮다(우리가 발급하는 모든 토큰에 typ가 있다) — 그래서 priority 4다. 그러나 CLAUDE.md '만료 없는 유예·제외 금지'(2026-08-03: 유예는 반드시 만료 또는 재확인 지점을 동반한다)에 정면 해당하고, 그 규칙의 1차 집행은 산문이 아니라 코드여야 한다(PB-02 그랜드파더 만료 계약 선례).\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

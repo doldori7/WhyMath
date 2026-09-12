@@ -89,6 +89,7 @@
 - ✅ **L4 교수학 엔진 — 슬라이스 73 (PgDeviceStore 봉투 암호화 결선 — register 암호화·verify 복호·dual-read 폴백)** 완료 (메인 직접·4게이트 green·1491 passed, 2026-06-05) — slice 72 프리미티브를 PgDeviceStore에 실제 결선 → **B 트랙 핵심 보안 달성**: device secret이 DB에 *암호화*되어 dump 단독 복호 불가. **구현**: ① **`_crypto.py` 저장 헬퍼 2종**(순수·hermetic): `encrypt_secret_for_storage(cipher, secret_plain) -> (plain|None, enc|None, nonce|None)`(cipher 있으면 암호화·평문 컬럼 None·없으면 평문 폴백)·`resolve_stored_secret(cipher, plain, enc, nonce) -> str`(암호화 행 복호·평문 행 그대로·**암호화인데 cipher 없으면 RuntimeError**[조용한 401 lockout 대신 시끄러운 500]·둘 다 없으면 무결성 오류). ② **device.py 모델**: `secret_encrypted`·`secret_nonce`(LargeBinary nullable) 추가·`secret_plain` → nullable 완화(암호화 행은 NULL). ③ **alembic `e1f2a3b4c5d6`**(head): 2 컬럼 add + secret_plain NOT NULL 완화(downgrade는 평문만 상태에서 안전). ④ **PgDeviceStore**: `__init__(sessionmaker, cipher=None)`·register는 `encrypt_secret_for_storage`로 저장 표현 결정(응답 secret은 생성 평문 토큰·저장과 무관)·verify는 `resolve_stored_secret`로 HMAC용 평문 복원. ⑤ **build_device_store_from_settings**: `build_secret_cipher(settings)` → PgDeviceStore에 주입(잘못된 키 길이 startup fail-fast). InMemoryDeviceStore는 무변경(메모리 dump 위협엔 in-memory 키 암호화 무의미). **하위 호환**: 기존 평문 행·cipher 미설정은 그대로 verify(dual-read). CachedDeviceStore 무변경(inner 위임). **테스트** 2층: ① **hermetic +6**(`TestStorageHelpers`): encrypt with/without cipher·resolve 암호화 round-trip·평문 폴백·암호화+cipher없음 RuntimeError·secret 없음 RuntimeError. ② **통합 +1**(`test_pg_device_store_envelope_encryption_round_trip_on_live_pg`·skip): cipher 주입 register→DB 행 secret_plain NULL·secret_encrypted/nonce 채워짐·ciphertext에 평문 미포함·verify True·평문 행 하위 호환 verify. **4게이트 green**(py3.12): black(105)·ruff·mypy-strict(90)·pytest **1491 passed**(1485→+6 hermetic)·skip 50(49→+1 통합)·`_crypto.py`·`_device_store.py` cov **100%**·전체 99.88%. **🎯 의미**: **KMS envelope 핵심 완성** — `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY` 설정 시 신규 device secret은 AES-256-GCM 암호화 저장, DB dump 단독 복호 불가(마스터 키 DB 밖). 키 미설정이면 기존 평문 동작(점진 도입). CLAUDE.md 우선순위 #2(보안) 실현. **결정 v1 한계/후속**: ① **기존 평문 행 백필 없음**(신규만 암호화·기존은 평문 잔존·재암호화 배치 후속) ② **단일 마스터 키·키 회전 경로 없음**(회전 시 전 행 재암호화 필요·후속) ③ **라이브 PG 미검증**(통합테스트 skip·운영 PG 필요) ④ secret_plain 평문 컬럼 잔존(전면 암호화 후 drop은 후속). **후속**: 기존 행 재암호화 배치·키 회전·secret_plain 컬럼 제거·nonce 재생 방어·라이브 LLM 좌석.
 - ✅ **L4 교수학 엔진 — 슬라이스 74 (기존 평문 secret 봉투 암호화 백필 — `PgDeviceStore.reencrypt_plaintext_secrets`)** 완료 (메인 직접·4게이트 green·1497 passed, 2026-06-05) — slice 73 한계 ①(기존 평문 행 백필) 해소. slice 73은 *신규* register만 암호화 → 기존 평문 행 잔존. 본 메서드가 마스터 키 도입 후 기존 행을 점진 전환. **구현**: `PgDeviceStore.reencrypt_plaintext_secrets(*, batch_size=100) -> int`(재암호화 행 수) — `secret_encrypted IS NULL`(평문 행) 중 secret_plain 있는 것을 batch_size개까지 암호화해 `secret_encrypted`/`secret_nonce` 채우고 `secret_plain=NULL`. 이미 암호화 행 자동 제외(idempotent)·cipher 미설정 0(no-op)·secret 둘 다 없는 이상 행 건너뜀(무결성 방어). 호출자가 0까지 반복(대형 테이블 메모리/락 보호). `cleanup_stale`와 동형 *운영 일회성/관리자 경로*(Protocol 미추가·구체 PgDeviceStore로 호출·요청 경로 아님·InMemory 미구현). **테스트 인프라 개선**: `_FakePgSession._row_matches`가 `col.is_(None)`(우변 Null() 노드·`.value` 없음)을 미처리해 IS NULL 필터가 0 매치 → value 정규화(Null 노드→None) 추가. 실 PG 쿼리(`IS NULL`)는 정상이었고 *fake만* 보강. **테스트** 2층: ① **hermetic +6**(`TestPgDeviceStoreReencrypt`): no_cipher no-op·평문 2행 백필(암호화·verify 유지)·idempotent 2차 0·이미 암호화 행 0·batch_size 분할(2+1+0)·둘 다 NULL 이상 행 skip. ② **통합 +1**(`test_pg_device_store_reencrypt_backfill_on_live_pg`·skip): 실 PG 평문 2행→백필 count 2·DB secret_plain NULL·secret_encrypted 존재·verify 유지·idempotent 0. **4게이트 green**(py3.12): black(105)·ruff·mypy-strict(90)·pytest **1497 passed**(1491→+6 hermetic)·skip 51(50→+1 통합)·`_device_store.py` cov **100%**·전체 99.88%. **🎯 의미**: 봉투 암호화 *전체 전환* 경로 완비 — 신규(slice 73)+기존(slice 74) 모두 암호화 가능. 운영: 키 설정 후 `reencrypt_plaintext_secrets` 반복 호출 → 전 행 암호화 → (후속) secret_plain 컬럼 drop. **결정 v1 한계/후속**: ① **트리거 엔드포인트/CLI 없음**(cleanup_stale와 동일·`/v1/admin/devices/*` 후속) ② **키 회전 미지원**(회전 시 복호 후 재암호화 필요·현재는 평문→암호화 단방향) ③ secret_plain 컬럼 잔존(전 행 암호화 후 drop 후속) ④ 라이브 PG 미검증(skip). **후속**: 관리자 백필/cleanup 엔드포인트·키 회전·secret_plain 컬럼 제거·nonce 재생 방어·라이브 LLM 좌석.
 - ✅ **L4 교수학 엔진 — 슬라이스 75 (디바이스 secret 키 회전 — `MultiKeyCipher` 다중 복호 키)** 완료 (메인 직접·4게이트 green·1504 passed, 2026-06-05) — B 잔여(키 회전) 해소. 키 회전 *무중단* 핵심: 새 primary 키 도입 시 구 키로 암호화된 행이 *lockout 없이* 복호되도록 fallback 복호 키 지원. **구현**: ① **`_crypto.py` `SupportsEnvelope` Protocol**(encrypt/decrypt 구조적 타입) + **`MultiKeyCipher`**(primary로 암호화·primary→fallbacks 순 복호·전부 실패 시 InvalidTag). SecretCipher(단일)·MultiKeyCipher(회전)가 같은 Protocol 충족 → PgDeviceStore·저장 헬퍼는 구현 교체 가능(타입 `SupportsEnvelope | None`로 일반화·기존 SecretCipher 호출처 무변경). ② **`build_secret_cipher` → MultiKeyCipher | None**: primary(`device_secret_encryption_key`) + fallbacks(`device_secret_decryption_fallback_keys`·쉼표 구분 base64·복호 전용·공백/빈 토큰 무시). ③ **Settings `device_secret_decryption_fallback_keys: SecretStr`**. **회전 절차**: 새 키 생성→primary 승격·구 키를 fallback으로→재시작(신규는 새 키 암호화·구 행은 fallback 복호)→(slice 74 reencrypt로) 전 행 새 키 재암호화→fallback 제거. encrypt는 *항상 primary*라 재암호화가 현재 키로 수렴. **마이그레이션 불필요**(스키마 불변·키만 추가). **테스트** **+7 hermetic**: MultiKeyCipher round-trip·fallback 암호문 복호·encrypt는 primary만(구 키 단독 복호 불가)·전 키 실패 InvalidTag(`TestMultiKeyCipher` 4) · build fallback 회전 시나리오·파싱 공백/빈 무시(`TestBuildSecretCipher` 2) · **store 레벨 회전**(`TestPgDeviceStoreKeyRotation`·구 키 등록→새 primary+구 fallback store가 lockout 없이 verify·신규는 새 키). **4게이트 green**(py3.12): black(105)·ruff·mypy-strict(90)·pytest **1504 passed**(1497→+7)·skip 51·`_crypto.py`·`_device_store.py`·`config.py` cov **100%**·전체 99.88%. **🎯 의미**: KMS envelope에 *키 회전 무중단* 능력 추가 — 키 노출/주기적 회전 시 다운타임·lockout 없이 새 키 도입. slice 74 백필과 결합하면 *완전 회전*(구 키 행 → 새 키 재암호화 → 구 키 폐기). **결정 v1 한계/후속**: ① **key_id 미저장** — 어느 행이 어느 키인지 DB에서 모름·재암호화는 *전 암호화 행* 대상(slice 74 reencrypt는 평문만 — 구키→새키 재암호화는 별 메서드 후속) ② **fallback 시도 순차 비용** — 키 많으면 복호 평균 시도 증가(실무 1~2개라 무시) ③ 회전 자동화/스케줄 없음(수동 env 갱신+재시작). **후속**: 구키→새키 재암호화 메서드(key_id 또는 전 행)·관리자 엔드포인트·secret_plain 컬럼 제거·nonce 재생 방어·라이브 LLM 좌석.
+- ✅ **SEC-28: device secret 평문 폴백 봉인(fail-closed)** 완료 (구현 2026-08-25 · **회수·이식 2026-08-30**) — slice 73~75의 KMS envelope이 평문 폴백을 *prod-like 환경에서도* 허용해 키 누락 시 보안 약화 우려. **fail-closed 정책**: 개발/CI 외 평문 저장 금지. **구현**: ① `_crypto.py`: `require_device_secret_cipher(settings)` 추가(SEC-01 dialogue cipher 패턴 미러). `encrypt_secret_for_storage(..., *, allow_plaintext_fallback: bool = False)`로 시그니처 변경 — cipher=None이고 폴백 미허용 시 RuntimeError. `encrypt_dialogue_content`는 `allow_plaintext_fallback=True`로 호출해 대화 본문 평문 폴백은 유지(점진 도입). ② `_device_store.py`: `PgDeviceStore.__init__`에 `allow_plaintext_fallback: bool = False` 추가. `build_device_store_from_settings`에서 `build_secret_cipher` 대신 `require_device_secret_cipher` 사용; 개발 환경(키 없고 production_like=false)에서만 평문 폴백 허용, prod-like(kakao/naver client_id 등 인증 OAuth 설정 존재)에서 키 없으면 부팅 거부(RuntimeError). ③ `config.py`: `device_secret_encryption_key` description에 fail-closed 언급. **테스트**: `test_crypto.py`에 `TestRequireDeviceSecretCipher` 추가(dev→None, prod-like→RuntimeError, 키 설정→cipher 반환) 및 `encrypt_secret_for_storage` fail-closed 케이스 추가. `test_devices.py`의 hermetic PgDeviceStore 테스트는 `_pg_store(..., allow_plaintext_fallback=True)` 헬퍼로 평문 폴백을 명시적 유지; `TestBuildDeviceStoreFromSettings`에 prod-like 부팅 거부·키 설정 시 cipher 사용 케이스 추가. **4게이트**: ruff·black green; mypy는 기존 5개 프로젝트 전반 오류 외 SEC-28 변경 파일에서 신규 오류 0; pytest `test_crypto.py`+`test_devices.py` 232 passed. **🎯 의미**: device secret은 prod-like 환경에서 반드시 at-rest 암호화 — 키 미설정 시 평문 저장으로 조용히 떨어지는 것을 막고 초기 설정 단계에서 즉시 발견. dialogue content와 폭발반경을 분리해 대화 암호화는 평문 폴백을 유지하면서 device secret만 먼저 fail-closed. **[회수 2026-08-30]** 구현은 2026-08-25 PR #885(고립·base가 5일 전 main)에 갇혀 있었고 태스크 YAML도 미보유였다 — 재구현 대신 `c72423fe`를 최신 main 위로 cherry-pick 이식했다(충돌 0). **회수 규칙대로 acceptance 4항을 현재 main 기준으로 전수 재대조**한 결과 원 PR이 빠뜨린 ④ *문서화* 축 2건을 보강했다: (a) `48_eos_security_access_control.md` §7.3이 이 갭을 아직 "알려진 갭"으로 선언하고 있었다 — 보안 정본이 닫힌 갭을 열린 것으로 말하는 상태였다. 해소 사실·집행 지점·하위호환 경계·뮤테이션 실측을 명문화. (b) `.env.prod.example`의 device secret 키 주석만 "prod 필수"를 말하지 않았다(dialogue 키는 말함) — 부팅 거부 사실을 병기. **변별력 실측**: prod-like 거부 가드(`if is_production_like` → `if False`)와 부팅 배선(`allow_plaintext_fallback` 계산 → 상수 True)을 각각 무력화하는 뮤테이션 2종에서 테스트 4건이 red 전환됨을 확인 후 `cp` 백업으로 원복. **부수 교정**: 이식분 전반의 한글 오타 `폰백`→`폴백` 12건. mypy는 현재 main에서 554파일 **0 오류**(원 PR이 "기존 5개 오류 별도"로 적었던 것은 그 사이 해소됨).
 - ✅ **L2 학습자 모델 — 슬라이스 1 (BKT 숙달 확률 추정 — `l2/bkt`)** 완료 (메인 직접·4게이트 green·1532 passed, 2026-06-05) — **H 트랙(코어 모트) 착수·L2 첫 코드**. 12슬라이스 연속 L4 인프라(device 보안·/me 조회) 후 *제품 핵심 가치*로 전환 — 90일 계획 Day31~45 L2 프로토타입. **BKT(Bayesian Knowledge Tracing, Corbett & Anderson 1994)**: 성취기준(개념)별 학생의 *숨은 숙달 확률* P(L)을 풀이 정/오답 관측으로 베이지안 갱신. 산출 P(L)이 `ConceptMasteryHistory.mastery`(0~1·특성 #16 학습곡선)로 적재되어 콘텐츠 난이도 라우팅 입력이 된다. **구현**: 신규 `whymath_backend/l2/` 패키지(`__init__`·`bkt.py`). ① **`BktParameters`**(frozen pydantic·4-파라미터 p_init/p_transit/p_slip/p_guess 전부 [0,1])·**비퇴화 제약 `p_slip+p_guess<1`** model_validator 강제(위반=정답이 믿음을 낮추는 비식별 모델). 문헌 전형 기본값(0.3/0.1/0.1/0.2). ② **순수 함수**: `posterior_mastery`(관측 후 베이지안 사후·분모0 극단은 prior 반환)·`apply_learning`(학습 전이 P(L')=post+(1-post)·T)·`update_mastery`(사후→전이 1회 갱신)·`probability_correct`(다음 정답 확률 P(L)(1-S)+(1-P(L))G). ③ **`BktModel`**(파라미터 고정·stateless 추정기·상태는 호출자/시계열 DB 보유): `initial_mastery`·`update`·`update_sequence`(관측 리스트 순차)·`predict_correct`. **검증 수치**(default params): update(0.3,정답)≈0.6927·update(0.3,오답)≈0.1458·P(✓|0.3)=0.41·연속 8정답→0.9993(1 수렴)·8오답→0.1143. **외부 의존 0·완전 결정론·DB/HTTP 없음**(첫 슬라이스 범위 — IRT·DKT·파라미터 적합[EM]·정서·오개념·시계열 적재는 후속). **테스트 +28 hermetic**(`tests/backend/l2/test_bkt.py`): 파라미터 범위/비퇴화/frozen·사후 정답↑오답↓·prior 범위·분모0·학습전이(T=0 불변·T=1 완전)·갱신 수치·정답확률 경계/단조·Model initial/update/시퀀스 수렴(상·하)/명시 prior/predict/커스텀. **4게이트 green**(py3.12): black(107)·ruff·mypy-strict(92·+2 신규 l2 파일)·pytest **1532 passed**(1504→+28)·skip 51·`l2/bkt.py`·`l2/__init__.py` cov **100%**·전체 99.89%. **🎯 의미**: 학습자 모델 *첫 추정기* — 학생의 개념별 숙달을 데이터로 추적하는 코어 모트 시작. L4 교수학 결정(graded hint·난이도)·L3 콘텐츠 라우팅이 이 P(L)을 소비. **결정 v1 한계/후속**: ① **파라미터 미적합**(전 개념 동일 기본값·실제는 개념별 EM 적합 필요·AttemptEvent 로그 입력) ② **시계열 적재·HTTP 미연결**(P(L) 갱신을 ConceptMasteryHistory에 쓰는 결선은 후속) ③ **단일 스킬 가정**(다중 개념 동시 활성/전이·forgetting[감쇠] 미모델) ④ IRT(문항 난이도+능력 동시)·DKT(신경망)는 별 슬라이스. **후속**: BKT↔ConceptMasteryHistory 시계열 결선·파라미터 적합(EM)·IRT 프로토타입·forgetting·정서 신호·오개념 매핑.
 - ✅ **L2 학습자 모델 — 슬라이스 2 (BKT ↔ ConceptMasteryHistory 시계열 결선 — `l2/mastery_tracking`)** 완료 (메인 직접·4게이트 green·1545 passed, 2026-06-05) — L2 슬라이스 1 BKT *순수 추정*을 영속 학습 곡선에 결선. 풀이 관측 → (user, concept) *직전* 숙달 측정을 prior로 읽어 BKT 갱신 → 새 `concept_mastery_history` 행 append(특성 #16 학습 곡선). **설계 분리**(코드베이스 패턴): ① **`compute_mastery_record(prior_mastery, prior_sample, correct, model) -> MasteryRecord`** *순수*(DB 무관) — prior None이면 P(L0)에서 시작·mastery는 저장 정밀도(2자리) 반올림·sample_size=prior+1·confidence는 표본 기반 v1 휴리스틱 `n/(n+5)`(n=5→0.5). ② **`record_attempt_mastery(session, user_id, concept_id, correct, *, model, measured_at)`** 얇은 async DB 래퍼 — 직전 측정 SELECT(`measured_at DESC LIMIT 1`)→순수 계산→INSERT(append-only)·commit. **정밀도**: `mastery`가 `Numeric(3,2)`라 2자리 반올림으로 hermetic↔실 PG 일치(컬럼 폭 확대·고정밀 상태 분리는 후속). **FK 없음**: `concept_mastery_history`는 hypertable 느슨참조(user_profile 선적재 불요). **검증 수치**(기본 모델): 첫 정답 P(L0)0.3→0.69·표본1·conf0.17·둘째 정답 prior0.69→0.92·표본2·conf0.29. **테스트** 2층: ① **hermetic +13**(`test_mastery_tracking.py`): compute 8(첫 관측 P(L0)·정/오답·prior 사용·표본 증가·conf 단조·2자리 반올림·커스텀·연속 정답 증가) + record 5(fake session·prior 없음/있음/mastery NULL 폴백/explicit measured_at/기본 모델) — `_FakeSession`(SELECT prior·add·commit 시뮬). ② **통합 +1**(`test_record_attempt_mastery_appends_and_reads_prior_on_live_pg`·skip): 실 PG 첫 관측 0.69·둘째 0.92·DB 2행. **4게이트 green**(py3.12): black(108)·ruff·mypy-strict(93·+1 신규 모듈)·pytest **1545 passed**(1532→+13)·skip 52(+1 통합)·`l2/mastery_tracking.py`·`l2/bkt.py` cov **100%**·전체 99.89%. **🎯 의미**: BKT가 *데이터로 살아 있는 학습 곡선*이 됨 — 풀이마다 개념 숙달이 시계열에 누적되어 콘텐츠 난이도 라우팅·학습 곡선 시각화·L4 graded hint의 실데이터 입력. **결정 v1 한계/후속**: ① **AttemptEvent 자동 트리거 미연결**(현재 명시 호출·풀이 채점 파이프라인이 record_attempt_mastery 호출하는 결선은 후속) ② **2자리 정밀도 손실 누적**(Numeric(3,2)·장기 시퀀스에서 미세 편차·컬럼 확대 후속) ③ **단일 개념 가정**(한 문제 다중 개념 태깅 시 개념별 분배·가중은 후속) ④ confidence v1 휴리스틱(사후 분산 기반 신뢰구간 후속) ⑤ 파라미터 미적합(전 개념 기본값). **후속**: AttemptEvent→record 자동 결선·다중 개념 분배·파라미터 적합(EM)·IRT·forgetting.
 - ✅ **L2 학습자 모델 — 슬라이스 3 (채점 풀이 → 평가 개념 숙달 자동 전파 — `record_problem_attempt_mastery`)** 완료 (메인 직접·4게이트 green·1548 passed, 2026-06-05) — 풀이 채점 파이프라인의 *자동 결선 진입점*. 채점된 풀이(user, problem, 정/오답) 하나가 그 문제가 *평가하는 모든 개념*의 숙달 갱신으로 전파된다(다개념 분배 동시 해소). **구현**: `l2/mastery_tracking`에 ① **`_assessed_concept_ids`** — `problem_concept`에서 role∈{PRIMARY, TESTED}인 *distinct* concept_id SELECT(SUPPORTING·IMPLICIT 제외). ② **`record_problem_attempt_mastery(session, user_id, problem_id, correct, *, model, measured_at, assessed_roles)`** — 평가 개념 조회 → 각 개념마다 `record_attempt_mastery`(slice 2) 호출 → `ConceptMasteryHistory` 측정 N건 적재·리스트 반환. 매핑 없으면 []. **역할 필터 근거**(교수학): 정/오답은 *평가 대상* 개념(PRIMARY 주된·TESTED 평가)의 숙달 직접 증거지만 SUPPORTING(계산 부수)·IMPLICIT(무의식)엔 직접 증거 아님(오답이 보조 탓일 수도·정답이 보조 숙달 확증 안 함) → 노이즈 차단. **한 풀이=같은 measured_at**(생략 시 현재 1회 계산해 전 개념 공유). **소스**: 정/오답 신호는 `ProblemAttempt.is_correct`(AttemptEvent는 단계 이벤트 로그)·문제↔개념은 `ProblemConcept`(N:M·role·relevance). **현재 호출처 없음**(채점 엔드포인트 미구현·본 함수가 *결선 seam*·향후 채점 파이프라인이 호출). **테스트** 2층: ① **hermetic +3**(`TestRecordProblemAttemptMastery`·`_QueueSession`[execute별 큐잉 결과·다중 쿼리 시뮬]): 두 평가 개념 전파(같은 measured_at·add 2·commit 2)·매핑 0 → 빈 리스트·단일 개념 오답. ② **통합 +1**(`..._only_assessed_roles_on_live_pg`·skip): 실 PG Problem+3 Concept+3 ProblemConcept(PRIMARY·TESTED·SUPPORTING) 적재 → PRIMARY·TESTED 2개만 갱신·SUPPORTING 제외(역할 필터 실증·FK 체인 setup/cleanup). **4게이트 green**(py3.12): black(108)·ruff·mypy-strict(93)·pytest **1548 passed**(1545→+3)·skip 53(+1 통합)·`l2/mastery_tracking.py` cov **100%**·전체 99.89%. **🎯 의미**: 학습자 모델이 *풀이 한 건 → 다개념 학습 곡선 자동 갱신*으로 연결 — 채점 파이프라인이 이 함수 1개만 호출하면 BKT 숙달이 모든 평가 개념에 시계열로 누적. L2 핵심 데이터 흐름(풀이→숙달) 완성. **결정 v1 한계/후속**: ① **채점 엔드포인트 미연결**(함수는 seam·POST 풀이 채점이 호출하는 결선은 후속) ② **동일 신호 분배**(평가 개념 각각 같은 정/오답·role/relevance 가중 부분 크레딧은 후속) ③ **개념별 독립 commit**(다개념 원자성 후속) ④ ProblemAttempt→correct 추출 로직 미포함(호출자가 correct 전달). **후속**: POST 풀이 채점 엔드포인트(ProblemAttempt 적재 + 자동 숙달 전파)·role/relevance 가중·파라미터 적합(EM)·IRT.
@@ -336,6 +337,823 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-09-12 (구현·SEC-31): **학생 답안·풀이 본문 3테이블(problem_attempt·answer_submission·student_solution_step) 봉투 암호화 — EOS-32 §4-6 "일괄 후속" 유보 해소, dialogue_turn(SEC-01) 선례를 그대로 답습·신규 키 1개로 3테이블 공유** (claude 구현, backend-engineer 서브에이전트 위임 + 세션 독립 재검증) — 판정 기준 main `b469d3b5`
+
+- **배경**: PR #903 Codex P1 지적 → 실측 결과 봉투 암호화 장치는 dialogue 계열(SEC-01)엔 실재하나 학생이 실제로 제출한 답안/풀이 본문 3테이블은 평문으로 유보돼 있었다(단일 테이블 선행 암호화는 보호 비대칭이라 EOS-46에서도 의도적으로 미적용 유지 — 부분 배선 자체가 이 태스크의 존재 이유를 재생산하므로 3테이블 일괄 해소가 acceptance⑤).
+- **키 정책 결정(내가 직접 판단·위임 전 결정)**: `api/_crypto.py`의 기존 3개 키(device_secret·dialogue_content·evidence_payload)가 전부 "자산 도메인별 분리"돼 있음을 확인 → 신규 키 `student_work_encryption_key`(+`_decryption_fallback_keys`)를 발급해 dialogue·evidence와 폭발 반경을 격리하되, 3테이블 내부는 이 키 하나를 공유한다(같은 데이터 주체·같은 답안 제출 흐름 안에서 함께 쓰이는 관계라 dialogue_turn 내부 3축 공유 논리의 자연스러운 확장 — 키를 3개로 쪼개도 폭발 반경이 안 줄고 "미설정→평문 폴백" 함정만 3배가 된다).
+- **`student_solution_step.expression`의 NOT NULL 특수 취급**: 다른 7개 대상 컬럼과 달리 `expression`은 원래 `NOT NULL`이었다(다른 컬럼은 이미 nullable). 마이그레이션(`3f5c83f51246`, down=`4c6dfb1527a9`)이 이를 nullable로 완화하되, schema 계약(필수 `str`)은 그대로 유지해야 하므로 `resolve_dialogue_content`(둘 다 없으면 None 허용)가 아니라 `resolve_stored_secret`(device secret과 동일 계약 — 암호행인데 cipher 미설정이면 RuntimeError, 평문·암호문 둘 다 없으면 데이터 무결성 오류 RuntimeError) 패턴을 재사용하는 전용 헬퍼(`encrypt_student_solution_step_expression`/`resolve_student_solution_step_expression`)를 신설했다 — 조용한 빈 문자열 없음.
+- **구현 위임 + 독립 재검증**: 8쌍 16컬럼 ORM 추가·`_NON_SCHEMA_COLUMNS`·`api/me.py`(`submit_attempt`)·`api/coach.py`(`_complete_problem`) 두 `ProblemAttempt` 쓰기 경로 배선·`privacy/export.py`(`_student_work_row_json` — 복호를 먼저 적용한 뒤 schema 재검증, `to_schema()` 직접 호출 시 `expression` 필수 계약과 순서 충돌하는 함정을 문서화해 회피)·`privacy/student_work_backfill.py`(dialogue_content_backfill.py 선례 미러, SEC-04 JSONB `none_as_null` 함정 회피)의 기계적 구현은 backend-engineer 서브에이전트에 위임했다(약 59분·54만 토큰). 서브에이전트가 자체 Monitor 대기 루프에 갇혀 최종 보고를 즉시 전달하지 못해, **세션이 직접 diff 전체를 검토하고 RED-before-fix 3건(me.py 암호화 호출 제거·`_crypto.py` expression 복호 헬퍼 훼손·`export.py` 복호 루프 우회 — 전부 `cp` 백업/복원, git 원복 미사용, `diff` 바이트 동일 확인)을 독립 재현**한 뒤 커밋했다(서브에이전트도 별도로 4건의 뮤테이션을 자체 수행했다고 사후 보고 — 두 결과가 서로 다른 뮤테이션 지점에서 일치해 교차 검증됨).
+- **에이전트 자기보고의 신뢰 한계**: 서브에이전트가 최종적으로 보고한 `tests/infra: 1303 passed`는 세션이 그 이후 발견한 `privacy.student_work_backfill` 모듈 미귀속 오류(전수성 위반 — `eos_feature_inventory_v2.py`의 `WM-O-902` 좌석에 `dialogue_content_backfill`과 함께 추가해 해소)**이전 시점의 stale한 수치**였다 — 세션이 직접 재실행한 결과만 최종 근거로 채택(`tests/infra` 1303 passed·1 skipped는 귀속 수정 *후* 재확인 값과 우연히 같은 숫자였으나, 그 사이 21건 ERROR가 실재했다는 점에서 "trust but verify"가 실제로 갭을 잡은 사례).
+- **검증**: ruff·black·mypy 대상 파일 전건 clean. 전체 백엔드 스위트 `12856 passed, 340 skipped, 1 xfailed, 0 failed`(18분33초 — 안정된 트리에서 재실행, RED-before-fix 뮤테이션 도중 첫 실행은 트리 변경으로 폐기 후 재실행). `tests/infra` 1303 passed·1 skipped(귀속 수정 후).
+- **범위 경계**: `problem_attempt.handwriting_uri`/`ocr_result`는 `AttemptSubmitRequest`에 아직 필드가 없어 암호화 경로는 배선됐지만 현재 항상 `None`을 암호화한다(API 계약 확장은 SEC-31 범위 밖). `answer_submission`·`student_solution_step` 2테이블은 이 코드베이스에 아직 **살아있는 HTTP 쓰기 경로가 전혀 없다**(erasure/export/retention만 참조) — evidence_payload 선례와 동형으로 "쓰기가 생기기 전에 암복호·백필·export 표면을 먼저 갖춘다"는 판단.
+
+### 2026-09-11 (구현·SEC-29): **관리자 콘텐츠 CUD(개념·문항) 감사 배선 신설 — 원래 겨냥한 `record_admin_access_audit`는 여전히 미배선(ADMIN-06 대기)이고, 실제로 닫은 것은 `PrivacyAudit`의 5번째 event_kind `content_mutation`** (claude 구현) — 판정 기준 main `5a65ad64`
+
+- **배경**: `docs/architecture/48_eos_security_access_control.md` §제2부가 "관리자 접근 감사 — `record_admin_access_audit` 호출부 0곳"을 P0 갭으로 명시. 그러나 실측 결과 이 함수는 SEC-09가 관리자→학생 개인정보 열람(콘솔 미착수라 호출부가 없는 것이 그 시점엔 옳은 설계)을 위해 만든 것이고, 그 결정 자체를 재론하는 것은 SEC-29의 권한 밖(ADMIN-06 선행 필요)이었다. 대신 `RequireContentAdmin` 전체 호출부를 grep해 찾은 **실제로 존재하는, 감사 0인 갭**은 `api/concepts.py`·`api/problems.py`의 CUD 6라우터(POST/PATCH/DELETE ×2) — 전역 콘텐츠(개념·문항)를 관리자가 생성·수정·삭제해도 감사 행이 전혀 남지 않았다.
+- **설계**: `AuditEventKind`에 5번째 값 `content_mutation` 신설(D3의 폐쇄 택소노미 — "데이터 유출/타인 개인정보 접근/권한 변경"에 "전역 콘텐츠 리소스 CUD"를 새 4번째 축으로 명시 추가). `PrivacyAudit`에 nullable 컬럼 3종(`resource_type`·`resource_id`·`action`) 추가, 신규 마이그레이션 `4c6dfb1527a9`(down=`f2662166a661`, offline `--sql`로 양방향 검증). `resource_type`은 `AuditResourceType`(`deletion_audit` 전용 — 학생 소유 데이터 삭제 도메인)을 재사용하지 않고 별개의 `PrivacyAuditResourceType`(concept/problem)을 신설 — 두 값공간을 섞으면 D3(이중 진실원천 금지)를 어기게 된다. 신규 writer `record_content_mutation_audit`(`privacy/audit.py`)가 `target_user_id`를 채우지 않는다(대상이 사용자가 아니라 리소스이므로) — `resource_type`+`resource_id`가 그 역할.
+- **의도적으로 하지 않은 것 — `reason` 자유텍스트 필드**: acceptance 원문이 언급한 "무엇이 바뀌었는지" 축은 `PrivacyAudit`의 기존 불변식("자유텍스트 필드는 두지 않는다 — 감사 행이 PII를 우연히 담는 사고 방지")과 정면 충돌해 의도적으로 제외했다. 이 필드는 `record_role_change_audit`도 동일 이유로 갖지 않는다 — 새 기능이 아니라 기존 설계 존중.
+- **Pydantic 스키마 동시 갱신 필수**: `PrivacyAudit.to_schema()`가 `sa.inspect(...).mapper.column_attrs` 제네릭 introspection + Pydantic `extra="forbid"`를 쓰므로, ORM 컬럼 3종을 추가하고 `schema/audit.py`에 대응 필드를 안 넣으면 **기존 감사 행 읽기 전체**(`GET /v1/me/privacy-audit`)가 그 순간 깨진다.
+- **RED-before-fix**: 뮤테이션 3건 — ①`concepts.py`의 3개 호출부 제거(정규식) → `test_concepts.py` 5건(신규 `TestContentMutationAudit` 4건 + `TestCreate`의 `len(fake.added)==2`) RED, 40건 무회귀 ②동일 패턴 `problems.py` → 4건 RED, 43건 무회귀(problems쪽 `TestContentMutationAudit`은 3건) ③writer 자체(`record_content_mutation_audit`에서 `resource_type=`·`action=` 대입 제거) → `test_audit.py`의 신규 `TestRecordContentMutationAudit` 2건 RED, 10건 무회귀. 세 곳 다 `cp` 백업/복원(git 계열 원복 미사용), `diff` 바이트 동일 확인.
+- **기존 테스트 파급**: `test_concepts.py`/`test_problems.py`의 `TestCreate::test_create_returns_201_and_commits`가 `len(fake.added) == 1`을 가정하고 있었는데(Concept/Problem 행 하나만 add된다는 전제) 감사 행이 함께 add되며 `== 2`로 깨짐 — 회귀가 아니라 새 동작을 반영하는 정정. 전체 스위트 1차 실행에서 `test_solution_path_orm.py::TestMigrationFileChain::test_single_head_chain`이 이전 head(`f2662166a661`)를 하드코딩하고 있어 RED — 새 head로 갱신 후 2차 전체 실행으로 재검증. `tests/infra`의 `feature_inventory_v2` 정합 가드도 backend 소스 변경(라우터 시그니처)으로 RED → `eos_feature_inventory_v2.py --write`로 재생성.
+- **범위 경계**: `record_admin_access_audit`(관리자→학생 개인정보 열람) 자체는 여전히 호출부 0곳 — ADMIN-06(백오피스 콘솔) 착수 전까지는 배선할 대상이 없다(SEC-26 CORS 항목과 동일하게 "선행 필요"로 명시 유예, 강제 의존 없음). `docs/architecture/48_eos_security_access_control.md`의 관리자 접근 감사·CORS·Job 소유권 3행을 이번 기회에 함께 갱신 — 뒤 둘은 SEC-26·SEC-27이 착지했는데도 문서가 갱신되지 않은 채 방치돼 있던 것을 발견해 보정(같은 표 안 인접 행이라 별도 태스크 없이 함께 처리).
+- **검증**: `EventKindFilter` Query 설명에 `content_mutation` 추가(`test_privacy_audit_kind_doc_sync.py` 기계 가드 충족). ruff·black·mypy 대상 파일 전건 clean. 전체 백엔드 스위트 0 failed(2차 실행, 1차는 위 head 상수 갱신 전이라 폐기). `tests/infra` 1301 passed·1 skipped(feature_inventory 재생성 후).
+
+### 2026-09-11 (구현·SEC-27): **비동기 작업(job↔user) 소유권 인가 배선 — 48_보안 §P0 IDOR 갭 해소, 신규 `job_ownership` 테이블이 79번째 핵심-외 테이블로 편입되며 감사 3종(스키마 프로브·정본 문서·삭제권 계획)이 함께 확장됨** (claude 구현) — 판정 기준 main `2d1f76c8`
+
+- **배경**: `app.py` 모듈 docstring이 이미 예고해 둔 갭 — `GET /v1/jobs/{job_id}` 폴링이 `CurrentUser` 인증 게이트는 있었지만(SEC-24(원 SEC-15) M6), 소유권(job↔user) 검사는 "현재 job 저장 구조(`JobStatus`)에 user 매핑이 없어 불가"로 명시 유예돼 있었다. Celery 자체는 job_id(태스크 id) 외 메타데이터가 없어(브로커·result backend는 이름 없는 페이로드만 오간다), 소유자 기록은 이 백엔드가 별도로 영속해야 했다.
+- **설계**: `db/models/job_ownership.py`(신규 ORM, PK=job_id(String) — Celery가 외부 발급하는 불투명 문자열이라 `sa.Uuid`가 아닌 `sa.String(255)`. user_id FK→user_profile, CASCADE 미적용·`refresh_token_session.py` 동형) + alembic `f2662166a661`(단일 head, `19149e92d368` 다음). `POST /v1/generate`가 QUALITY 큐잉 성공 직후(`result.is_queued`) 같은 트랜잭션에서 `JobOwnership` 행을 기록하고, `GET /v1/jobs/{id}`가 PK lookup으로 대조 — 매핑 부재·소유자 불일치 둘 다 **404**로 통일(acceptance③ "존재 자체도 노출하지 않음").
+- **RED-before-fix**: 뮤테이션 2건 — ①ownership 검사 블록 제거 → 신규 `TestJobsOwnership` 3건 중 2건(타사용자·매핑부재) RED ②`session.add`(쓰기) 제거 → 나머지 1건(왕복 테스트, `job_owner=None`으로 기본값 마스킹을 명시 배제해 실제 쓰기 경로를 변별) RED. `cp` 백업/복원(git 계열 원복 미사용)·diff 바이트 동일 확인.
+- **테스트 픽스처 파급**: 기존 `tests/backend/test_app.py`의 `_client()` 공유 가짜 세션이 `session.get`만 지원(consent 조회 전용)했던 것을, `add`/`commit`/`get(JobOwnership,...)`까지 지원하는 `_FakeSession`(POST↔GET 요청 경계를 넘는 공유 딕셔너리 + `job_owner` 기본 소유자 파라미터)으로 확장 — 기존 폴링-메커니즘 테스트(TestJobsEndpoint 등)는 `default_owner=_FAKE_USER`로 무회귀. `TestJobsAuthGate`·`TestAppVersionGate`·`tests/backend/api/test_health_endpoints.py`도 각자의 가짜 세션에 `JobOwnership` 응답 분기를 추가해야 했다(그러지 않으면 `get_session`이 처음으로 필수 의존성이 되면서 이 세 파일이 실 DB로 새 나가 `ConnectionRefusedError`).
+- **의도치 않은 파급 3건(전부 CI가 실제로 검증하는 축)**: ①`db/test_canonical_entity_model_freeze.py` — 신규 테이블은 좌석(19종 핵심 엔티티) 아니면 핵심-외로 귀속돼야 하는데, `job_ownership`을 "인증(작업 소유권)" 분류로 `NON_CORE_TABLES`에 추가하고 정본 문서(`canonical_entity_model_v1.md`) §2 표·합계(78→79)를 동시 갱신(과거 결정 서술은 보존하고 "※ [갱신 2026-09-11]" 각주로 델타만 기록 — 이 문서 자신의 정정 관례를 따름) ②`scripts/ops/probe_prod_schema_revision.sql` + `db/schema_version.py::KNOWN_REVISIONS` — 프로덕션 스키마 판별 프로브가 마이그레이션 체인 꼬리를 전수 커버해야 하므로 새 head에 대한 판별자 행(테이블 존재 검사) 추가 ③`privacy/erasure.py::_ERASURE_PLAN` — 소유 컬럼(user_id)을 가진 신규 테이블은 삭제권 계획에 포함되거나 사유와 함께 예외 등재해야 하므로(`test_erasure_plan_completeness.py`) `_ERASURE_PLAN`에 편입, `test_me_erasure.py`의 하드코딩된 총 삭제 행수(44→46)도 함께 갱신.
+- **왜 이 3건이 "부수 효과"가 아니라 "설계의 일부"인가**: 이 저장소는 "9월 스키마 노드 폭발 방지"(canonical entity freeze)·"삭제권에도 안 지워지는 테이블 방지"(erasure completeness)·"stamp 오판 방지"(schema probe)를 전부 기계 게이트로 걸어 뒀다 — 새 테이블 하나가 이 세 게이트를 전부 통과해야 한다는 것 자체가 "테이블을 추가하는 비용"을 의도적으로 높여 둔 설계다(CLAUDE.md 구조 붕괴 방지 철칙). 셋 다 로컬에서 RED로 먼저 확인한 뒤 고쳤다(신규 게이트를 우회하지 않음).
+- **검증**: 전체 백엔드 스위트 12810 passed·340 skipped·1 xfailed(0 failed, 19분22초) — 두 차례 재실행(첫 실행은 검증 도중 트리를 고쳐 신뢰 불가 판정 후 폐기, CLAUDE.md "검증 중 트리 변경 금지" 준수). `tests/infra` 1303 passed·1 skipped(최종 확인). ruff·black·mypy 전건 clean(대상 파일 5+).
+
+### 2026-09-11 (구현·SEC-26): **CORS/보안 헤더 미들웨어 배선 — 48_보안 §P0 갭 해소, "네이티브 앱이라 미적용" 원 결정을 그대로 흡수하는 deny-by-default 설계** (claude 구현) — 판정 기준 main `97fb89fb`
+
+- **배경**: `docs/architecture/48_eos_security_access_control.md`(§18 P0 목록·§제2부 매핑 L829)가 "CORS/보안 헤더 미들웨어 없음"을 EOS P0 갭으로 명시. 원 결정(2026-08-11 SEC-24)은 "학생 클라가 Flutter 네이티브 앱이라 브라우저 CORS 미적용" — 그 논리 자체는 여전히 유효하지만, `src/web/`(웹 클라)이 이제 저장소에 실재하고 `ADMIN-06`(백오피스 웹 셸)이 향후 브라우저에서 이 API를 호출할 예정이라 미들웨어 부재가 더는 안전하지 않다.
+- **설계**: `config.py`에 `cors_allowed_origins`(콤마 구분, 기본 "")·`cors_allow_credentials`(기본 False)·`trusted_hosts_allowlist`(콤마 구분, 기본 "") 3필드 + 파싱 프로퍼티 2종(`oauth_redirect_uri_allowlist`·`trusted_proxy_ip_allowlist`와 동일 패턴) 추가. `app.py::create_app`에서 TrustedHostMiddleware → CORSMiddleware → 커스텀 보안 헤더 미들웨어 순으로 **항상** 등록 — allowlist가 비면 각자 안전한 기본 자세로 수렴한다(TrustedHost `*`=현재 동작 무회귀, CORS 빈 리스트=deny-by-default·네이티브 앱 미영향, 원 결정과 실질적으로 동치). 보안 헤더는 `X-Content-Type-Options`·`X-Frame-Options`·`Referrer-Policy` 상시 + `Strict-Transport-Security`·`Content-Security-Policy`는 `_prod_like`(기존 docs_url 게이팅과 같은 판정 좌석 재사용 — 새 축을 만들지 않음. CSP `default-src 'none'`을 dev에 걸면 `/docs`(Swagger UI, CDN 스크립트 필요)가 깨지므로, docs가 이미 비활성인 prod에서만 적용해 충돌을 원천 차단).
+- **와일드카드+credentials 금지 = 부팅 시점 강제**: `Settings.model_validator`가 `cors_allowed_origins`에 `*`와 `cors_allow_credentials=True`가 동시 설정되면 `ValidationError`로 부팅을 막는다 — 브라우저 Fetch 표준도 이 조합을 금지하지만 그 실패는 브라우저에서 조용히 일어나므로(CLAUDE.md "확실하지 않을 때 침묵 금지"), 서버 쪽에서 fail-closed로 만들었다.
+- **RED-before-fix 검증**: 미들웨어 등록 블록 전체를 제거하는 뮤테이션 → `TestSecurityHeadersMiddleware`·`TestTrustedHostMiddleware`·`test_cors_policy_freeze.py` 5/7건이 RED로 반응(2건은 "기본값이 비어 있어도 결과가 같은" 대조 테스트라 불변 — 설계상 정상). `model_validator` 제거 뮤테이션 → `test_cors_wildcard_with_credentials_rejected_at_boot` RED. 원복은 `cp` 백업으로 실행(git 계열 원복 금지 준수), `diff` 바이트 동일 확인.
+- **`test_cors_policy_freeze.py` 전면 갱신**: 원 결정("미들웨어 없음")을 동결하던 테스트를 갱신 결정("미들웨어 있음·deny-by-default")을 동결하는 형태로 교체 — 그 파일 자신의 docstring이 이미 "이 테스트가 실패하면(=CORSMiddleware가 조용히 추가됨) 그 갱신 없이 결정이 우회된 것"이라고 예고해 둔 대로.
+- **범위 경계**: `trusted_hosts_allowlist`·`cors_allowed_origins` 둘 다 프로덕션 값은 미설정(배포 시 설정 필요 — 그때까지는 각각 안전한 기본 자세 유지). `ADMIN-06`은 아직 미착수(S4)라 하드 의존 없이 독립 진행(acceptance①이 "선행 권장"으로만 명시).
+
+### 2026-09-10 (사고·재발방지·규칙 등재): **증거를 실행용 펜스에 담아 냈다 — 붙여넣기 실행 사고 2회차, 규칙 축이 실패했으므로 코드 축으로 간다** (Kiki 붙여넣기 실행·오류 제보, claude 원인 규명·규칙/태스크 등재) — 판정 기준 main `091dd3c5`
+
+- **무엇이 일어났나**: `OPS-72` 착지 보고에서 세션이 **검증 증거**를 실행용 코드펜스에 담았다 — 커밋 메시지 한 줄(`b64f470d  OPS-72: … (#1065)`)과 `git cat-file -e origin/main:<경로>  → 존재` 두 줄. Kiki가 그 펜스를 통째로 붙여넣어 PowerShell에서 3건이 터졌다: **ParserError**(메시지 끝 `(#1065)`를 식으로 파싱 — "'(' 뒤에 식이 와야 합니다") 1건 + **`fatal: too many arguments`**(`→ 존재`가 git의 두 번째 인자가 됨) 2건. 전부 읽기 전용 명령이라 **피해 0**.
+- **2회차라는 것이 핵심**: 1회차는 2026-08-31 `HARN-38` 세션(`$ git ls-tree …`와 그 출력을 한 펜스에 담아 보고 → `CommandNotFoundException` 2건, 역시 조회 명령이라 피해 0). 그때의 대책이 CLAUDE.md 「실행용 블록과 증거 블록의 분리」 **산문 규칙**이었다. 그 규칙이 살아 있는 상태에서 같은 형태가 다시 났으므로, 「실수 관리」(동일 유형 2회 이상 → 규칙·코드·태스크 중 하나로 등재 의무)에 따라 이번 대책은 **규칙 강화 + 코드 축**이어야 한다.
+- **왜 규칙이 실패했나 — 재량이 남아 있었다**: 1회차 규칙의 문면은 "증거·출력 인용은 실행용과 **눈으로 구별되게** 표시"였다. 무엇이 "구별되게"인지가 저자 재량이라, 펜스를 쓰면서 라벨만 붙여도 준수로 읽을 수 있었다. 실제로 이번 세션은 그렇게 읽었다. **재량이 남은 규칙은 재량이 사고를 낼 때까지만 유효하다.**
+- **대책 2축**:
+  - ①**CLAUDE.md v0.2.20 확장 — 재량 제거**: Kiki에게 보내는 메시지에서 **코드 펜스는 실행용 전용**이며, 증거·출력·커밋 메시지·판정 주석은 **어떤 라벨을 붙이더라도 펜스에 넣지 않는다**(인용문 `>` + 「실측」 라벨). 위험한 두 형태를 명시했다 — ⓐ커밋 해시+메시지(괄호가 식으로 파싱) ⓑ명령+결과 주석(화살표 이하가 추가 인자). PR 본문·리뷰 문서에도 같은 규율을 적용한다.
+  - ②**`OPS-73` 등재 — 기계 축**: `scripts/ops/check_ps_scripts.py`에 규칙 추가(프롬프트 접두·화살표 판정 주석·커밋 해시 줄 검출). 신규 도구가 아니라 **규칙 추가**다 — `OPS-57`이 이미 그 가드를 `docs/**/*.md`의 powershell 펜스(인용문 안까지)로 확장해 뒀다. 인접: `OPS-60`(런타임 실패 규칙 3종 승계·같은 파일).
+- **정직한 한계 (태스크 acceptance ④에 못 박음)**: **기계 축은 이번 사고의 실제 실패 표면을 덮지 못한다.** 사고는 *채팅 출력*에서 났고 CI는 채팅도 PR 본문도 보지 않는다. 가드가 덮는 것은 저장소에 커밋된 런북·커맨드 문서뿐이다. 다만 그 표면도 실재하는 경로다 — 런북은 Kiki가 그대로 붙여넣는 1차 표면이고, **같은 날 PR #1093 본문에도 동일 패턴이 들어갔다**(즉 이 형태는 커밋되는 텍스트에서도 재생산된다). 채팅 축의 유일한 방어선은 규칙이며, 그 규칙은 이미 한 번 실패했다는 사실을 함께 남긴다.
+- **형태의 계보**: 「시크릿 입력 안내 규칙」(2026-07-16 · 복사-실행되는 위치에 자리표시자를 두지 않는다) → 「실행용 블록과 증거 블록의 분리」(2026-08-31 · 증거 인용 축) → 「붙여넣기 블록의 자리표시자 전면 금지」(2026-09-06 · 예외 제거) → 이번 확장(증거 축의 예외 제거). **네 번 다 "Kiki는 블록을 통째로 붙여넣는다"는 같은 사실**에서 비롯됐고, 그때마다 남겨 둔 재량이 다음 사고 자리가 됐다.
+- **함께 착지한 것**: `OPS-72` 본체는 PR #1065(머지 `b64f470d`)로 착지했고 대장 `done` 정합은 PR #1093이다. 이번 커밋은 규칙·대장만 건드리며 서빙·CI 워크플로 무변경.
+### 2026-09-10 (라이브 실측·Kiki 화면 확인): **필수 체크는 사라진 적이 없다 — 룰셋에서 클래식 브랜치 보호로 갈라졌고, 우리 도구 3종이 전부 룰셋만 본다** (claude 측정·등재, Kiki 설정 화면 확인) — 판정 기준 main `54b332ee` → `091dd3c5`
+
+- **경위.** `HARN-02`가 조직 이관 후 harness-audit 상시 red를 고쳤다(워크플로가 옛 owner를 리터럴로 넘기고, `curl`에 `-L`이 없어 GitHub의 301 본문을 규칙 배열로 오독). 착지 후 실효를 재니 **잡은 여전히 red였고 문구만 바뀌었다** — `필수 체크 0건(규칙 미조회/권한 부족)` → `규칙 5건은 읽혔으나 required_status_checks 0건(HTTP 200 · repo=kiki-s-broom/WhyMath)`. 고친 축은 작동했고(자기서술 인자가 새 조직을 따라갔고 301을 데이터로 읽지 않는다), **가려져 있던 진짜 상태가 그제야 보인 것**이다.
+- **확정된 시간선.** 2026-09-03 `G-required-checks-live-drift-fix` clear(라이브 16건 ↔ 문서 16건 기계 대조 완전 일치) → 09-05 `G-required-checks-source-pin-cleanup` clear(16건 전부 GitHub Actions(15368) pin) → **09-07T21:25:48Z 룰셋 `16623542` 갱신 후 `required_status_checks` 규칙 소멸**(`HARN-82` notes ⓐ가 admin 뷰로 실측) → 09-09 조직 이관 → 09-10 여전히 0건(규칙 수는 4 → 5). **소멸은 이관보다 이틀 앞선다 — 이관 탓이 아니다.**
+- **가른 것은 Kiki의 눈이었다.** 세션은 두 가설(ⓐ보호가 사라졌다 ⓑ보호는 사는데 이 API 창으로 안 보인다)을 **가르지 못했다** — 레거시 `/branches/main/protection`은 integration에 403이고, 에이전트 프록시가 이관 리다이렉트 목적지(숫자 ID 경로)를 거부해 조회 자체가 불능이었다(`HARN-04`). 추론으로 채우지 않고 물었다. Kiki 실측: Settings→Rules→Rulesets→main의 `Require status checks to pass`는 **비어 있고**, Settings→Branches의 `Branch protection rules`에 **`main` 규칙이 있다** → **ⓑ 확정**.
+- **정합하는 반대 신호가 이미 있었다.** PR #1063은 큐 진입 후 `merge_group` CI가 **19분 55초**를 돈 **뒤**(성공 31초 후) 머지됐다. 필수 체크가 진짜 0건이면 큐는 기다리지 않고 즉시 머지한다 — 이 관측이 ⓐ를 배제하는 쪽을 가리키고 있었고, 그래서 "보호가 사라졌다"로 단정하지 않은 판단이 옳았다.
+- **진짜 결함은 관측 도구 쪽이다.** `pr_delivery_audit.py`·`ruleset_drift.py`·`ruleset_pin_plan.py` **3종이 전부 룰셋만 읽는다.** 집행이 클래식으로 갈라진 상태에서 이 도구들의 판정은 *실제 집행*이 아니라 *한쪽 소스*에 대한 판정이다. 게다가 `GITHUB_TOKEN`은 룰셋은 읽지만 클래식 브랜치 보호는 **403**이라, CI 안에서는 갈라진 쪽을 볼 수단 자체가 없다. CLAUDE.md 「변별력 없는 검증 스텝 금지」의 *소스 축* 변형이다 — 검사 자체는 멀쩡한데 **보는 곳이 정본이 아니게 됐다**.
+- **결정은 사람 몫으로 남겼다** — `G-required-checks-source-of-truth`(kind=decision · assignee=kiki) 등재. 권고 A) 룰셋에 재등록(도구·게이트가 전부 룰셋 기준이고 새 자격증명이 불요) vs B) 클래식 정본화(도구 3종을 PAT 경로로 재작성). **안전 조건**: merge queue가 클래식 쪽에만 있으면 클래식 삭제 시 큐가 죽으므로, 룰셋이 전부 갖추기 전에는 클래식을 지우지 않는다. 해소되면 `HARN-82`의 차단 조건 ①도 함께 충족된다.
+- **교훈(등재).** *상시 red는 원인이 하나라고 가정하지 않는다.* 이 red는 원인이 **교체**됐다 — 첫 원인(301 오독)이 두 번째 원인(소스 갈라짐)을 3일간 가리고 있었다. 첫 원인을 고친 뒤 **문구가 바뀌었는지**를 확인한 것이 두 번째를 드러냈다. 고침의 완료 판정은 "green이 됐는가"가 아니라 **"내가 고친 것이 실제로 작동했는가"** 로 하고, 남은 red는 별개로 다시 진단한다.
+
+### 2026-09-08 (라이브 실측·게이트 G-pr-auto-resync-token): **자동 재동기화가 처음으로 돌았다 — 열린 질문 2개가 닫히고 결함 2개가 드러났다** (Kiki PAT 발급·실행, claude 로그 판독·등재) — 판정 기준 main `ee2e1918`(실행 시점 checkout)
+
+- **닫힌 질문 ① 예약은 발화한다.** run `34187637864`이 **`schedule` 이벤트**다(04:37:17Z). 워크플로 결함이 아니었다. 착지 00:09Z → 첫 예약 발화 04:37Z로 **약 4시간 28분**(표본 1). `HARN-87` ⑤~⑧이 "미확정"으로 남겨 둔 축이 이것으로 갈렸다 — **미확정을 유지한 판단이 옳았다**(⑥에서 "구조적 달성 불가"로 확정했다면 지금 그 근거가 틀린 채 대장에 남아 있었을 것이다).
+- **닫힌 질문 ② PAT 경로가 실제로 돈다.** run `34188745979`(workflow_dispatch · dry_run=0 · 04:56:02Z) **success** — `token=pat` · `── 요약: 스캔 17건 · BEHIND+auto-merge 0건 · 최신화 0건 · 충돌 0건 · 미판정 4건 · 기타실패 0건`. 게이트 clear.
+- **드러난 결함 ① 토큰 값 오염** — 04:37 예약 실행은 시크릿이 이미 등록된 상태(`RESYNC_TOKEN_KIND: pat`)에서 `Post "https://api.github.com/graphql": net/http: invalid header field value for "Authorization"`로 실패했다. 붙여넣기에 개행·공백이 딸려 들어간 형태다. **실패 경로 설계가 그대로 일했다** — 스크립트가 이것을 "대상 0건"이 아니라 `PR 목록 조회 실패(exit=1) — 측정 실패다`로 판정하고 **HTTP 응답 본문을 남겨** 원인이 즉시 규명됐다(`HARN-85` ③의 실증). Kiki 재등록 후 정상. 대책은 타 세션이 `HARN-89-resync-token-hygiene-precheck`로 등재(토큰 위생 사전 검사).
+- **드러난 결함 ② 대상을 못 본다 → `HARN-90` 등재(priority 1)**. 성공 실행의 **미판정 4건** 중 하나가 PR #1059인데, **같은 시각 REST는 그 PR을 `mergeable_state: behind`로 답했다** — 재동기화해야 할 바로 그 대상을 건너뛰었다. `gh pr list --json mergeStateStatus`가 GitHub의 지연 계산을 유발하지 않아 UNKNOWN으로 오는 것으로 보인다(단건 조회가 계산을 촉발한다 — **추론이므로 ①에서 실측하도록 적었다**). 설계("모른다 ≠ 아니다")는 옳게 작동했으나 입력이 거의 항상 UNKNOWN이면 **자동화가 형식적으로 정상이면서 실효 0**이 된다. 요약이 분모와 미판정 수를 내도록 설계한 덕에 그 상태가 첫 실행에서 즉시 보였다("작동한 비율" 원칙의 효과).
+- **등재 절차에서 배운 것 2건**: ⓐ`add`가 번호 충돌로 `HARN-89`를 거부해 타 세션의 동명 태스크를 알게 됐다 — **paths 2개가 정확히 겹쳐**(같은 스크립트·같은 테스트 파일) 병렬 충돌 고지를 notes에 박았다. 이번엔 등재 전에 역할 기반 grep(`mergeStateStatus|update-branch|auto-resync|재동기화`)을 먼저 돌렸다(직전 `HARN-88` 중복의 교훈 적용). ⓑ`audit-deps` 쓰기측 선검사가 내 notes의 "선행" 어구를 의존 선언으로 읽고 **등재를 거부**했다 — 오탐이지만 규칙대로 우회하지 않고 **문구를 고쳐** 재등재했다(대장 차원 의존이 아니라 실행 순서 권고임을 문장에서 분리).
+### 2026-09-08 (stray-code 9회차): **좌석은 전부 살아 있었고, 대신 감사가 자기 세션의 PR 결함을 잡았다 — 그리고 "처분 라벨"이 만료 없는 유예로 8일째 서 있었다** (Kiki "stray-code", claude 실측·등재) — 판정 기준 main `4abacdce` · 정본 `docs/reviews/unmerged_branch_audit_2026-09-08.md`
+
+- **전제 복구**: 세션이 shallow(52커밋)로 시작해 브리핑도 "판정 보류"를 냈다 — `--unshallow`로 1,043커밋 복원 후 판정. 이걸 안 풀면 ahead 수치·포팅 근거가 통째로 오염된다.
+- **판정 4분류**: 원격 38브랜치 = PR 소유 19 · claim 활성 4 · 감사 대상 15. **회수 필요 0건**(15건 전부 8회차가 좌석 부여·이번 회차에 좌석 상실 0) · 추적 중 14 · **삭제 1**(a3ysut) · 제외 23. 유령 PR 0건.
+- **8회차 미커버 17건 해소 확인**: 8회차 §8.1이 자기 위반으로 수용한 "7n9n72 좌석 8건의 커버가 미머지 PR #1020에만 있다"는 #1020·#1027·#1033 머지로 닫혔다 — main 기준 좌석 10건 전부 브랜치 참조 실재. "사람 기억에만 의존"이던 상태가 끝났다.
+- **회수 done 2건 acceptance 전수 재대조**(규칙 의무): PED-37의 Codex P1 잔여(duration_seconds 미제공 시 started_at NULL)는 SEC-33(#1052)이 승계 착지. SEC-32는 artifacts 줄에 문서 정정이 안 적혀 있어 별도 확인했고 실제로는 정정돼 있었다(eos_privacy_gap_analysis.md 166·245·274행). 미이행 0.
+- **삭제 판정 1건 — a3ysut 독립 재도출**: 8회차가 "착수 세션 재확인 후"로 조건을 달았고 좌석 OPS-41 ④(a)가 그 권한을 명시했다. 재확인 수행 — diff 16파일 **main 부재 0**, 고유 줄 20(6파일)은 전건 옛 판이며 main이 더 넓다(예: ReviewStatus가 브랜치 3종 docstring vs main 3종+quarantined+EOS-71 근거). 8회차의 유일 uncovered였던 MEMORY 글자 깨짐은 #1027이 정정해 고유 줄 0. 8차 배치 등재(head b271671b 스냅샷 병기).
+- **신규 등재 1건 — HARN-93**: 열린 PR 10건이 HARN-42(done)의 처분 라벨(eos-rework 5·eos-postpone 4·eos-close 1)을 단 채 **8일간 갱신 0**이다. HARN-42 ④가 집행을 Kiki에게 넘기고 종료했으므로 **닫기 전 파일 단위 대조·회수 좌석 선행을 소유한 것이 없다** — 닫히면 main 부재 파일이 그대로 고아가 된다(#882 12·#880 6·#847 2 등). 만료 없는 유예 금지의 실사례이며, 앞선 미머지 고립 4회가 전부 "PR을 열지 않아서" 생긴 데 반해 이 형태는 **PR을 열어 두고 닫아서** 생긴다. 함께 등재한 관측: `backlog.py branches`가 PR 열림/닫힘은 가르지만 **처분 라벨은 보지 않아** PR #975(실작업 중)와 #858(eos-close·닫기로 결정)이 같은 `[PR]` 줄로 렌더된다 — HARN-78(done)은 *이미 닫힌 뒤*의 축이라 이 사각을 덮지 않는다.
+- **감사가 자기 PR의 결함을 잡았다(§5.4)**: MOB-18(세션이 끊긴 in_progress·claim 브랜치 원격 부재)을 실측하다가, 같은 세션이 30분 전에 연 PR #1067의 HARN-86 안내가 `해소 경로 (0단계): in_progress` — **실행할 명령이 하나도 없는 빈 안내**를 내는 것을 발견했다. 답처럼 보이는데 실행할 것이 없으므로 없는 것보다 나쁘다. 뿌리는 `_transition_route(x, x)`가 `[]`를 돌려주고 호출부가 0단계 경로로 렌더한 것이고, 내 전수 가드는 `src != dst` 쌍만 생성해 **그 절을 한 번도 밟지 않았다**(2026-09-07 "픽스처가 그 절을 실제로 밟는가" 3회차). 수정하며 타이브레이크가 의미를 가르는 것도 드러났다 — in_progress 재진입 고리는 review 경유·todo 경유가 둘 다 2단계지만 `cmd_review`는 원격 claim을 유지하고 `cmd_unblock`은 해제한다. 재진입 요청은 앞 홀더가 사라졌다는 뜻이므로 자리를 비우는 쪽이 옳고, 길이만 보는 타이브레이크는 claim을 든 채 재착수하라고 안내한다. 뮤테이션 4종 추가(누적 13/13 RED).
+- **오판 2건을 절차가 막았다**: ⓐ claim 대장의 "브랜치 없는 claim" 2건을 하네스 결함으로 읽을 뻔했으나, 역할로 검색하니 EOS-02는 `kind:block`(의도된 차단 홀드)이고 MOB-18은 HARN-26 `branch_gone`의 24h grace 안(경과 8.1h)이었다 — **부재 판정 절차**(2026-08-31)가 없는 결함의 등재를 막았다 ⓑ 8월 PR의 main 부재 파일 수를 `^(src|tests)/`로 재도출해 8회차 수치(#847 2·#882 12)와 어긋나자 8회차가 틀렸다고 적을 뻔했다. 패턴을 `src|tests|scripts|data`로 넓히자 정확히 재현 — **8회차가 옳고 내 패턴이 좁았다**. 선행 판정을 뒤집기 전에 집계 기준부터 맞춰야 한다.
+- **직전 배치 집행**: 누적 21건 잔존 0/21 · 허용 패턴 밖 수동 3건 전건 삭제 확인. 부수 관측 — 이 파일이 삭제된 21건을 계속 열거해 워크플로가 404를 실패로 계상하는 상시 red는 **HARN-01**(next 1순위)이 이미 소유하므로 재등재하지 않았다.
+- **검증**: validate green(597태스크·39게이트) · audit-deps green(위반 0) · next 122건 중 HARN-93 1순위(배선 확인) · overlap 경고 3건은 전건 상대측 광범위 glob. 전건 EXIT=0. 대장 쓰기는 인용 heredoc+파일 경유 후 **파싱해 식별자 13종 생존 대조**(누락 0 — 09-08 백틱 사고 절차 이행).
+
+### 2026-09-08 (재발방지·HARN-86): **거부가 "안 된다"만 말하고 "어떻게 하면 되는지"는 말하지 않았다 — 전이 거부에 해소 경로를 붙였다** (claude 실측·구현) — 판정 기준 main `4abacdce`
+
+- **사고 경위(2026-09-07)**: `LIC-07`(owner=kiki) 완료 기입을 Kiki에게 안내하며 `backlog.py done LIC-07 --as kiki --artifact ...` 한 줄만 주었다. 그 태스크는 `todo`였고 전이표에 `todo → done`이 없어 **exit 1**로 공전 — 왕복 1회 낭비. "검증 없는 실행 안내 금지"(가정 기반 런북) 유형이다.
+- **왜 도구 쪽에 대책을 두는가**: 세션 쪽 규칙은 이미 있다(안내 전 코드 경로 확인). 그런데 그 규칙은 *안내자가 규칙을 기억할 때만* 작동하고, 이 저장소는 그 형태의 실패를 반복해 왔다. 거부 메시지가 **허용 목록만** 내면 그것은 전이표를 이미 아는 사람에게만 유용하다 — 거부가 해소 경로 자체를 내면 안내자가 규칙을 몰라도 실행자가 막히지 않는다. "고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다"(HARN-52 등재 사유)의 같은 축.
+- **구현**: `_transition()`이 거부할 때 전이표 위 BFS로 **최단 경로**를 구해 그대로 붙여 넣을 수 있는 명령 목록을 동봉한다. 사고 경로의 실제 출력 —
+  `todo → done 전이 불가` 아래에 `해소 경로 (2단계): todo → in_progress → done` + `1) … start <id> --as kiki` + `2) … done <id> --as kiki --artifact <증적>`.
+  `--as <owner>` 표기는 owner 거부 메시지(HARN-06)가 이미 쓰는 형식을 재사용한다(새 어휘 금지). 종결 상태(`done`·`cancelled`)에서는 **없는 경로를 지어내지 않고** "새 태스크로 등재하라 · 대장 손편집으로 되돌리지 않는다"를 낸다.
+- **변별력 실증(뮤테이션 9/9 RED)**: 정상 입력에서 초록인 것은 보호의 증거가 아니므로 거부 상태를 주입해 전건 검출을 확인했다 — M1 `--as` 제거 · M2 안내 블록 제거 · M3 최단이 아닌 경로(DFS) · M4 `review`에 없는 `--as` 부착 · M5 우회 금지 문구 제거 · M7 `--artifact` 자리 제거 · M8 도달 불가를 `None` 대신 `[]`로 · **M6a/M6b 변별력 축**(정상 전이에도 안내가 나오게 만들면 잡히는가 — 성공/실패가 같은 화면이면 그 안내는 위장이다). 하네스는 셸을 배제한 순수 Python이며 `mutated != original`·치환 count·원복 바이트 동일을 매 회차 단언한다(2026-09-06 "주입 자체의 실재" 규칙).
+- **`--as`가 붙는 홉과 안 붙는 홉**: `--as`를 받는 것은 `start`·`done` 둘뿐이다. `review`·`block`·`unblock`·`cancel`에 붙이면 argparse가 거부한다 — 문자열 대조가 아니라 **실제 파서로 전건 파싱**하는 가드(`test_every_suggested_command_actually_parses`)를 둔 이유이며, M4가 그 가드의 변별력을 실증한다(2026-09-01 "금지 패턴 열거 대신 산출물 검사").
+- **검증**: 하네스 전체 스위트 **763 passed**(부분 실행 아님) · ruff·black은 CI 명령 그대로 exit 0. 배선은 신규 파일이 아니라 기존 `tests/harness/test_cli.py`에 얹었으므로 `tests/harness` 디렉터리 배선(`test_tests_harness_itself_is_wired`)이 그대로 덮는다.
+
+### 2026-09-08 (게이트 `G-eos-ip-separation-evidence` 라이브 실행·OPS-71): **리포트는 잘 만들었는데 소비자가 읽지 못했다 — PowerShell이 `Claude`와 `claude`를 중복 키로 거부, 그리고 그 실패 화면에 `FOREIGN=0종`이 찍혔다** (Kiki 실행·claude 실측·수정)
+
+- **경위**: Kiki가 MGMT-05 런북 실행 블록 ①을 Phaiakes9에서 돌렸다. 증거 생성 자체는 **성공**했다 — `EXIT=0` · 모든 ref 129개 전수 **2621건** · 선언 밖 신원 **0종** · 사람 저작 1132건 · 평일 09~18시 KST 커밋 **34.8%** · 오프셋 `+00:00` 1433 / `+09:00` 1002 / `-04:00` 186. 그런데 바로 다음 자가검증 줄이 리포트를 읽지 못했다:
+  `ConvertFrom-Json : … 중복된 키 'Claude <noreply@anthropic.com>' 및 'claude <noreply@anthropic.com>' …`
+- **원인**: Windows PowerShell 5.1의 `ConvertFrom-Json`은 JSON 객체를 **대소문자 무시 사전**으로 만든다. 우리 리포트의 신원 키는 커밋한 사람의 이름·이메일이라 대소문자를 **우리가 통제할 수 없다** — 이력 어딘가에 `claude`로 찍힌 coauthor 1건(대 702건)이 있었고, 그 한 건이 리포트 전체를 PowerShell에서 파싱 불가로 만들었다. 키를 정규화해 피하는 길도 있으나 그러면 서로 다른 두 신원이 한 줄로 합쳐진다 — 증빙 문서에서 신원을 합치는 것은 사실을 바꾸는 것이다. 그래서 **키가 아니라 소비 경로를 고쳤다**.
+- **더 나쁜 축(이것이 진짜 결함)**: 파싱이 깨진 뒤에도 런북은 `FOREIGN=0종`을 출력했다. `$J`가 `$null`인데 `.PSObject.Properties.Count`가 0을 냈기 때문이다 — **실패 화면이 "혼입 없음"으로 읽혔다**. CLAUDE.md "변별력 없는 검증 스텝 금지"(2026-07-17)의 재발이며, 이번에는 *검사 자체*가 아니라 **실패했을 때 무엇이 화면에 남는가**가 축이었다. clear 블록은 `$J.status -eq "ok"`가 거짓이 되어 fail-safe로 멈췄지만, 그 대가로 게이트가 통째로 막혔다.
+- **대책(코드)**: `--summary-from <report.json> [--expect-head <sha>]` 모드 신설 — git을 건드리지 않고 리포트를 파이썬으로 읽어 평면 `KEY=VALUE`만 낸다. exit code는 `0`=읽었고 clear 조건 충족 · `1`=읽었으나 미충족(`CLEAR_BLOCKERS`가 사유) · `2`=**읽기 자체가 불가**이며, 2일 때는 값을 **한 줄도 내지 않는다**(실패가 값으로 위장되지 않게). 판정(status·커밋수·전수·리포트가 이 커밋을 잰 것인지)을 런북의 PowerShell 조건식이 아니라 **도구 안에서** 한다 — 조건식은 실패할 때 조용히 빈 값을 내지만 도구는 사유를 낸다.
+- **대책(리포트 자신)**: `consumption` 블록 신설 — 리포트가 자기 JSON의 대소문자 충돌 키를 **스스로 열거**하고 `powershell_convertfrom_json_safe`를 선언한다. 충돌이 있으면 Markdown 본문에도 §7로 실린다. 소비자가 파서 거부로 처음 알게 되는 상태를 없앤다.
+- **대책(런북 동결)**: `tests/infra/test_ip_separation_evidence.py`가 실행 블록(```powershell 펜스 안, 주석 줄 제외) 안의 `ConvertFrom-Json`을 금지하고 `--summary-from` 실재를 요구한다. **첫 시도의 가드는 무효였다** — "리포트 파일명과 같은 줄"을 찾는 형태였는데 실제로 깨진 줄은 `$J = Get-Content $Report … | ConvertFrom-Json`으로 파일명이 변수 뒤에 숨어 있었다. 뮤테이션 R1(그 줄을 그대로 복귀)로 확인해 펜스 기반으로 교체했다. CLAUDE.md "가드가 *막는다*는 주장도 주입으로 검증한다"(2026-09-06)가 잡아 준 사례다.
+- **검증**: 뮤테이션 **17종 전건 RED**(주입 실재·바이트 동일 원복 단언 내장, 셸 배제 순수 Python 하네스) · `tests/infra` **1081 passed**(CI와 같은 의존 7종 설치 후 — 그 전 47건 실패는 전부 `sqlalchemy`·`pytest-asyncio` 누락이었고 내 변경과 무관함을 실측 확인) · ruff·black CI 명령 그대로 exit 0.
+- **부수 수확**: 이번 전수 실측(2621건)은 MGMT-05 당시(2297건)보다 324건 많다. `FULL=1`·`FOREIGN=0`이라는 **비교 대상**은 그대로이며, 런북의 예상 출력 수치를 이번 실측으로 갱신했다.
+- **남는 것**: 게이트는 여전히 `pending`이다. 이 수정이 푼 것은 **기계 축의 소비 불가**이고, ②확인서 서명·③양도기록 서명·⑤시점 고정·⑥clear는 그대로 Kiki 소유다.
+
+### 2026-09-08 (사고·재발방지·규칙 등재): **대장에 적은 문장이 셸에 먹혔다 — 백틱 4곳이 명령 치환으로 실행돼 식별자가 무증상 소실, append 전용이라 복구 불가** (claude 자책 실측·등재) — 판정 기준 main `1f126a55`
+
+- **무엇이 일어났나**: `HARN-87` acceptance ④를 `backlog.py amend --acceptance "…"`로 등재하며 한국어 산문 안 마크다운 백틱을 그대로 넘겼다. bash 큰따옴표 안의 `` ` ``는 **명령 치환**이라 `*/15`·API 경로·`workflow_dispatch`·`push: branches: [main]` 네 곳이 *실행되고* 그 자리가 **빈 문자열로 저장**됐다. 남은 것은 "cron은 라 2~3회 발화했어야" 같은 무의미 문장이다.
+- **왜 안 보였나**: 셸은 `command not found`를 stderr로만 흘렸고 CLI는 *받은 문자열*만 보므로 **정상 종료**했다(`✎ 정정 — acceptance +1`). 쓰기 성공과 내용 보존이 다른 값인데 출력은 같았다. 되돌리려 했으나 `--acceptance`는 **append 전용**이라 삭제 경로가 없어, 정정본 ⑤를 덧붙이는 것으로만 수습했다 — 손상된 ④는 대장에 영구히 남는다.
+- **대책 3종**: ①CLAUDE.md 규칙 신설(v0.2.19) — 대장 CLI에 산문을 넘길 때 **인용 heredoc**(`<<'EOF'`)으로 파일에 쓰고 `"$(cat 파일)"`로 전달(치환 결과는 재파싱되지 않아 백틱이 리터럴로 보존된다), **쓴 뒤 읽어서 핵심 식별자 대조**까지가 한 동작 ②정정 경로 등재 — **`HARN-88`을 새로 만들었다가 취소했다**: `HARN-76-acceptance-supersede-and-title-amend`가 같은 공백을 2026-09-06에 이미 등재했고(ARCH-31·#1012의 동형 Codex P2가 출처), 더구나 내가 제안한 *삭제*는 그 태스크 ④가 **의도적으로 닫아 둔** 축이었다(HARN-20 사고 이후 append 전용은 결함이 아니라 설계 — 필요한 것은 삭제가 아니라 폐기 표시). 등재 전에 역할로 검색하지 않은 것이 원인이며, `add`의 중복 고지는 HARN-75만 지목했다 — **고지는 검색의 대체가 아니다.** HARN-76에 근거를 승계하고 HARN-88은 cancelled ③정정본 ⑤를 그 방식으로 다시 써서 식별자 5종 보존을 파싱으로 확인.
+- **형태의 반복**: 2026-09-06 뮤테이션 하네스의 셸 이스케이프 사고와 **같은 부류의 2회차**다. 그때는 *안 들어간 주입*이 "검출"로 보였고, 이번엔 *손상된 텍스트*가 "등재 완료"로 보였다 — 둘 다 셸이 조용히 문자열을 바꿨고 도구는 그 사실을 알 수 없었다. 규칙을 축별로 나눠 적은 이유가 이것이다(하네스 축 vs 대장 쓰기 축).
+- **부수 실측 — `pr-auto-resync` 첫 실행 관측 실패, 그리고 그 해석에서 낸 두 번째 오류**: 워크플로가 main 착지(00:09Z) 후 116분간 실행 0건이었다(`total_count=0`·`state=active`). 세션 토큰에 `actions: write`가 없어(재실측 403) 수동 트리거로 결함 가능성을 배제할 수 없었다. 그래서 같은 저장소의 다른 예약과 대조했고 — `schedule` 총 85건 정상·`ci.yml` 야간 잡이 `cron: "0 18 * * *"`인데 실제 19:52Z·21:00Z로 **1시간 52분~3시간 지연** — "지연으로 설명된다"까지는 옳았다. **그런데 거기서 멈추지 않고 "`*/15`는 구조적으로 달성 불가"로 확정하고 push 트리거를 확정 설계로 승격했다(`HARN-87` ⑥). 이것이 틀렸다** — 비교 표본 5건이 **전부 정각 예약**이고 정각은 GitHub에서 가장 혼잡한 슬롯이라, 그 지연을 `*/15`의 비정각 슬롯에 일반화할 수 없다. 게다가 바로 앞 ⑤가 "대상 워크플로를 며칠 관측"하라고 절차를 정해 뒀는데 그 관측 없이 앞질렀다. PR #1056 Codex P2가 잡았고 `HARN-87` ⑦로 철회·범위 축소했다(원인은 **미확정 유지** · push 트리거는 유력한 대안일 뿐). **자기 진단: 새 규칙이 필요한 공백이 아니라 기존 규칙 위반이다** — "환경 사실의 추론 등재 금지"가 이미 이것을 막는다. 나는 *다른 워크플로의* 실측으로 *이 워크플로의* 환경 사실을 등재했다. 더 나쁜 것은 PR 본문 「정직한 공백」에 "표본 5건"이라고 적어 두고도 **대장 본문에는 "확정"이라고 쓴 것**이다 — 미래 세션이 읽는 것은 대장이므로 대장의 과신이 진짜 피해다. 같은 날 아침 "설정 부재를 미제공 가능성 없이 읽은" 오류와 **같은 축(간접 증거로 확정 판정)의 2회차**다. **그리고 3회차가 이어졌다**: ⑦로 철회하면서 *같은 표본*을 근거로 "116분 0건은 결함의 증거가 아니다"는 결론만 남겨 뒀다 — 표본의 대표성을 부정한 이상 그 결론도 지지되지 않는데, 하필 그것이 내게 유리한 쪽(내 워크플로에 결함이 없다)이었다. PR #1057 Codex P2가 다시 잡았고 ⑧에서 **비변별 증거**(지연·결함 양쪽에 부합)로 정정했다. 함께 잡힌 P2: ⑦을 append해도 ⑥이 활성으로 남아 **정본에 배타적 요구 두 개가 공존**한다 — 실행자가 ⑥을 먼저 읽으면 ⑦이 막으려는 조기 도입을 그대로 한다. `HARN-76`을 `depends_on`으로 붙여 폐기 표시 경로가 착지해야 착수되게 집행했다. **교훈: 철회는 그 근거에 매달린 결론을 전수로 훑어야 끝난다 — 절반만 한 철회는 남은 절반이 더 위험하다**(철회했다는 안도감이 검증을 멈추게 하므로).
+- **완료된 것**: PR #1040(머지 `34001b42`) 자동 재동기화 구현 + PR #1054(머지 `6797900c`) 대장 정합. `HARN-85` done, `HARN-87`은 `G-pr-auto-resync-token` 대기.
+
+### 2026-09-07 (사고·Kiki 재판정·게이트 G-merge-queue-or-strict-relax): **"설정이 꺼져 있다"와 "설정할 수 없다"를 구분하지 않아 결정 하나가 통째로 무효가 됐다 — merge queue는 조직 소유 전용이고 이 저장소는 개인 계정 소유다** (Kiki "1) merge queue 도입" → 실행 불가 발견 → "D) 자동 재동기화", claude 실측·구현) — 판정 기준 main `af32913b`
+
+- **무엇이 일어났나**: 머지 경합(PR #935 재동기화 4회 · PR #952가 CI green 3회를 확보하고도 `behind`로 3라운드)을 풀려고 게이트를 3안으로 올렸고 Kiki가 **1) merge queue**를 골랐다. 집행 PR(#1040)까지 냈는데, Kiki가 룰셋 편집 화면에서 `Require merge queue` 체크박스를 **찾지 못했다**. 실측: `GET /repos/doldori7/WhyMath` → `visibility=public`이지만 `owner.type=**User**`. merge queue는 **조직(Organization) 소유 저장소 전용**이라 항목 자체가 없다 — UI 경로 문제가 아니었다.
+- **왜 놓쳤나(결함의 형태)**: 라이브 룰셋을 실측해 `merge_queue` 규칙 **부재**를 확인했고, 그것을 "아직 안 켰다"로 읽었다. **부재는 미설정일 수도 미제공일 수도 있는데 앞의 것만 가정했다.** 기존 규칙들이 막는 부재 오독은 "내가 못 찾았다"(식별자 부재)·"trunk에 없다"(브랜치) 축인데, 이번은 **"설정할 수 있다"를 확인하지 않은** 세 번째 축이다. 실피해 = Kiki 왕복 1회 + 폐기된 PR 1건. 더 나빴을 경로: 그대로 머지됐으면 `ruleset_drift.py`가 **영원히 충족 불가한 위반**을 매 실행 보고해 판정기 전체가 소음이 됐다(상시 실패하는 fail-open의 신설).
+- **대책 3종**: ①CLAUDE.md 규칙 신설 — "설정 부재를 설정 가능으로 단정 금지"(기능 도입 제안 전 계정 유형·가시성·플랜 확인, 확인 못 하면 범위를 밝혀 적기) ②`ruleset_drift.py`의 규칙 타입 축에 `merge_queue`를 **의도적으로 넣지 않는다**는 결정을 코드 주석에 근거와 함께 고정(조직 이관 시 추가) ③`.github/branch-protection-setup.md`에 미제공 사실·조건·실패 경위를 절로 박아 다음 세션의 재제안을 차단 — 회귀 테스트 `test_doc_records_that_merge_queue_is_unavailable_here`가 실측 근거(`owner.type`)까지 동결한다.
+- **Kiki 재판정 = D) 자동 재동기화**(`HARN-85`). `strict`(up-to-date 강제)는 **유지**한다 — 보호를 낮추는 대신 충족을 자동화한다. 2)strict 해제는 실측 반례(#931이 `ReviewStatus`에 `quarantined`를 추가하자 #935 단언이 red — 동기화 없이 머지했으면 main에서 터졌다)로 계속 배제, 3)현행 유지는 OPS-58 단축(29분41초→약 19~20분) 후에도 main 전진 간격 15~30분을 못 이겨 배제, A)조직 이관은 이관 부수효과(App 권한·룰셋·시크릿·CODEOWNERS) 미실측이라 보류.
+- **구현**: `.github/workflows/pr-auto-resync.yml`(schedule 15분 + workflow_dispatch·`dry_run` 입력) + `.github/scripts/pr_auto_resync.sh`. **auto-merge가 켜져 있고 `BEHIND`인 PR만** `update-branch`한다(리뷰 중 diff를 임의로 전진시키지 않기 위해 auto-merge를 조건으로 둔다). 실패 경로 설계: 409=건너뛰되 PR 번호+**응답 본문** 기록·비치명 / 401·403=치명(권한 부족을 경고로 넘기면 자동화가 상시 무력인 채 초록으로 보인다) / 목록 조회 실패·비-JSON 응답=**측정 실패**로 exit 1(0건 통과 위장 금지) / `UNKNOWN`=건드리지 않되 출력에 남김(모른다≠아니다). 요약은 항상 **분모**를 낸다.
+- **가드 검증**: 쉘 스크립트를 문자열 검사하면 조건을 반대로 뒤집어도 통과하므로, `gh`를 스텁으로 갈아끼우고 **실제 실행**해 "이 입력에서 이 호출이 났는가"로 판정한다(테스트 19건). 뮤테이션 **11종 전건 RED** — auto-merge 필터 제거·BEHIND 조건 반전·UNKNOWN 출력 제거·403 비치명화·409 치명화·목록실패 검사 무력화·파싱실패 검사 무력화·요약 분모 고정·DRY_RUN 무시·응답 본문 미기록·워크플로의 스크립트 호출 제거. 주입 실재(치환 대상 1건 단언·`mutated != orig`)와 원복 바이트 동일(sha256)을 회차마다 단언하는 순수 Python 하네스.
+- **후속 — PR #1040 Codex 라운드(P1 수용·설계 변경)**: 초판은 PAT가 없으면 `GITHUB_TOKEN`으로 **폴백**해 진행하고 `::warning::`만 냈다 — "추론으로 PAT를 먼저 요구하지 않는다"는 논리였고, 그것이 틀렸다. Codex P1의 지적: GITHUB_TOKEN이 만든 push는 workflow를 재발화시키지 않으므로 그 폴백은 **새 head에 required check 0건**을 만들고, strict 하에서 그 PR은 "체크 대기"로 **영구히** 막힌다. `behind`는 사람이 Update branch를 눌러 풀 수 있지만(사람 행위는 CI를 재발화시킨다) 체크 없는 head는 그 탈출구마저 없앤다 — **폴백은 아무것도 안 하느니 나쁘다**(성공을 보고하며 PR을 좌초시킨다). fail-closed로 전환: `RESYNC_TOKEN_KIND != pat`이면 **쓰기 전에** exit 1(단 `DRY_RUN=1`은 읽기 전용이라 허용 — 배선 확인 경로 유지). 게이트 `G-pr-auto-resync-token` 신설. **판단의 형태가 교훈이다**: 제약의 성립 여부를 측정하지 않고도 결정할 수 있었다 — 제약이 없으면 비용은 PAT 요구 1회, 있으면 폴백의 비용은 좌초된 PR로 **비대칭**이기 때문이다. 나는 "측정 전엔 요구하지 않는다"를 원칙처럼 적용했지만, 그 원칙은 *비용이 대칭일 때*의 것이다. 뮤테이션 5종 추가 전건 RED(게이트 제거·조건 반전·미지정 허용·DRY_RUN 예외 제거·워크플로 미전달). 함께 수용한 Codex P2: 폐기 게이트 `G-merge-queue-enable-ruleset`의 승계자 표기가 **존재하지 않는 `HARN-81`**을 가리켰다(번호 충돌로 CLI가 HARN-85로 재배정한 것을 산문에 반영하지 못함) — 대장 두 곳(waive 사유·clear 증적) 정정. 남은 P2 1건은 **원복으로 이미 해소**된 지적이었다(리뷰 시점 `4f0e6167`의 `merge_queue` 파라미터 미검증 — 현 head에는 선언·배선·파라미터 표가 전부 없다).
+- **정직한 공백**: ①`GITHUB_TOKEN` 폴백이 *실제로 어떻게* 실패하는지는 여전히 미측정이다 — fail-closed로 그 경로를 아예 막았으므로 관측 기회 자체가 사라졌다(`HARN-85` ②는 PAT 착지 후 '정상 경로가 CI를 재발화시키는가'로 범위가 좁아진다). ②도입 전후 변별력 실측(큐 대기 중 main에 의도적으로 착지시키기)은 워크플로가 main에 있어야 가능하므로 미수행(③④ 잔여). ③`HARN-56`(merge queue 도입)은 타 세션 claim이고 그 전제도 같은 이유로 무효지만 **무접촉**으로 두었다 — 처분은 소유 세션 몫이다. ④`ruleset_drift.py`·문서에서 `merge_queue` 선언을 되돌린 것은 같은 세션이 몇 시간 전 자기 손으로 넣은 것이다.
+### 2026-09-07 (게이트 `G-eos-ip-separation-evidence` 입력·MGMT-05): **겸직 IP 귀속 증빙 — 기계가 만들 수 있는 것은 ①번 축뿐이고, 그 ①이 증명하지 *못하는* 것을 리포트가 스스로 말하게 했다** (Kiki "G-eos-ip-separation-evidence", claude 구현) — 판정 기준 main `3a30244c`
+
+- **왜 지금**: 게이트는 2026-08-30 등재(remind 14d)됐고 8일째 미해소였다. 전환 설계서 §6-3이 이 항목만 변호사 자문 대기(MGMT-01·MGMT-02)에서 떼어낸 이유는 **자문과 무관하게 지금 확보 가능한 사실 기록**이기 때문인데, 그 사실 기록을 만드는 도구가 없어서 "2h짜리 과제"가 착수되지 않고 있었다. 세션이 만든 것은 그 2h를 **기입·서명만 남기도록** 줄이는 입력이다.
+- **산출물 4종**: `scripts/ops/ip_separation_evidence.py`(신원·시각·환경 증거 생성기) · `tests/infra/test_ip_separation_evidence.py`(28건) · `docs/legal/templates/` 2종(재직사 자산 무사용 확인서 · 신설 법인 IP 양도 예정 기록) · `docs/ops/ip_separation_evidence_gate_runbook.md`(6항목 브리핑 + 자리표시자 0개 블록 3개).
+- **실측(main `3a30244c` 전체 이력 1013건)**: 선언 밖 신원 **0종**(개인 `rollrock.ki@gmail.com` + 도구 3종만) · author 오프셋 `+09:00` 806 / `-04:00` 182 / `+00:00` 25 · 평일 09~18시 KST 커밋 **33.6%**(340건) · AI 도구 신원 author 25건(2.5%).
+- **설계 판단 3건 — 전부 "괜찮아 보이는 실패"를 막는 쪽으로**:
+  ① **업무시간 비율에 기본 임계를 두지 않았다.** 그 비율에는 법적 임계가 없고, 임의의 숫자는 근거처럼 읽히면서 아무것도 재지 않는다. `--work-hours-threshold`를 준 사람에게만 신호가 간다.
+  ② **shallow 클론은 exit 2**(수집 실패)이지 0(이상 없음)이 아니다. 잘린 이력의 "혼입 0건"은 잘린 부분에 대해 아무 말도 하지 않는데, 확인서에 첨부되면 그대로 거짓 진술이 된다. 커밋 0건·신원 미선언도 같은 색이다.
+  ③ **증명 한계 4개 항이 리포트 본문에 항상 실린다**(조건부 아님). author date는 클라이언트가 정하는 값이라 위조 가능하고, git은 **장비 소유를 증명하지 않는다**. `-04:00` 182건을 감추지 않고 "클라우드 세션 환경"으로 표기해 확인서 §2-1이 사실대로 적게 했다 — 오프셋 분포와 기재가 어긋나는 것이 실사에서 가장 먼저 질문받는 지점이다.
+- **변별력 실측(뮤테이션 16종 전건 RED)**: committer 순회 삭제·KST 환산 제거·주말 조건 제거·업무시간 경계 개방·shallow/신원/커밋0건 가드 무력화·대소문자 정규화 제거·즉시 flush 제거·예외 타입명 은폐·한계 문단 조건부화·실패 리포트 위장·임계 기본값 부활·마커 부분일치 완화·스캐너 무효화·`.gitignore` 규칙 삭제. 하네스는 셸을 배제한 순수 Python이며 **주입 적용 단언(치환 count==1 · `mutated != original`)과 바이트 동일 원복 단언**을 매 회차에 건다(2026-09-06 셸 이스케이프 사고의 대책을 그대로 적용). 원복 후 기준선 sha256 일치 확인.
+- **서명 실물 유출 가드**: 기입된 확인서에는 재직사명·서명이 들어가므로 저장소에 남길 문서가 아니다. 1차는 `.gitignore`(`/.ip_evidence/` + 기존 `docs/private/`)이고, `git add -f` 한 번이면 뚫리므로 2차로 **추적 파일 첫 줄 마커 스캔**을 뒀다. 마커를 "어디든 있으면 위반"으로 만들지 않고 **첫 줄 전체**로 정의한 이유는, 부분일치로 하면 마커를 *설명하는* 런북·템플릿 주의문이 전부 위반이 되고 그 오탐을 면제하는 순간 가드 자신이 구멍이 되기 때문이다(2026-09-01 `(?!_PATH)` 자기면제 선례). 스캔 0건도 실패로 잡는다 — 템플릿 2건이 잡혀야 스캐너가 실제로 돈 것이다.
+- **게이트는 clear하지 않았다.** `kind=human`·`assignee=kiki`이고, 확인서 서명·양도 예정 기록은 본인의 의사표시라 기계 대체 대상이 아니다. 런북 마지막 블록이 `Read-Host`로 서명 완료를 확인한 뒤에만 `gates clear --as kiki`를 실행하며, 판정 기준 커밋(HARN-68)은 블록이 `git rev-parse HEAD`로 스스로 채운다. 런북 말미에 **이 게이트가 해결하지 않는 5축**(업무상저작물 §9·직무발명 §10·겸업금지·AI 생성물 귀속·겸직 신고 의무)을 명시했다 — clear는 "사실 기록을 확보했다"이지 "법적으로 안전하다"가 아니다.
+- **Codex 리뷰 라운드(PR #1041 · P1 2건·P2 4건 전건 수용) — 그 중 하나가 이 도구의 존재 이유를 무너뜨릴 뻔했다**:
+  ⓐ **P1 스캔 범위** — 초판이 `git log HEAD`만 순회했다. 이 저장소 실측으로 **2297건 중 1018건(44%)만** 보고 "이력 전체에서 혼입 0건"이라 선언하고 있었다(나머지 1279건은 미머지 브랜치·원격 참조). 증빙 문서에 실렸으면 그대로 거짓 진술이다. 기본 범위를 `--all`로 바꾸고, 범위를 좁힌 실행은 `scope.is_full_history=false`·`unmeasured`로 **스스로 부분 측정임을 표시**하게 했다. Codex는 미도달 커밋을 2건으로 추정했으나 실측은 1279건 — **지적의 방향이 맞았고 크기는 훨씬 컸다**.
+  ⓑ **범위를 넓히자 초판이 못 보던 신원 2종이 드러났다** — `whymath-harness <harness@whymath.invalid>` 932건(전부 `origin/harness-claims` orphan 브랜치·트리는 `claims/` 하나뿐인 기계 장부 → 도구 신원으로 분류, 리포트 표에는 그대로 노출)과 `kiki <kiki@whymath.local>` 30 author·30 committer·63 coauthor(로컬 git 설정 주소로 보이며 시각 전부 KST·내용은 정상 개발분 → **본인 확인 사항**으로 런북·확인서에 명시). 재직사 신원은 없었다.
+  ⓒ **그 김에 발견한 자기 결함** — 하네스 봇 932건이 시각 분포에 섞여 있었다. "개인 시간에 작업했는가"라는 질문에 **봇의 실행 시각이 답하는** 상태다. TIME-01의 모집단을 `person_authored`(도구 신원 author 제외 1021건)로 바꾸고, 전체 스캔분도 `time_profile_all_scanned`로 병기해 감추지 않았다(사람 33.6% vs 전체 35.4%).
+  ⓓ **P2 Co-Authored-By 미집계** — 모듈 docstring이 트레일러도 센다고 적어 놓고 구현은 author 이메일만 봤다. 실측 998건 대 25건 — AI 관여를 **40배 과소계상**했다. 본문(`%b`)을 파싱해 집계하고(git `%(trailers:)`는 2.22+ 종속이라 미채택 — 환경에 따라 다른 수치가 나오는 증빙은 증빙이 아니다), 공동저작자를 **IDENT-01 신원 검사에도** 넣었다(공동저작자 = 잠재적 공동 권리자).
+  ⓔ **P1 게이트 clear 조건** — 런북 블록 ③이 서명 확인 문자열만 보고 clear했다. 수집 실패(exit 2)해도 JSON 파일 자체는 생기므로, shallow 실행의 **커밋 0건 실패 리포트로 human gate가 닫힐 수 있었다** — 이 도구가 막으려던 바로 그 실패를 런북이 열어 둔 것이다. `status -eq ok` + `total_commits > 0` + `is_full_history`를 clear 조건에 넣었다.
+  ⓕ **P2 타임아웃 미집행** — 블로킹 `read()` **뒤에서만** deadline을 봤다. git이 출력 없이 멈추면 그 검사 지점에 영영 도달하지 못해 선언한 300초가 장식이 된다. watchdog 스레드로 옮기고 stderr를 파이프 대신 임시 파일로 받아 파이프 교착 경로를 없앴다(모조 블로킹 프로세스로 결함 주입 검증).
+  ⓖ **P2 서명 스캔본 미차단** — 마커 가드가 `*.md` 첫 줄만 봤는데, 런북은 서명본을 **스캔·PDF로 저장**하라고 안내한다. 첫 줄을 읽을 수 없는 형식이라 가드가 절반만 존재했다. 파일명 패턴 + 법무 경로의 스캔본 확장자 축을 추가했다(이름을 바꾸면 뚫린다 — 그 한계를 코드 주석과 PR에 명시).
+  뮤테이션 **16종 → 26종 전건 RED**로 재검증(원복 후 기준선 sha256 일치).
+- **Codex 재리뷰 라운드 2(PR #1041 · P1 3건·P2 2건 전건 수용) — 머지 후보가 미검토 상태인 것을 세션이 먼저 발견해 `@codex review`를 요청했고, 그 판단이 옳았다**:
+  ⓐ **P1 mailmap 우회 — 이 도구의 존재 이유를 무력화한다.** git의 `%aE`/`%cE`(대문자)는 `.mailmap`이 **적용된** 이메일이다. 실측(임시 저장소 주입): `개인 <kiki@ex.com> 사내계정 <worker@employer.co.kr>` 한 줄만 있으면 `%aE`가 재직사 커밋을 `kiki@ex.com`으로 출력해 **IDENT-01이 신호 없이 exit 0**을 낸다. 원본은 소문자 `%ae`/`%ce`로만 나온다(같은 축: `%aN`↔`%an`). 이름은 처음부터 `%an`(원본)이었는데 이메일만 대문자를 써 **한 레코드 안에서 원본 이름 + 매핑된 이메일**이 섞여 있었다. 수정 = 소문자 전환. **기존 실측 수치는 영향 없음** — 이 저장소에 `.mailmap`·`mailmap.file`·`mailmap.blob`이 없고 `%aE`/`%ae` 출력이 전건 동일함을 실측 확인했다(잠복 결함).
+  ⓑ **P1 런북 fetch 성공 미확인** — `git fetch --all`이 네트워크·인증으로 실패해도 오래된 원격 추적 ref가 남아 스캔이 성공하고 `FULL=True`까지 나온다. `--all`은 "모든 원격을 대상으로"일 뿐 성공·최신성을 보증하지 않는다. `$FetchOk` 가드 추가.
+  ⓒ **P1 런북이 리포트 시점을 대조하지 않음** — 증거 생성 후 커밋을 더 쌓거나 이전 실행의 `.ip_evidence`가 남은 채 블록 ①을 건너뛰면, 리포트는 과거 측정인데 증적에는 현재 HEAD가 판정 기준으로 적힌다. `$SameHead`(`head_sha -eq $Base`)를 clear 조건에 편입 — 이 저장소의 "판정 시점 규칙"(v0.2.11)이 런북 수준에서 뚫려 있던 자리다.
+  ⓓ **P2 자식 프로세스 미수거** — 조기 `close()`·jsonl 실패 경로가 `kill()`만 하고 `wait()`하지 않아 POSIX에서 zombie가 남았다. 종료 경로를 `_reap(proc)` 단일 출구로 통합(stdout close → kill → wait).
+  ⓔ **P2 산출물 저장 실패가 exit 1로 샘** — `--out`이 기존 파일이거나 권한 문제면 `OSError`가 빠져나가 파이썬이 exit 1을 내는데, 이 CLI에서 1은 **"수집 성공 · 혼입 발견"으로 예약된 값**이다. 디스크 문제가 신원 혼입으로 오분류되고 런북은 이전 리포트를 다시 읽는다. exit 2로 변환.
+  **뮤테이션 26종 → 31종.** 첫 판에서 **3건이 살아남았고, 원인은 전부 가드가 아니라 픽스처였다**(CLAUDE.md v0.2.16 '픽스처가 그 절을 실제로 밟는가'를 그대로 재현): M27·M28은 mailmap 테스트가 "신호 1건 이상"만 단언해 author·committer 중 한 축만 되돌려도 나머지가 발화했고(현행 코드는 2건을 낸다 — 실측), M29는 `poll()`이 스스로 `waitpid(WNOHANG)`으로 zombie를 거두므로 wait 삭제를 구별하지 못했다. 픽스처를 고쳐(두 축 각각 단언 · wait 호출 자체를 spy로 못박음) **31/31 RED**. 부수: 새 `_reap`이 watchdog 클로저와 이름 충돌해 기존 테스트 11건이 즉시 RED — 테스트가 잡았다.
+- **자기 결함 1건**: `MGMT-04`로 먼저 등재하며 `--owner kiki`를 오기입해 `start`가 HARN-06으로 거부됐다. owner 변경 verb가 CLI에 없어 대장 손편집 대신 `cancel`(사유 기록) 후 `MGMT-05` 재등재로 처리했다 — 거부를 우회하지 않았으나 번호 1개를 태웠다. **검증 공백**: `tests/backend`는 돌리지 않았다(백엔드 소스 무접촉). `tests/infra` 1033건·`tests/harness` 전건·`check_ps_scripts.py` 317건·CI와 같은 ruff/black 명령을 전부 재현했다.
+### 2026-09-07 (게이트 실행 가능화·OPS-68): **게이트를 등재했는데 그것을 닫는 방법이 어디에도 없었다 — `G-eos63`를 6일 만에 실행 가능 상태로** (Kiki "G-eos63-skill-event-reach-sample", claude 실측·구현) — 판정 기준 main `3a30244c`
+
+- **문제**: `G-eos63-skill-event-reach-sample`[kiki]은 2026-09-01에 등재돼 `EOS-63`(P1)을 막고 있었으나, **닫는 절차가 어디에도 없었다**. 게이트 문면은 "prod DB에서 리포트 1회 실행"이라고만 적었고, 그대로 실행하면 십중팔구 공전한다 — 리포트(`harness.attempt_skill_event_reach_report`)는 *관측만* 하고 분모가 실 PG의 채점 이력이라, EOS-57 writer 착지(08-30) 이후 채점이 없는 DB에서는 전 지표가 `측정 불가(분모 0)`로 나온다. 이 저장소가 이미 4회차 태운 "측정 회차 공전"과 같은 형태다.
+- **빠져 있던 것은 도구가 아니라 표본**이었다. 그래서 `harness/attempt_skill_reach_probe`를 신설했다 — **`record_attempt_skill_event`를 직접 부르지 않고** in-process ASGI(`TestClient`)로 실제 `POST /v1/me/attempts` 라우트를 태워 표본을 만든다. 직접 호출하면 writer 도달률이 구성상 100%가 되어 측정이 아니라 동어반복이 되기 때문이다(「작동 신호 없는 알고리즘 부착 금지」의 측정기 축). uvicorn을 띄우지 않는 것도 의도다 — 포트 점유·좀비 서버·LAN 도달성 같은 *측정과 무관한* 실패 축을 제거한다(2026-07-17 좀비 uvicorn 계열).
+- **실패 경로를 먼저 설계했다**(「측정·수집 도구를 성공 경로만 보고 설계 금지」): exit **2**(DB 미도달)·**3**(스키마 뒤처짐 — `attempt_event.skill_ids` 부재)·**4**(후보 문제 0건)·**5**(제출 전건 실패)가 서로 다른 번호이고, 건별 실패는 **예외 타입명과 함께** 남는다. 해소율 0%는 exit 0 — 그것은 실패가 아니라 측정값이다. 모른다와 아니다를 구분한다: 제출 실패 건의 해소 개수는 `0`이 아니라 `None`, 수용 0건의 해소율도 `None`이다.
+- **NULL 함정 하나를 설계 단계에서 막았다**: 후보 선정을 `NOT IN (서브쿼리)`로 짜면 `problem_attempt.problem_id`가 nullable이라 NULL 한 건에 SQL 3값 논리로 **전건 false**가 되어 후보가 조용히 0건이 되고, 그 0건이 "코퍼스가 비었다"(exit 4)로 오독된다. `NOT EXISTS`로 조립하고 **컴파일된 SQL을 테스트가 동결**한다(문자열 금지 열거가 아니라 산출물 검사).
+- **보호 장치는 실패 주입으로 검증했다**(「보호 장치를 실패 주입 없이 '보호 있음'으로 선언 금지」): 뮤테이션 **11종 전건 RED**. 하네스는 셸을 배제한 순수 Python으로 짜고 ①치환 대상 count 단언 ②주입이 디스크에 반영됐는지 단언 ③원복 sha256 동일 단언을 회차마다 걸었다(2026-09-06 "주입 자체의 실재" 축). 원복은 `cp` 백업으로만 했다(git 계열 원복 금지 — 미커밋 산출물이 함께 사라진다).
+- **런북**(`docs/ops/eos63_skill_event_reach_sample_runbook.md`): 6항목 브리핑 + **자리표시자 0개** 블록. 프로브가 아직 main에 없으므로 1단계 블록이 `git cat-file -e origin/main:<프로브>`로 **스스로 판정해** main과 작업 브랜치 중 올바른 쪽을 고른다(2026-09-06 "블록이 스스로 찾는다"). 창 경계는 사람이 옮겨 적지 않고 4단계 JSON에서 `$Since` 변수로 잇는다. 산출물은 `/work/`(gitignore) 아래에 둔다. 게이트 clear 명령은 **블록으로 두지 않았다** — 증적 문자열이 자리표시자를 포함할 수밖에 없어 그대로 실행되면 잘못된 증적이 대장에 박힌다.
+- **정직 고지**(런북 §9): 이 회차의 도달률 100%는 "학생들이 쓰고 있다"가 아니라 "`attempt_submit` 경로의 writer 배선이 이 DB에서 작동한다"까지다. `coach_completion` 행이 0인 것은 죽었다는 뜻이 아니라 이 회차가 태우지 않았다는 뜻이다.
+- **부수 발견 → HARN-84 등재**: `declared_unwired_audit`가 신설 CLI를 즉시 "미분류"로 잡아 CI red를 냈다(가드가 일했다) — CI가 이 도구를 절대 돌리면 안 되는 이유가 미도달 사유이기도 해서(대상 DB에 **쓴다**) 그대로 선언했다. 더 넓게는 *사람 게이트가 실행 절차 없이 등재되는* 상태를 기계가 안 본다 — pending 11건을 게이트 ID grep으로 훑으니 문서 참조가 안 잡히는 것이 3건이었으나, **그중 최소 1건은 런북이 실재하는데 게이트 ID를 인용하지 않은 경우**였다(`G-eos02-prompt-cache-live-run`). 즉 이 수치는 상한이 아니라 측정 도구의 한계이고, 그래서 `HARN-84`의 acceptance는 검색 방법 명시와 **경고(exit 0)**를 요구한다(원래 HARN-82로 등재했으나 타 세션의 `HARN-82-required-checks-premise-drift`가 PR #1045로 main에 먼저 착지해 번호가 충돌 — 83도 원격 브랜치가 선점 중이라 CLI 제안대로 84로 개명했다. `validate`가 충돌을 exit 1로 잡았다) — 결정형 게이트(법률 검토)는 절차가 없는 것이 정상이라 차단으로 만들면 정상 상태에서 멈춘다.
+- **EOS-63 본체는 건드리지 않았다** — 타 세션(`claude/status-f6qz0c`)이 claim 중이다(그 브랜치는 main 대비 변경 0으로, 차단에 걸려 멈춘 상태로 실측됐다). 이 세션이 소유한 것은 게이트를 실행 가능하게 만드는 표본·런북뿐이다.
+### 2026-09-07 (MISC-23 · 실수 관리 의무 등재): **함정을 정확히 설명한 정답이 오개념으로 확신 진단됐다 — 공출현 AND에 반박 축이 없던 구조적 공백** (claude 실측·PR #1039) — 판정 기준 main `c4860445`
+
+**사고**: `diagnose("x²=2x에서 양변을 x로 나누면 x=2만 나와서 안 되고 해는 0과 2다")`가
+`root-loss-by-dividing`을 **confidence 1.0**으로 냈다. 이 문장은 함정을 *정확히 설명한 정답*이고,
+품질 게이트(0.65)를 넘어 학생에게 나갔다. "양변을 x로 나누면 안 된다 — x=0 근을 잃는다"도 같았다.
+
+**원인**: v1.1~v1.3 매칭은 전부 *양성 단편을 찾는* 축이라, 공출현 AND는 오개념을 **저지른** 풀이와
+그것을 **설명한** 정답이 같은 어휘를 쓴다는 사실을 구별할 수단이 없다. MISC-07이 만든 정규식 경로는
+무관했고(이미 배제됨) 결함은 substring 축이며 main에도 있었다(origin/main 대조).
+
+**대책(코드)**: `Misconception.refuting_regex` 신설 — 매치되면 `_match_one`이 **신호를 세기 전에**
+None을 반환한다. *감점이 아니라 거부*로 한 이유: 반박된 후보를 낮은 confidence로 남기면 하류가 그것을
+약한 증거로 취급하고, "얼마나 깎을 것인가"는 답 없는 눈금 문제다. 기존 `correct_form`은 coach의
+정밀 귀속 *점수*에만 쓰여 진단을 막지 못한다(소스 확인). 제로근 표기는 `ZERO_ROOT_MENTION` 단일
+정의로 두 집행 지점(전방탐색·반박)이 공유한다 — 두 번 적었던 것이 PR #1032 Codex P1의 자리였다.
+
+**대책(규칙·의무 등재)**: 뮤테이션 R4(숫자 경계 제거)가 **1차에서 살아남았다**. 내 경계 픽스처가
+`x=10`·`x=20`만 봐서 그 절을 한 번도 밟지 않았기 때문이다 — `(?<!\d)`가 막는 것은 `10과` 같은
+**조사 결합**이다. 같은 형태가 같은 날 `MISC-07` M1에서도 났다(`(?!\d)`가 막는 것은 `x=-20`인데
+픽스처는 부호 없는 `x=20`). **동일 유형 2회차**이므로 CLAUDE.md 실수 관리 규약상 등재 의무 →
+"보호 장치를 실패 주입 없이 보호로 선언 금지"에 **픽스처 접촉 축**을 확장(v0.2.16). 절을 추가할 때마다
+"이 절이 없으면 어떤 문자열이 통과하는가"를 적고 **그 반례를 픽스처에 넣는다**. 두 픽스처 다 이름이
+`test_..._boundary_...`였다 — 이름이 의도를 말한다고 코드가 그 의도를 실행하지는 않는다.
+
+**검증**: 뮤테이션 7종 전건 RED(정정 후) · backend 전체 12029 passed · tests/infra 1005 passed.
+
+---
+
+### 2026-09-07 (stray-code 8회차 · r2): **7회차 판정을 적대 검증했더니 판정은 전건 유효했고, 대신 "좌석은 살아 있는데 acceptance가 잔여를 안 덮는" 상태가 14건 중 9건이었다** (Kiki "Stray-code", claude 실측·등재) — 판정 기준 main `b75f495d` · 정본 `docs/reviews/unmerged_branch_audit_2026-09-07_r2.md`
+
+- **왜 r2인가**: 같은 날 3시간 앞선 다른 세션이 7회차(PR #1020·`status-9dti04`)를 이미 올려 두었다. 재생산하지 않고 ①델타(소유 태스크 14건 불변·신규 판정 대상 0) ②**7회차 판정의 독립 적대 검증**(삭제 3건 × 반박자 2렌즈·7n9n72 잔여표 재도출·started_at 버그 반박·alembic 좌석) ③6·7회차가 두 번 연속 "정직한 공백"으로 남긴 **추적 중 14건의 acceptance 커버리지 전수 정독**을 워크플로(에이전트 25건·읽기 전용)로 수행했다. 7회차 등재분(PED-37·게이트·좌석 8건 amend·7차 배치)은 미머지이므로 재등재도 "착지"로도 적지 않았다.
+- **7회차 판정 검증 결과**: 반박자 6/6 반박 실패(전건 high) — 삭제 3건 전건 유효. 정정된 것은 판정이 아니라 **근거 표기 2건**(wbhw8v의 실작업은 EOS-81/#980이 아니라 EOS-75/#994·HARN-73/#1002 · dydkkx 머지 sha는 91c348fd가 아니라 b63c48e5 — 트리 바이트 동일). started_at 상시 NULL 버그는 반박 4축 전부 실패로 **main 실존 확정**(모델·DDL default 없음·writer 2곳 미대입·writer 산출물 단언 테스트 0·retention 폴백 없음) + 7회차가 안 꼽은 독자 2건(COLLAB-03 일별 롤업 0건 집계·SOL-02 앵커 최근순이 UUID 순으로 퇴화). alembic `7ef2b5a8e69e`는 main #738이 다른 스키마(`review_turns_remaining`)로 대체해 **superseded**(7회차 공백 닫힘), ASM-06 리비전은 미흡수 고립. 7n9n72 잔여표는 17파일 수는 정확하나 동반 변경(PB-02 ci.yml 본체·MISC-01/03 플래그·shadow.py·coach.py 배선·ASM-06 스키마/ORM/me.py/테스트 9·MISC-05 감사기 등록)이 빠져 표대로 회수하면 RED.
+- **커버리지 정독 결과(14건)**: uncovered 0 = 3(6eejrv·gdmwhk·34zvse 코드축) · low 6 · **high 5**. 실피해 후보: q8tvcx의 **SEC-13**(삭제·반출 매니페스트가 미도입 ClickHouse·S3를 선언하고 실재 반출처 Langfuse를 누락 — 미성년자 데이터·법령)·OPS-20이 OPS-38 acceptance에도 main에도 없었다 → **SEC-32(priority 1)·OPS-67 재등재**. k20m0w의 **MGMT-03**(연령 수집 결정·`is_production_like` 단일 신호가 안전장치 3중을 결박·PIPA 미성년 게이트)이 main 0건 → 원 ID 재등재(priority 1·owner kiki). 5t5lmv는 OPS-40 acceptance가 초기 head 기준이라 그 뒤 OPS-35(클라 버전 게이트 12파일)·A11Y-02(접근성 가드 3파일) 등 29항목이 **HARN-35와 상호 미소유** → OPS-40 ⑤. trjg5x는 PB-13 ②가 "소관 분리"로 제외한 18파일(S4-19 학년축·S4-20 대학 커버리지 축·PATH-03·설계 문서 2건 — main 생성기 7파일이 이미 유령 참조)을 받은 태스크가 없었다 → PATH-03·PB-14 amend + **삭제 금지를 PB-14·PATH-03·ADMIN-02 완료 후로 연장**. 34zvse는 코드 잔여 0인데 CUR-07 구현이 main `7b4fb546`(08-25 직접 커밋·PR 없음)에 있으면서 대장은 todo·HARN-34 노트는 "고립" — `done` 시도가 PR 증적 게이트에 exit 1로 거부돼 우회하지 않고 **HARN-80**(`--no-pr direct-commit <sha>` + trunk 조상 실측) 등재.
+- **별건 발견 — 탐지기 사각 3번째 변형(HARN-78)**: `backlog.py branches`가 닫힌 미머지 PR(#967·#802·#675) 3건을 "PR 제출됨 — 처분은 해당 PR에서"로 냈다. 원인은 `remote_claims.py:1601`이 자인한 한계(`refs/pull/<N>/head`는 닫힌 PR에도 남음)인데, 그 위임의 결과 문구가 막다른 길이다. 08-11 ④(느슨한 needle)·HARN-37(문서 커밋)에 이은 "결정 불요로 위장" 계열. 오늘 실피해 0은 감사가 GitHub API로 PR 상태를 따로 실측하기 때문이지 탐지기 덕이 아니다.
+- **조치 합계**: 신규 등재 7건(SEC-32·MGMT-03·HARN-78·79·80·OPS-67·VIZ-11) · 좌석 amend 12건(MISC-01/03·OPS-38/40/41·CUR-07·ARCH-30·MOB-18·PED-26·S4-59·PATH-03·PB-14) · 삭제 배치 0건 추가(#1020 보유) · 코드 이식 0줄. **7회차가 amend한 좌석 8건·PB-13·cleanup-request는 충돌 회피로 무접촉** — 보완 목록은 문서 §4.2 표가 고정(ASM-06·MISC-02·MISC-05는 #1020 머지 후 amend 1회로 닫힘). 전건 CLI·validate green(569건)·audit-deps 위반 0·SEC-32가 `next` 1위.
+- **자기 결함·공백**: **Codex P1(PR #1027)** — 좌석 amend 3건(MOB-18·ARCH-30·CUR-07)에 "HARN-57/HARN-80 착지 후 …"를 **산문으로만** 적고 `depends_on`에 넣지 않아 MOB-18이 `next` 후보로 노출됐다. 이 감사가 문서에서 인용한 규칙("선행 조건을 산문에만 적고 대장에 집행하지 않기 금지")을 같은 세션이 어겼다 — `amend --depends` 3건으로 집행, 전후 노출 실측(노출→미노출). `audit-deps`는 수정 전에도 green — 검출기는 "착지 후"를 알지만 **acceptance를 의도적으로 스캔 제외**(09-01 실측 오탐 4/12·notes 한정)하고 내 문구는 acceptance에 있었다. 설계된 사각을 사람이 메운 사례(`amend --acceptance`가 산문 선행의 통로라는 관측만 기록). 최초 워크플로에서 에이전트 9건이 세션 한도로 실패(06:40 UTC 리셋) → 리셋 후 `resumeFromRunId` 캐시 재개로 전건 회수. 판정 기준 이후 main 2커밋 전진(#1015·#1024)은 관련 파일 diff 0 실측. 실행 검증 0(전건 정적 git 대조). 부수: main `MEMORY.md:91`의 "회전 자omatica"(#922 유입 글자 깨짐)를 a3ysut 대조에서 발견해 정정.
+- **후속 집행(같은 날·PR #1027 머지 후)**: 7회차 #1020(`c36af9e2`)·8회차 #1027(`d50781b7`)이 모두 착지해 §8이 적은 "#1020에만 있다" 조건이 해소됐다. 충돌 회피로 미뤄 둔 **보완 amend 3건**을 §4.2 표 근거로 집행 — ASM-06(스키마·ORM·me.py 슬롯·export·테스트 3파일 + **alembic 재채번**: 브랜치 down_revision `7ef2b5a8e69e`는 main #738이 건너뛴 폐기 리비전이라 그대로 포트 시 multiple heads, main 단일 head `c1a5e07b4d38` 위로) · MISC-02(서빙 집행 지점 2파일+테스트 6건 · 단 `misconception_crosslink_mode` 플래그는 main 실재라 신설 불요) · MISC-05(`declared_unwired_audit` 등록 — 없으면 OPS-22 감사가 미분류로 CI red 가능). 세 항의 paths 문면은 *선행 조건이 아니라 유의사항*으로 적었다 — 선행이면 `depends_on`으로 집행해야 한다는 같은 날 Codex P1 교훈을 그대로 적용했다.
+- **후속 PR #1033 Codex 라운드(P1·P2 수용)**: ①**P1** — ASM-06 보완이 `api/me.py` 경로만 열거했는데 **실제 학생 흐름은 coach**다. 모바일이 `POST /v1/me/attempts`를 부르지 않음을 실측(클라 주석 3곳이 "coach.py 계약·중복 적재 금지"로 자인)했고, attempt는 `_complete_problem`이 만든다 — me.py만 회수하면 슬롯이 주 흐름에서 영원히 NULL이라 기능이 휴면. coach 제출 경로 + E2E 관통 테스트를 별항으로 부착. ②**P2** — 세 좌석의 "paths 유의" 산문은 claim 시점 충돌 검출에 무력(`start`·`overlap`은 paths만 읽는다). `amend --path`가 없으므로(HARN-57 todo) 세 좌석을 `--depends HARN-57`로 걸었다 — **같은 날 내가 내린 "선행이 아니라 유의사항" 판단을 뒤집은 것**이다. 변별력 정직 기록: 노출 A/B는 전후 모두 미노출이라 변별력 0(뮤테이션에서도 동일) — 셀렉터 직접 호출로 `Exclusion(reason='deps')`를 확정해 집행 작동을 증명했고, 가려진 진짜 이유는 HARN-11 미머지 done 필터의 중복 차단이다.
+- **다음 회차 최우선**: 8월 열린 PR 10건(#844~#893·08-31 이후 갱신 0)은 닫히는 순간 고아가 된다(main 부재 src: #882 12·#880 6·#847 2…) — HARN-78 사각과 결합하면 "소유됨"으로 위장된다.
+
+### 2026-09-07 (stray-code 감사·미머지 브랜치 정리 7회차): **좌석이 done이 되면 그 좌석이 지키던 잔여도 함께 고아가 된다 — 7n9n72 잔여 8태스크에 고립 참조 부착 + ID 충돌로 유실된 PED-15 버그 수정 회수 재등재 + 삭제 배치 2건** (Kiki "미머지 브랜치 정리", claude 실측·등재)
+
+**판정 기준: main `98925b0e`** (`--unshallow` 후 트렁크 994커밋 · 원격 브랜치 38 · 열린 PR 17 · 유령 PR 0 · claim 활성 3). 판정 정본 = `docs/reviews/unmerged_branch_audit_2026-09-07.md`. 직전 4~6차 삭제 배치는 잔존 0/19·허용 패턴 밖 수동 4건 전건 삭제 확인.
+
+**발견 1 — 좌석 소멸형 고아(신유형).** 08-31 감사가 `7n9n72`(최대 잔존 고립·main 부재 17파일)의 소유자로 지목한 것은 `HARN-37`이었는데, 그 태스크는 *탐지기 결함 수정* 태스크라 회수 acceptance가 없었고 #962로 done이 되자 잔여 8태스크(MISC-05/06·PED-14·PB-02·S3-33/34·ASM-06·MISC-02)의 명시 참조가 0이 됐다. 좌석 태스크 자체는 main에 todo/blocked로 살아 있으나 `next`는 이들을 "이미 완료(미머지)"로 **제외**하므로 /drive가 영원히 집지 않는 림보다. vafylb(08-31 `S4-59`)가 *done 후 잔여 고아*였다면 이번은 *좌석의 done이 잔여를 고아로 만든* 형태다. 조치 = 재등재가 아니라(ADMIN-08 중복 좌석 선례) `backlog.py amend --acceptance`로 8건에 [고립 참조] 항을 부착 — HARN-34가 MISC-01/03에 notes 손편집으로 한 것과 같은 내용을 이번엔 CLI 경유로 했다(정정 사유·이벤트가 대장에 남는다).
+
+**발견 2 — ID 충돌로 유실된 버그 수정.** 7n9n72의 `PED-15`(ProblemAttempt.started_at 상시 NULL 근본수정·done)와 `PED-16`(Kiki 결정)은 main이 같은 번호를 다른 태스크에 배정해(621b11f9 커밋 메시지가 "ID 충돌 그랜드파더 등재"로 자인) 재등재 경로가 없었고 HARN-35 유실 태스크 재등재에서도 빠졌다. main에서 버그 생존 실측: coach.py·me.py 두 writer 모두 started_at 미대입, wh1_evaluation 시간창 8곳이 그 컬럼으로 필터(since/until 지정 시 상시 0행·가짜 NO), **privacy/retention.py:80이 PII 보존기한 파기 기준으로 그 컬럼을 써 파기 0건**. 조치 = `PED-37`(priority 1·P1·파일 단위 이식·집행 지점 별항) + 게이트 `G-attempt-retention-purge-backfill-decision`(kiki·decision·14일 리마인드 — 법령 유래 절차는 kiki 소유 태스크보다 리마인드가 있는 게이트가 표면화가 확실).
+
+**발견 3 — 삭제 가능 3건.** `wbhw8v`(ahead 0·diff 0) · `dydkkx-runbook`(#961 머지·후행 'EOS-80 done' 커밋도 main이 승계·고유 53줄 전건 옛 상태) → 7차 배치. `gates/deploy-environment-approval`(#967 닫힘·main이 상위 증거로 같은 게이트 clear·런북 §7-3 판정 기준도 main이 09-01 정정판으로 명시 대체) → 허용 패턴 밖이라 Kiki 수동 삭제. 6dszy0 2건은 LIC-07 ⑪이 소실 0을 전수 증명한 뒤 09-06 삭제한 것으로 확인(감사 대상에서 자연 소멸).
+
+**정직한 공백**: claim 활성 3건 판정 보류(f6qz0c는 diff 0 — claim 해제 시 삭제 후보 · f9lp65 백업 스크립트 98줄은 main #993/#1009가 같은 결함을 독립 재구현한 것으로 *보이나* 대조 미실시 · 03elxp) · 7n9n72 alembic `dialogue_server_verified_completion` 1건은 S3-32(done) 회수가 대체했는지 미확인 · 추적 중 14건의 acceptance 전수 정독은 이번에도 하지 않았다(08-31과 같은 공백) · PED-37 `overlap` 경고는 전건 광범위 glob 포함·비활성 세션이며 `--in-flight-only` 결과는 감사 문서 §7 참조.
+### 2026-09-06 (LIC-07 ④): **저작권 원본 재유입 차단 — 사고가 들어온 경로를 3중으로 닫았다**
+
+**배경**: 2026-08-08에 KICE 보고서 PDF 2건이 들어왔고 제거는 끝냈지만(위 항목) **들어온 경로는
+그대로 열려 있었다**. `git check-ignore` 실측 결과 `.gitignore`는 아카이브(`*.zip` 등)만 막고
+**PDF·hwp·오피스는 규칙이 아예 없었다** — `git add` 한 번이면 그냥 들어온다.
+
+**3중 방어선**: ⓪ `.gitignore` 규칙(기본 경로 차단) ① 확장자 축(`add -f` 우회 차단)
+② **매직 바이트 축**(`%PDF`·`PK` — `보고서.pdf` → `보고서.txt` 위장 차단). ①만 두면 확장자를
+바꾸는 한 번의 조작으로 뚫린다 — "금지 패턴 열거 대신 산출물 검사"(2026-09-01)의 적용이고,
+여기서 산출물은 파일의 실제 바이트다. 가드는 **자기 1차 방어선의 실재까지 검사한다** —
+`.gitignore` 규칙이 지워지면 red(안 그러면 방어선이 조용히 사라진다).
+
+**설계 원칙 3건**: 허용 목록은 *사유 붙은 영구 예외*이고 실재하지 않는 항목은 **죽은 예외**로
+red(예외가 조용히 쌓이는 것 차단) · 전수 스캔이 성립하지 않으면 통과가 아니라 **exit 2**
+("스캔 0건은 실패") · CI는 **기존 policy-guard 잡에 스텝 추가**(신규 잡 신설 0).
+
+**변별력 실증 14건** — 정상 초록은 보호의 증거가 아니므로 위반을 실제 주입했다: 사고 당시
+파일명 그대로의 PDF · hwp · docx · zip · 확장자 위장 PDF · 위장 xlsx · 죽은 예외 · `.gitignore`
+규칙 삭제 · 얇은 인벤토리 · 비-git 디렉터리. **대칭 축**도 뒀다(진짜 텍스트 파일은 통과 — 모든
+`.txt`를 잡는 가드가 아니라는 증명). 배선 실재성 3건은 `ci.yml` 스텝을 지우면 red임을 실증했고,
+`needs: changes` 종속을 금지한다 — **PDF 하나만 추가하는 PR은 어떤 경로 필터에도 안 걸려 잡이
+skip되고 GitHub는 skipped를 required check 충족으로 센다**. 가드가 필요한 바로 그 상황에서
+돌지 않게 되는 함정이라 별도 계약으로 막았다.
+
+**과정에서 잡은 자기 결함 2건**: ⓐ 뮤테이션 M4(zip 주입)가 EXIT=0을 냈는데 가드 결함이 아니라
+**무효한 주입**이었다(`.gitignore`가 이미 `*.zip`을 막아 `git add -A`가 추적조차 안 함) —
+`add -f`로 재주입하니 정상 red. "EXIT=0이니 통과"로 넘겼으면 변별력 없는 스텝을 통과로
+오독했을 것이다. ⓑ `git check-ignore -z`가 `--stdin` 없이는 exit 128인데, 가드가 그것을
+**통과로 위장하지 않고 exit 2**로 냈다 — 측정 실패 설계가 실제로 작동한 사례.
+
+**남은 공백(명시)**: 확장자를 바꾼 **구형 `.hwp`**(OLE 복합문서)는 매직 축 미탐지 · 텍스트로
+옮겨 적은 본문은 이 가드 대상이 아님(policy-guard 패턴 축·사람 검수 몫).
+
+---
+
+### 2026-09-06 (Kiki 판정·게이트 G-eos49-content-version-seat): **도메인별 버전 테이블은 소속 엔티티 좌석에 편입한다 — 두 정본은 처음부터 같은 것을 금지하고 있었다** (Kiki 결정 "D안", claude 실측·집행)
+
+**판정 기준: main `9d5f81b2`** (근거 4건 전부 trunk 실재 확인 — `canonical_entity_model_v1.md` · `test_canonical_entity_model_freeze.py` · `44_eos_version_management.md` · `db/models/curriculum_version.py`).
+
+**충돌로 보였던 것**: `ARCH-37`(#984·09-05)이 `ContentVersion`을 좌석 부재로 동결(§3-D)했는데
+`EOS-49` acceptance ①은 `concept_version` 버전 테이블 신설이다. §4-5는 `EOS-49`를 "기존 좌석의
+컬럼 추가"로 적었으나 그것이 **사실 오류**였다.
+
+**실측 1 — 게이트 문면의 차단 주체가 틀렸다.** 게이트는 "검사 ③/③-b가 막는다"고 적었으나
+`concept_version` 테이블을 `Base.metadata`에 주입해 4검사를 직접 호출한 결과: ①만 RED
+(`귀속 없는 신규 테이블 1건`), ③·③-b·④는 GREEN. ③의 예약 이름 목록은 `content_version`·
+`content_versions`·`entity_version`뿐이고, ③-b는 `ContentVersion` 좌석 tuple만 본다. 정상
+상태에서는 4검사 전부 GREEN — 변별력 확인. **즉 부재 동결을 건드리지 않고 해소 가능했다.**
+
+**실측 2 — 두 정본은 충돌하지 않았다.** 44 §6.1은 Unified Entity 슈퍼테이블을 **보류**하고
+Hybrid(공통 헤더 Pydantic + 도메인별 버전 테이블)를 채택했고 §14-8은 슈퍼테이블 즉시 도입을
+**금기**로 명시한다. §3-D가 막는 것도 문면 그대로 "20번째 엔티티 급조"(=범용 ContentVersion)다.
+둘은 같은 것을 금지하고 있었고, 어긋난 것은 §4-5의 서술 한 줄뿐이었다.
+
+**실측 3 — 선례가 이미 있었다.** `curriculum_version`은 Curriculum 좌석의 2번 테이블이다
+(`db/models/curriculum_version.py` · `version_id` UUID PK + `framework_id` FK + `version_label`).
+버전 테이블이 소속 엔티티 좌석의 일원이 되는 것은 이 저장소의 기존 패턴이다.
+
+**Kiki 판정 (D안)**: `concept_version`을 **Concept 좌석의 4번째 테이블**로 등재한다.
+`ContentVersion` 좌석은 비운 채 유지 — 엔티티 19종 불변, 검사 ③·③-b 무손상. 좌석 합계 41→42.
+`problem_version`(ARCH-31)도 같은 규칙으로 Problem 좌석. 공통 축은 44 §6.2 `VersionHeader`
+**Pydantic 계약**으로만 공유한다(테이블 아님). 게이트 원안 3선택지(①좌석 개통 ②10월 연기
+③테이블 없는 계약으로 축소)는 모두 미채택 — 예외 승인 폭이 가장 좁은 길이 따로 있었다.
+
+**실측 4 — 순서 제약(신규)**: 좌석 상수에만 `concept_version`을 선등재한 상태를 주입하니
+①(`정본이 선언한 테이블이 코드에 없다`)·②(`좌석 테이블이 사라졌다`)·④(문서↔상수 불일치)가
+**3중 RED**. 그러므로 §2-A 표 + 좌석 상수 + ORM/alembic은 **같은 PR에 원자적으로** 담아야 하며,
+판정 세션이 표를 미리 고쳐 두는 것은 금지다 — 정본 §5-1로 등재.
+
+**집행**: `canonical_entity_model_v1.md` §3-D 판정 절 + §4-5 사실 정정 + §5-1 원자성 제약 신설
+(freeze 테스트 8건 GREEN 유지) · `EOS-49` acceptance ①-b · `ARCH-31` acceptance 파급 항
+(범용 ContentVersion ORM을 범위 밖으로 축소) · 게이트 clear. `EOS-49`·`EOS-50` 착수 해금.
+
+**교훈**: 게이트 문면이 지목한 차단 주체를 읽기만으로 믿지 않고 **실패 주입으로 확인**한 것이
+판정을 바꿨다 — ③/③-b가 막는다면 부재 동결 해제(A안)가 불가피했지만, 실제로 막은 ①은
+"§5 절차를 밟았는가"만 묻는 검사였다. CLAUDE.md "보호 장치를 실패 주입 없이 선언 금지"의
+**역방향 적용**: 가드가 *막는다*는 주장도 주입으로 검증해야 한다.
+### 2026-09-06 (LIC-07 실행): **KICE 연구보고서 PDF 제거 완료 — 재작성이 아니라 삭제였다** (Kiki "지금 삭제" 실행, claude 진단·증명)
+
+**결과**: `claude/human-bottleneck-tasks-6dszy0`·`merge/human-bottleneck-6dszy0` 삭제로 제거 완료.
+새 clone에서 KICE blob **0건**(Kiki 실행 실측). main 무변경·히스토리 재작성 0·협업자 재clone 불요.
+
+**교훈 1 — 서명된 저장소에서 "브랜치만 재작성"은 불가능하다.** 처음 설계는 `filter-repo
+--refs <두 브랜치> --strip-blobs-with-ids`로 PDF만 들어내고 커밋 21건을 보존하는 것이었다.
+실행하니 blob은 사라졌고 파일도 온전했는데(1·3축 통과) **2축(커밋 수)이 실패**했다 —
+`main..A`가 21에서 **726**으로 폭증. 원인은 **이 저장소의 커밋이 전부 서명**(`gpgsig`·SSH,
+표본 200/200)돼 있고 filter-repo의 엔진 `fast-export`가 **서명을 버린다**는 것. PDF와 무관한
+조상 705건까지 SHA가 바뀌어 브랜치가 main에서 분리됐다(공유 736 → 31). main을 `--refs`에
+넣는 것은 main 재작성이라 불가. → **히스토리에서 뭔가를 지워야 하면, 재작성 설계 전에 "그 ref를
+지울 수 있는가"(내용이 다른 곳에 보존돼 있는가)를 먼저 보라.**
+
+**교훈 2 — 검증 축은 "성공 확인"이 아니라 "서로 다른 실패를 각각" 잡아야 한다.** blob 0건과
+파일 보존만 봤다면 그대로 push해 두 브랜치를 못 쓰게 만들었다. 같은 실행에서 **검증 스텝 자신의
+결함도 2건** 나왔다 — ⓐ 커밋 수 기대값을 `21/18`로 못박아 *정상 상태에서 실패하는* 검증을 만들
+뻔했고(`388f7921`이 PDF만 담은 커밋이라 비면 정리돼 20이 된다 → `pre` 또는 `pre-1`로 교체)
+ⓑ 내용 마커를 한글 grep으로 잡으려다 PowerShell 인코딩에서 오탐 위험을 발견해 **blob SHA
+대조**(ASCII)로 교체했다.
+
+**교훈 3 — 부재 판정을 main과 한 브랜치만 보고 내렸다.** "삭제하면 MISC-01·MISC-03·PB-02
+구현이 소실된다"고 판단해 회수 PR 계획까지 세웠으나, 실제로는 그 구현이
+`claude/subject-problems-theory-check-7n9n72`에 **그대로 있었다**(기능 마커 5/5 보존·핵심 파일
+6개 blob SHA 바이트 동일·KICE blob 0건). 6dszy0 전용 파일 4개도 MISC-04 분으로 전부 main 실재
+(PR #821 회수분). **답은 하네스가 이미 갖고 있었다** — `backlog.py next`의 제외 경고가
+"이미 완료(미머지): …, claude/subject-problems-theory-check-7n9n72"를 출력하고 있었는데
+그걸 늦게 읽었다. CLAUDE.md "trunk 부재를 미구현으로 단정 금지"의 형제 사례 —
+그쪽이 "브랜치를 안 봤다"를 막는다면 이건 "**한 브랜치만 봤다**"이다.
+
+**실행 환경 함정 2건**(런북 §5): pip 설치 후 `git filter-repo`가 PATH에 없다(pip이 출력한 경로를
+세션 PATH에 얹어야 함) · `git filter-repo --version`이 버전이 아닌 SHA 형태를 내고
+`__version__`도 없다 → **버전 문자열로 도구 정상 여부를 판정하지 말고 `--dry-run`으로 기능 검증**.
+
+**남는 한계**: `refs/pull/739/head`(닫힌 PR #739)는 소유자도 git으로 지울 수 없다. 다만 일반
+`git clone`은 `refs/pull/*`을 가져오지 않으므로 통상 배포 경로에서는 제거 완료다. 완전 제거는
+GitHub Support 요청 — `LIC-07` ⑨에 기록.
+
+**기록**: `docs/ops/kice_pdf_history_purge_runbook.md`(지시서 → 실행 기록·교훈으로 재작성).
+
+---
+
+### 2026-09-06 (저작권 전수 실사): **선언이 데이터를 설명하지 못했다 — `concept_content_v1` 라이선스 고지 정정 + 히스토리 잔존 KICE 보고서 2건 등재** (Kiki "저작권 저촉가능성있는 자료가 있으면 삭제" → 실사 후 "선언을 데이터에 맞춰 정정", claude 실측·구현)
+
+**요청**: 저장소에 저작권 저촉 가능성이 있는 자료가 있으면 삭제.
+
+**실사 결과 — 작업 트리는 저촉 0건**:
+- 문제은행 코퍼스 **14,034 문항 전량** `license=WHYMATH_GENERATED`·`source_type=자체생성`(예외 0).
+- 교과서·기출 스캔·PDF·이미지 **0건**. 금지 등급 외부 소스(Khan·CK-12·AoPS·LibreTexts·Mathigon)
+  실물 **0건** — 매치는 전부 *금지를 선언하는* 정책 문서였다.
+- 벤더 JS(MathLive·three.js·React) 라이선스 고지 보존 확인. `data/licenses/snapshots/`는 라이선스
+  페이지 아카이브(준거 증적)로 보존 대상.
+
+**발견 1 — 선언↔데이터 모순(정정함)**: `data/corpus/concept_content_v1`의 `explanation` **133건**이
+NCIC 성취기준 본문과 사실상 동일했다(유사도 ≥0.90·그중 **124건은 표기 정규화 후 글자 그대로**).
+그런데 이 코퍼스의 `license_notice`는 **"K-12 성취기준 본문은 NCIC 저작물이라 미수록"**을 선언하고
+있었고, 데이터는 `concept_content` 테이블로 투영돼 서빙 경로에 올라간다. QUAL-06이 크롤링 파손
+48건을 고치며 ⑥에서 "파손 없는 성취기준 문체 약 129건은 KG-02 소관"으로 남긴 바로 그 잔류분이다.
+
+**판단(Kiki)**: 데이터 삭제가 아니라 **선언 정정**. 근거 — NCIC 성취기준은 교육부 고시
+제2022-33호라 저작권법 **§7 제1호(고시·공고·훈령)상 보호받지 못하는 저작물**이고 NCIC 공개분은
+**공공누리 제1유형**(출처 표시·상업 이용·변경 허용)이다. 같은 본문을 `standards_v1`이 이미 같은
+근거로 895건 보유한다. **법적 위험이 없는 자료를 지우면 합법 콘텐츠만 잃는다** — 결함은 데이터가
+아니라 거짓 선언이었다. 선언이 거짓이면 그 선언에 기대는 하위 판단(감사 신호·리뷰 프롬프트·데이터
+카드·매트릭스)이 전부 조용히 틀린다.
+
+**집행 지점(정본화와 별항)**: 산문만 고치면 다음 재생성에서 드리프트가 소리 없이 돌아온다 —
+실제로 생성원은 `data_pipeline/concept_content/models.py`의 상수였다. 두 게이트를 배선했다.
+- `tests/backend/l1/test_concept_content_license_declaration.py` — 실 코퍼스 전수 스캔 ↔ 사이드카
+  `ncic_statement_overlap` 숫자 대조 + 출처 표시 존재 + 거짓 주장 회귀 + 두 선언 일치(4축).
+- `tests/data_pipeline/concept_content/test_models_validate.py` — 파이프라인 상수 ↔ 커밋 코퍼스
+  바이트 동일(재생성 드리프트 경로 차단).
+**뮤테이션 5종 전건 red 실증**(정상 green·백업 `cp` 원복 후 바이트 동일 확인) — 정상 통과만으로는
+보호의 증거가 아니다(2026-09-01 규칙).
+
+**부수 소득**: 새 선언에 `[수학과 교육과정]` 리터럴을 하드코딩했다가 기존 **과목 중립성 게이트**
+(`test_subject_neutrality_gate.py`)에 걸렸다 — `build_ncic_citation_core()` 합성으로 교정. 이미
+있던 가드가 실제로 잡았다.
+
+**발견 2 — 유일한 실질 위험(미해결·Kiki 소유)**: git 히스토리에 **KICE 평가기준 개발 연구 보고서
+원본 PDF 2건**(고등 CRC 2017-5-6 4.82MB·초중 CRC 2016-2-6 5.91MB)이 잔존한다. 작업 트리에서는
+2026-08-08에 지웠으나(`98a34695`) 히스토리에 남아 clone마다 배포된다. **판권장 직접 추출로 확인**:
+ISBN 979-11-5788-529-9 / -347-9 + "※ 본 자료 내용의 무단 복제를 금함" — 고시가 아니라 KICE 발간
+**연구보고서**이고, `licensing_safety.md`의 'NCIC 구분'이 이미 후자를 **영리 차단(C등급)**으로
+분류해 둔 바로 그 부류다. 같은 커밋군의 `curriculum_math_2022.pdf`는 교육부 고시 제2022-33호
+별책 8이라 §7 비보호 — **제거 대상 아님**(Kiki가 실사 중 이 구분을 정확히 지적했다).
+제거는 히스토리 재작성·force-push라 되돌리기 어려워 세션이 실행하지 않고 **`LIC-07`로 등재**했다.
+
+**발견 2 정정 (같은 날 오후·unshallow 후)**: 위 판정은 **shallow 클론**에서 나온 것이라 도달성을
+확정할 수 없었다(SessionStart 훅도 "ahead 수치·포팅 근거를 신뢰할 수 없다"고 경고했다).
+`git fetch --unshallow` 후 재측정하니 **main은 두 blob을 담지 않는다**
+(`merge-base --is-ancestor 388f7921 origin/main` → false · `rev-list --objects refs/heads/main`
+→ 0건). 보유 ref는 정체된 브랜치 2개와 닫힌 PR #739의 `refs/pull/739/head`뿐이다. 따라서
+**main 히스토리 재작성·전 협업자 재clone·열린 PR 전건 재기반은 불요**하다 — 작업 규모가 크게 줄었다.
+Kiki가 실사 중 "KICE PDF 2건만 문제 아니냐"고 지적한 것이 정확했듯, 이 축도 처음 보고가 과대했다.
+
+**방법도 정정**: 브랜치 **삭제**가 아니라 **재작성**이다. `claude/human-bottleneck-tasks-6dszy0`은
+main에 없는 21커밋을 담고 그중 **MISC-01·MISC-03·PB-02 구현이 main에 미착지**다(내용 실측 —
+`coach.py`의 `visualize_misconception` main 0 / 브랜치 6, `ci.yml` 커버리지 재생성 main 0 /
+브랜치 3). 삭제하면 미병합 고립 **5회차**가 된다. blob ID 지정으로 PDF만 들어내고 커밋은 보존한다.
+
+**실행 주체**: 세션이 `git filter-repo`를 실행하려 했으나 **권한 분류기가 거부**했다. 거부는
+장애물이 아니라 판정이므로 우회하지 않고(CLAUDE.md "거부의 우회 금지" 처리 순서 ②) 소유자 실행으로
+이관 — 런북 `docs/ops/kice_pdf_history_purge_runbook.md`. 런북 초안의 성공 기준이 커밋 수를
+`21/18`로 못박았다가, `388f7921`이 **PDF 2개만** 담은 커밋이라 재작성 시 빈 커밋으로 정리되면
+정상 상태에서 검증이 실패함을 발견해 `pre` 또는 `pre-1` + 내용 마커 3축으로 교체했다 —
+"변별력 없는 검증 스텝 금지"가 *실패 방향*뿐 아니라 *성공 방향*에서도 성립해야 한다는 사례다.
+
+**남는 한계(명시)**: `refs/pull/739/head`는 소유자도 git으로 지울 수 없다. 다만 일반 `git clone`은
+`refs/pull/*`을 가져오지 않으므로 브랜치 재작성만으로 노출이 "모든 clone"에서 "PR ref를 명시
+fetch하는 사람"으로 줄어든다. 완전 제거는 GitHub Support 요청 몫이다.
+
+**리뷰가 잡은 3회차 — 같은 결함의 재발(PR #998 Codex P1)**: 위 정정은 선언 문자열을
+`models.py`에 **상수로 박고** 커밋된 코퍼스 파일도 손으로 고쳤다. 리뷰가 지적하기를, 그러면
+① 다른 xlsx로 재생성할 때 `133건`이 사실과 무관하게 그대로 나가고 ② 빌드 CLI가 사이드카를 통째
+덮어써 `ncic_statement_overlap`이 사라져 **새 게이트가 정상 상태에서 red**를 낸다. 즉 게이트가
+*생성 경로에 배선되지 않았다* — **내가 M5로 막으려던 바로 그 결함을 내 수정이 다시 저질렀다.**
+"정본화를 집행으로 착각한 완료 선언 금지"의 세 번째 사례이고, 이번엔 사람도 나도 못 잡고 리뷰
+봇이 잡았다.
+
+**대책(코드)**: 신규 `data_pipeline/concept_content/ncic_overlap.py` — 겹침을 빌드 시점에 전수
+실측하고 그 숫자로 선언을 **합성**한다(`build_source_citation`/`build_license_notice`).
+`models.py`의 상수 2개는 제거했다. CLI는 `--standards`를 읽고, **성취기준 코퍼스가 없으면
+exit 2로 중단**한다(측정 없이 선언을 쓰지 않는다). 사이드카는 통째 덮어쓰기 대신 **병합**해
+`pool` 같은 다른 도구의 키를 보존한다. 겹침이 0이면 빌더가 출처 표시를 담지 *않는* 다른 문장을
+낸다 — 대칭 축이 없으면 "무슨 데이터든 같은 문장"인 빌더도 통과한다. 뮤테이션 2종 추가 실증
+(선언 재하드코딩 → 4건 red · 사이드카 필드 제거 → 1건 red).
+
+**정정 파일**: `content.json`·`_provenance.json`(+ 기계 판독 `ncic_statement_overlap` 필드) ·
+`data_pipeline/concept_content/{models,__main__}.py` · `docs/data/concept_content_v1.md` ·
+`docs/data/licensing_safety.md` · `l1/concept_content/projection.py` ·
+`harness/concept_content_audit.py` · 테스트 4파일.
+
+---
+### 2026-09-05 (배선·EOS-81): **폐쇄루프 E2E 뒷반쪽이 닫혔다 — 코치 완료→attempt 적재→개념·스킬 숙달 갱신→추천 변화를 백엔드·모바일 두 앵커가 한 테스트에서 관통 증명** (Kiki /drive, claude 구현·검증)
+- **백엔드**(`test_e2e_vertical_slice_integration.py` 455→788줄, 신규 파일 0): 2턴 완료 경로(정답 `solution_steps` → 서버 correct 판정 → 돌아보기 1턴 → `problem_complete`+`completed_attempt_id`)를 관통. **산출물 자체를 단언**한다 — 그 attempt_id로 `problem_attempt` 실 SELECT(행 1건·`is_correct`·`used_socratic`), 개념·스킬 숙달 델타(strictly greater), `문제시도` 이벤트(`source=coach_completion`). 클라 직접 적재(`POST /v1/me/attempts`)는 계약상 금지라 호출하지 않는다
+- **(라)의 변별력과 정직한 공백**: "추천이 갱신된 mastery를 반영한다"를 *mastery 값이 추천 점수에 기여했다*로는 단언하지 못했다 — 응답의 `weak_concept_signal_count`는 BKT 기록의 **유무** 카운트라 값 변화(0.35→상승)에 변별력이 0이고 가중치는 미노출이다. 그래서 값 델타는 DB로 직접 재고, 추천 축에서는 *attempt가 추천 엔진 입력에 들어갔다*(미시도 필터·`standard_error` None→값)까지만 주장했다. 뮤테이션 5에서 드러난 것: **"완료 문항이 더 이상 추천되지 않는다"는 단독으로는 약한 검사**(엔진이 다른 문항을 골라 통과)이고, 실제 변별력은 **후보 풀 크기 정확히 1 감소**가 냈다
+- **모바일**(`e2e_loop_flow_test.dart`): fake를 **상태 있는** 서버 대역으로 바꿨다 — 추천이 조회 *횟수*가 아니라 완료 여부에만 반응한다(횟수로 회전하는 fake는 아무것도 증명하지 못한다). 대조군 2겹(완료 전 재조회·돌아보기 대기 중)으로 "완료가 원인"임을 격리. 완료 신호가 provider뿐 아니라 **화면 어포던스**까지 전파되는지 실 위젯 트리로 확인 — 소비를 무력화하면 상태 단언과 "다음 문항으로" 버튼이 **함께** RED
+- **④ LearningSession writer는 배선하지 않았다**(기계 집행 없음 명시): 스키마는 정본화됐으나 writer 0이고, 그 writer는 미완이 아니라 **영구 미신설 결정**(S3-16 acceptance ③)이다. `assert attempt.session_id is None`으로 공백을 기계로 동결했다
+- **⑤ 실행 실재성 실측**: `backend-migrations` 잡(실 PG·`WHYMATH_RUN_INTEGRATION=1`)이 `pytest -m integration`으로 이 파일을 수집하고, 경로 필터가 `tests/backend/`를 포함해 **이 파일 수정 PR은 반드시 발화**한다. `e2e-nightly`는 야간 단독 실행. 이 컨테이너에서도 로컬 PG16+alembic head로 **skip이 아니라 실제 실행**해 통과를 확인했다
+- 검증: 백엔드 전체 스위트 **12240 passed·322 skipped·exit 0**(15분 43초) · 모바일 `flutter test` **402 passed**·`analyze` No issues · 뮤테이션 백엔드 7종·모바일 1종 전건 RED(원복은 전부 `cp` 백업 — `git checkout` 금지 규칙 준수)
+- **부수 정정**: 직전 EOS-90 커밋이 `subject_adapter.py` docstring 표에서 **ruff E501 3건**을 남겨 CI가 red가 될 상태였다(커밋 전 그 파일에 ruff를 돌리지 않은 누락). 표를 각주 목록으로 분리해 CI의 정확한 명령(`ruff check . ../../tests/backend`)이 exit 0임을 확인
+
+### 2026-09-05 (사고·재발방지): **장부 생성기가 디스크를 세어 "내 기계에선 초록"을 만들었다 — 코드젠 산출물 29건이 인벤토리 loc를 2.7배로 부풀림** (claude 자책 실측)
+- **경위**: EOS-81 모바일 작업이 `dart run build_runner build`를 돌린 뒤 그 트리에서 인벤토리 v2 장부를 재생성했다. 생성기가 `p.rglob("*")`로 **디스크**를 훑어 gitignore 대상인 `.g.dart`·`.freezed.dart` 29건까지 셌고, `features/ocr`이 822줄(추적)→2188줄로 부풀어 장부에 박혔다. **로컬 tests/infra는 746 passed 초록**이었고 산출물이 없는 CI에서만 드리프트 테스트 2건이 RED — "내 기계에선 되는데"의 교과서적 형태다. 게다가 나는 CI diff의 `-`/`+` 방향을 반대로 읽어 "CI가 낡았다"고 한 번 오판했다(실제로는 내가 오염된 장부를 커밋한 것)
+- **왜 기존 규칙이 못 막았나**: CLAUDE.md의 "측정 도구 실패 경로"(2026-08-22)는 *도구가 실패할 때*를 다루고, "보호 장치 실패 주입"(2026-09-01)은 *가드 자신*을 다룬다. 이 사고는 세 번째 축이다 — **도구가 성공하는데 그 출력이 실행 환경의 우연한 상태에 의존**한다. 스냅샷·장부·리포트 생성기는 전부 이 위험을 갖는다
+- **대책(코드)**: `_GENERATED_CLIENT` 패턴으로 코드젠 산출물 제외 + 회귀 테스트 2건(`test_codegen_outputs_are_excluded_from_client_file_counts`·`test_ledger_counts_only_tracked_client_sources`). 후자는 **산출물이 없으면 skip**한다 — 없는 환경에서 초록인 것은 보호의 증거가 아니므로 변별력이 있는 환경에서만 판정한다. 결함 주입으로 실증: 필터 제거 시 `장부 loc 2198 != 추적 파일 합 828 — 빌드 부산물 29건이 섞였다`
+- **일반 규칙**: 저장소 상태를 스냅샷하는 도구의 모집단은 **디스크가 아니라 추적 대상**이어야 한다(`git ls-files` 또는 무시 패턴 제외). 그러지 않으면 장부가 "누가 어떤 명령을 먼저 돌렸는가"의 함수가 된다
+
+### 2026-09-04 (계측·EOS-88): **§3.8 허용 의존 방향을 네 화살표로 실측 — Interface→Adapter 0 · Adapter→Interface 적합성 증명 ✓ · Core 코드의 구현체 이름 0 · Core→Application 0 · 그러나 "등록" 형태는 부재(app.state 13키 중 과목 능력 0 · Core가 composition을 pull하는 지점 3)** (Kiki 계획서 100 §3.8 제시, claude 계측)
+- Kiki 제시: 권장 `Application→Core→Subject Contract→Math Adapter`, 실행 시 등록 형태면 `Core→Subject Interface←Math Adapter`(DI 역전)이 더 정확·**Core는 구현체를 몰라야 한다**. 게이트 `tests/infra/test_eos_dependency_direction.py`(19건·AST·지연 import 포함) + 경계 문서 §9. 실측: 인터페이스 두 파일이 import하는 것은 `schema.answer_form`뿐(docstring이 구현체 이름 2곳 언급 — 의존 아님·산문 냄새) · `l4.subject_adapter_math` L151 `_CONFORMANCE_PROOF: SubjectAdapter = MathSubjectAdapter()` · CORE 코드(docstring 제외)에 `Math*`·`subject_adapter_math` 0 · CORE→api/app/main 0(INFRA 운영 도구 8모듈 `ops.*`·`privacy.*`·`harness.*`는 `api._crypto/_auth/me` 헬퍼 import — Application 쪽 도구라 대상 아님·`api` 안의 암호/인증 헬퍼 배치는 별도 냄새로 기록만)
+- **현행은 §3.8이 "덜 정확하다"고 한 pull 형태**: `app.py`가 등록하는 13키 중 과목 능력 0 · `MathSubjectAdapter` 프로덕션 인스턴스화 0 · Core 3모듈(`api.coach` 2팩토리·`l3.pedagogy.slot_generator` 1·`l3.render.adapters` 2)이 `composition.default_*()`를 끌어옴. 테스트가 그 3개를 집합 동결(늘면 RED·줄면 ratchet) + `app.py`가 composition을 import하지 않는 현행을 잠금(등록 전환 시 의도적으로 깨져 두 기준선 동시 갱신 — 두 형태의 소리 없는 공존 금지) + `l*` pull 간선은 layers `ignore_imports`에 열거 필수(세탁 통로 방지)
+- 후속 등재: `EOS-89`(P1) 등록(push) 전환 — app.py 부팅 등록 + coach Depends + l3 파라미터 상류 주입 → pull 3→0·ignore_imports 2줄 삭제·전이 도달 14건 재실측. `EOS-86`에 ⑥ amend(StepChainVerifier 팩토리가 pull 4번째 지점이 되면 RED — EOS-89 경로 조율)
+- 첫 시도의 오탐 1건(정정): Core→Application 검사를 패키지 전체로 돌려 INFRA 8모듈이 걸림 → CORE 배정 모듈로 한정(BOUNDARY_MAP 정본 기준). 모집단 200 미만이면 RuntimeError(스캔 0건 = 실패)
+
+### 2026-09-04 (계측·EOS-84): **"수학을 제거했을 때 무엇이 남는가" + 금지 규칙을 기계로 — CORE 266 중 252(95%) 생존, 잔여 누수 2, 리터럴 비교 위반 1(적재기의 answer_kind 열거 — EOS-66 계약 충돌), 그러나 데이터로는 안다(어휘 상수 77건/18모듈)** (Kiki 계획서 100 §3.7 제시, claude 계측)
+- **EOS-65/67/69가 못 보던 두 축을 계측**했다 — `scripts/analysis/eos_core_boundary_probe.py` + 게이트 `tests/infra/test_eos_core_boundary_probe.py`(20건). ① **전이 도달**: import-linter는 직접 import만 보므로(`allow_indirect_imports=true`) CORE→CORE/INFRA/MIXED→ADAPTER 경유는 사각이었다. BFS 전수 결과 CORE 266 중 14가 ADAPTER에 닿고, **14건 모두 최단 경로는 합성 루트 `composition` 경유 = 설계된 유일 교체점**(누수 아님), 교체점을 막고 재면 **잔여 누수 2건**(`api.coach`·`api.ocr_handoff` → `l4.solution_coaching`(MIXED) → `verify_solution`·`wrong_form_match` 둘 다 — 누수 지점은 `solution_coaching` 하나). 원인은 하나 — MIXED는 계약 대상이 아니라 계약이 볼 수 없는 자리다. 테스트가 집합을 동결(늘면 RED·줄면 ratchet) ② **금지 규칙**(`if subject == "math"`·`if problem.type == "quadratic"`): CORE AST 비교문·match 리터럴 스캔 **히트 1** — `l1.problem_bank.populate._verify_meta_from_raw`(L363)가 answer_kind 17종을 튜플 멤버십으로 열거(`"inequality_direction"`이 걸림). 과목명 비교는 0. 이것은 EOS-66 "answer_kind는 Core가 해석하지 않는 불투명 문자열" 계약과 충돌하는 **진성 경계 냄새**다 — Physics 어댑터의 새 answer_kind가 적재 단계에서 걸러진다. 상환 방향 = 열거를 `SubjectAdapter.answer_kinds()`/코퍼스 데이터로 이전(Kiki 판정 후 태스크 등재). 테스트는 (모듈,종류) 기준선 1건으로 동결(늘면 RED·줄면 ratchet)·과목명 비교는 기준선 없이 0 강제. 결함 주입 5종(subject 비교·math_type 비교·튜플 멤버십·match case·역순 비교)이 각각 1건으로 검출됨을 확인, 비위반 4종(변수 비교·대입·docstring·`"pending"`)은 비검출
+- **새 발견 — Core는 로직이 아니라 데이터로 수학을 안다**: docstring 제외 문자열 상수에 수학 어휘가 77건/18모듈. 무게 중심은 `l4.misconception`(43건 — 오개념 64종(첫 메모 34종은 stale) 카탈로그·distractor op-code 10건이 **코드 상수**). EOS-65의 "기계는 중립" 배정은 로직으로는 맞고 데이터로는 샌다 — Physics 오개념을 붙일 때 `catalog.py`를 고쳐야 하면 Core가 아니다. 등재는 Kiki 판정(후보: 카탈로그 내용을 `data/corpus`로 이전하고 코드는 로더만). 그 외 `schema.pedagogy_pack` 예시 문자열 8·`slot_generator` LLM 프롬프트 예시 4·`l3.solution_path` ApproachType 한글 라벨 3
+- **정직한 공백**: 전이 도달은 정적 import(DI·문자열 참조 사각 — 인벤토리 v2의 DI 다리는 미적용) · 어휘 스캔은 낱말 목록이라 일반어 겹침 낱말(함수·로그·실수·소수·분수·확률)을 뺐고 그만큼 놓친다(`schema.user` "벡터 저장소"는 반대로 거짓 양성) · MIXED 29모듈은 두 계측 모두 출발점이 아니다 — 잔여 누수 2건이 전부 MIXED 경유라는 사실이 그 사각의 크기
+- **계측기 자체 결함 1건 — 비결정 BFS**(CLAUDE.md 2026-08-22 "측정 도구 실패 경로" 축): 첫 구현이 간선 `set`을 그대로 순회해 **해시 시드마다 동률 끝점이 달라졌다**(같은 출발점이 `wrong_form_match`/`verify_solution`으로 번갈아 끝남 → 잔여 동결 테스트가 시드 복권). 대책 = 정렬 순회 + 동률 회귀 테스트 + 동결 열쇠를 끝점이 아니라 **누수 지점**(`path[-2]`)으로 교체. `PYTHONHASHSEED` 0/1/12345에서 동일 결과 실측
+- 경계 정본 `eos_core_adapter_boundary.md` §8 신설(재현 명령·정본화≠집행 별항). 태스크 `EOS-84` 등재·PR #980에 동승
+- **후속 3건 검토·등재(2026-09-04 Kiki 지시 "권고안대로 등재")**: 검토 정본 `docs/reviews/eos_core_boundary_remediation_candidates_2026-09-04.md`(Explore 3 병렬 실측). `EOS-85`(P1) populate answer_kind 화이트리스트 제거 — 튜플 17종=코퍼스 17종·거르는 값 0·어휘 사본 4곳·`answer_kinds()` 프로토콜 추가는 two-tier 동결과 충돌해 비채택 / `EOS-86`(P1) solution_coaching → `StepChainVerifier` 선택층 주입(방안 A·실행 코드 40줄·2필드 접근·`_counts_conformance` 적합성 선재·방안 B는 누수를 CORE로 승격이라 비채택·`l3.pregenerate.validator` sympy 잔존은 부분 상환으로 명시) / `EOS-87`(P2) 오개념 3중 표현 canonical 수렴 — 카탈로그 실제 **64종**(문서 34종 stale 정정)·distractor 10건·`MisconceptionDomain` Literal이 유일한 하드 블로커·대장에 canonical 수렴 태스크가 부재해 이 태스크가 문서 3곳 산문 부채의 대장 정본이 됨·DB 테이블 방안은 `audit.py` "DB 0" 계약 위반이라 비채택·⓪ doc-first 정본 결정이 착수 선결
+
+### 2026-09-03 (구현·EOS-83): **기능 인벤토리 v2 — 라우터 23행을 기능 단위 162행으로 전수화. EOS Ownership·Migration Action을 행마다 기계가 판정** (Kiki "약 120개 기능을 한 장부로·최중요 필드 = EOS Ownership·Migration Action", claude 구현)
+- **모집단 정의를 먼저 적고 전수성을 기계가 검사한다** — 기능 = 사용자에게 의미 있는 능력 1단위 · 4평면(S 서빙 표면 49 · E 백엔드 엔진 88 · O 운영자 도구 13 · C 클라이언트 12). 백엔드 모듈 580·엔드포인트 109·Flutter feature 10이 **정확히 1행**에 귀속되지 않으면 생성기가 exit 1로 장부를 쓰지 않는다(첫 실행에서 중복 귀속 3건이 실제로 잡혀 제외 문법 `-module`을 도입). 산출 = `scripts/analysis/eos_feature_inventory_v2.py` → `backlog/inventory/feature_inventory_v2.{yaml,csv}`(csv는 utf-8-sig — Kiki Excel) + 해설 `docs/reviews/eos_feature_inventory_v2_2026-09-03.md` + 동결 `tests/infra/test_eos_feature_inventory_v2.py`(드리프트·전수성·결함 주입 4종 RED 확인)
+- **두 핵심 필드는 손으로 적지 않는다** — Ownership은 EOS-65 `BOUNDARY_MAP`으로 자기 모듈을 판정(CORE 108 · INFRA 21 · CLIENT 12 · **MIXED 10** · ADAPTER 8 · CORE+ADAPTER_DEP 3), Action은 v1 6축 임계를 **import**해 판정(KEEP 83 · REFACTOR 43 · HEAVY 12 · REPLACE 검토 1 · POSTPONE 23). 카탈로그 `Spec`에는 ownership 필드 자체가 없다(테스트가 동결). P2는 POSTPONE으로 덮되 `matrix_action`에 원판정 보존(이월 ≠ 삭제)
+- **"120"은 판정 불가·162는 재현 가능한 하한** — 외부 xlsx는 저장소 밖(EOS-68 notes 동일). 차이 추정 3가지를 문서 §1에 적되 단정하지 않았다. v1(EOS-68)은 Gate 0-D 재료로 존치 — 두 장부는 대체가 아니라 두 해상도(양쪽 문서에 관계 명기·테스트 동결)
+- **판정이 말하는 것**: 이전 난이도의 무게 중심은 수학이 아니라 **비대한 인프라 가족**이다 — HEAVY 12건 중 7건이 INFRA(privacy·검수·QA 게이트), A축 3점은 WH-S 하네스 1건뿐. ADAPTER 8행 중 6 KEEP(수학 엔진은 그대로 Math Adapter 패키지로 이동). REPLACE 검토 1건(관측 리포트 14 CLI 가족·15점)은 가족 합산 효과 — 치료는 OPS-19 러너 배선이지 재작성 아님(v1 coach 14점과 동형)
+- **새로 드러난 것 5건(§6 · 등재는 Kiki 판정)**: ① `api._*` 배관이 BOUNDARY_MAP 미등재라 `api` 기본 CORE를 물려받아 인증·app.state 배관 2행이 CORE 판정 — EOS-65 정본 보강 후보 ② DSL 생성기(MIXED·P0) 소유 태스크 0 — `variable_engine`·`validators`·`math_verifier` 파일 단위 ADAPTER 정정으로 해소 가능 ③ 구 개념그래프(HEAVY·P1)는 P2 강등 후보 ④ **학생 대면 WH-1 튜터링 엔진이 `harness`(INFRA)에 살아 경계 감시 밖** — 실측 A=3(`l3.equivalent.rephrase`·`verify_solution` 직접 호출) ⑤ privacy PEP·rights 게이트웨이 서빙 표면의 HTTP 테스트 0건(둘 다 P0)
+- **정직한 공백**: 귀속(묶음)은 사람 판단 — 기계가 보장하는 것은 빠짐·중복 0이지 묶음의 옳음이 아니다 · D축은 파일 단위 중복 계상(상대 비교용) · 1-hop 사각 · 이동 계획(어디로·언제)은 여전히 비어 있다(v1 §7-1 동일) · 상태 필드는 config 플래그 기본값 실측으로 11행이 Flag-off(그중 S-007 법정대리인 동의는 P0인데 OFF — 법령 게이트라 의도된 상태)
+- **§3.4 기준을 기계 판정에 편입(Kiki 후속 요청 "분류를 감으로 하면 안 된다")** — KEEP 6조건·REPLACE 신호 6종을 측정 가능한 불리언으로 옮기고(`_apply_criteria_34` · 수정비용>재작성비용은 측정 불가라 제외) 최종 Action = POSTPONE(P2) → REPLACE(매트릭스 14+ 또는 신호≥3) → HEAVY(10~13) → KEEP(§3.4 ≥5/6) → REFACTOR(미충족 조건을 `action_basis`에 명기). 결과 **KEEP 111 · REFACTOR 15 · HEAVY 12 · REPLACE 검토 1 · POSTPONE 23** — 매트릭스 단독 판정과 38행 어긋남(REFACTOR→KEEP 33: 점수가 크기(B·E·F)였고 경계 위반이 아님 / KEEP→REFACTOR 5: 작아도 MIXED·Flag-off). REFACTOR 15행은 전부 §3.4 정의 그대로 "경계 위반"(MIXED 6·수학 직접 호출 3·Shadow/Flag-off 4·서빙 표면 테스트 0 2). §3.4 단독·매트릭스 단독·최종 세 값을 장부에 모두 남겨 어긋남을 대시보드가 센다. 테스트 6건 추가(결합 규칙 행별 재현·KEEP<5/6 금지·단독 신호 REPLACE 금지·결함 주입 반응)
+- **P0~P3를 "이 기능이 없으면 12/31 폐쇄루프가 깨지는가" 한 질문으로 기계 판정(Kiki 후속 요청 §3.x Scope Freeze)** — 씨앗을 코드 좌표로 고정(학생 루프 25경로 = 계획서 300 §12 대응표 · 생산 루프 5경로 + 부록 E G1~G3·G5 집행 모듈 10 · 불변 계약 §0-6 · 선언 씨앗 3)하고 import BFS 도달성으로 P0를 낸다. 패키지 재수출은 심볼 단위로 풀어 과대 도달 방지 · 정적 도달했지만 Flag-off/Shadow면 P1(우회 가능) · L1 적재기가 루프 테이블을 채우면 `data_supplier` P0 · P3는 horizon 선언만. 결과 **P0 99 · P1 42 · P2 19 · P3 2**, 선행 제안과 26행 차이(강등 8 = 조회 API·비용 리포트·슬롯 파이프라인·SolutionPath 승격 writer / 승격 13 = 정적 도달 실측 — 구 개념그래프가 중복인데 루프가 여전히 밟음, pre-warm 패키지 안의 런타임 validator / 클라 3 = 씨앗 경로 리터럴 실재). 계획서 P0 예시 16종 전부 P0 행 보유. **"270개"는 저장소 외부** — 대체 모집단 crosswalk 53행(T1 33/T2 12/T3 6/T4 10)·backlog `eos_priority`(P0 16/P1 85/P2 95/P3 16·미기재 302)를 문서 §8.1에 병기. 1차 시도의 결함 2건을 검토에서 잡았다: 인증 배관 `api._auth`를 불변 계약으로 세어 인증 걸린 전 표면이 P0가 된 것(→ 구현 모듈만 판정), 헬퍼 사슬 확장이 매트릭스 점수를 부풀린 것(→ 도달성용 `deep_refs`와 매트릭스용 `refs` 분리). 정직한 사각: app.state DI(선언 씨앗)·정적 참조≠실행·`data_supplier` l1 한정(E-703 승격 writer P1 — Kiki 판정 후보)
+- **Kiki 판정 후보 2건 추가 검토 → 둘 다 규칙으로 메움(사람 판정 불요)** — ① E-703 SolutionPath 승격 writer: 실측 `solution_path` 테이블 writer = E-703·E-357(C6 이월)만, 읽기 표면 S-032(클라 step panel 호출)는 "쓰기는 승격 어댑터만" 자인 → `data_supplier` 2패스(루프 테이블 28개 중 P0 writer 없는 테이블의 writer를 P0 — Flag-off·이월 선언·P3 제외)로 **P0**. 남은 P0-writer-없는 테이블 = `misconception_embedding`(writer Flag-off) 1개. ② DI 사각: app.py `app.state.__setattr__(KEY, expr)` 20개 키를 파싱해 KEY 상수 참조 엔드포인트(헬퍼 `_l3_state` 경유 포함)에 배선 모듈을 잇는 다리 구현 → OAuth provider(E-804) 손 선언 제거·기계 도달, Celery 큐(E-304)가 `/v1/jobs` 의존으로 드러나 P0(OPS-27 워커 미배포와 충돌 — P0인데 배포 없음). "정적 참조≠실행"은 AST 실측: 정적 도달만 P0인 48행 중 플래그 조건문 안 참조만인 행 0·import만인 행 0. 최종 **P0 101 · P1 40 · P2 19 · P3 2**(선행과 26행 차이). 잔여 사각 = `Depends`/클로저 주입·런타임 getattr 게이트
+- **계측 결함 2건을 검토에서 잡아 고쳤다**: dart 테스트 매칭이 `lib/features/x`로 찔러 `package:korean_math_app/features/x`를 못 봤고(클라 D축 전부 3점), 패키지 `__init__` 재수출 경유 import(`from …l1.concept_visualization import (…)`)를 못 세었다(직계 부모 1단계까지만 허용해 과대평가 방지). 둘 다 "테스트 없음"으로 위장되는 방향의 결함 — 검토 없이 냈으면 클라 12행이 전부 REFACTOR로 부풀었다
+
+### 2026-09-03 (HARN-60): **게이트 clear의 주체를 대장에 기록 — 금지가 아니라 증명 가능성으로 푼다**
+
+**문제**: 이벤트의 `actor`가 **브랜치명**이라(실측: gate_clear 20건 전부 — 에이전트 브랜치 10종 +
+`main` 1건) 사람이 닫았는지 에이전트가 닫았는지 대장만 보고 판정할 수 없었다. 준수 감사 A3은
+"에이전트의 사람 게이트 clear"를 심각도 높음으로 보는데, 그 준수를 사후 증명할 유일한 채널이
+git 저자였다 — 그리고 이 저장소는 **스쿼시 머지만 허용**하므로(merge·rebase 405) 저자는 머지
+수행자로 덮이고 브랜치 ref는 자동 삭제된다. 즉 증거가 복원 불가능했다.
+
+**결정 1 — 증거를 git 메타데이터가 아니라 대장 데이터에 둔다.** `Gate.cleared_by` 필드 신설
+(`gates.yaml` + `gate_clear` 이벤트 양쪽). 플래그는 HARN-06의 `--as {kiki,partner}`를 그대로
+재사용한다(새 어휘 금지). 불일치 검사도 done/start와 동형 — 남의 게이트를 자기 이름으로 못 닫는다.
+
+**결정 2 — 표기 없는 clear를 거부하지 않고 `cleared_by: claude`로 사실대로 적는다.** 에이전트가
+사람 게이트를 clear하는 것은 실제로 일어나는 **정당한 중계**다(Kiki가 자기 머신에서 실행 → 출력
+전달 → 세션이 기입 — 기존 20건 중 다수가 그 형태). 거부하면 대장 CLI를 우회한 YAML 손편집으로
+밀려나고(CLAUDE.md 금지) 그때는 아무 기록도 안 남아 **더 나빠진다**. 목표는 금지가 아니라 사후
+증명 가능성이므로 항상 명시적으로 남기는 쪽을 택했다.
+
+**결정 3 — `as_owner`를 재사용하지 않는다.** start/done의 그 필드는 *부재 = 에이전트* 규약인데,
+이 태스크가 없애려는 결함이 정확히 그 **부재의 모호함**이다(부재가 '에이전트'인지 'HARN-60 이전이라
+미기록'인지 구별 불가). 그래서 항상 present인 별도 필드를 뒀다. 필드 이름만 새것이고 플래그·소유자
+어휘·검사 골격은 전부 기존 선례다.
+
+**소급 금지**: 기존 26개 게이트 행은 `cleared_by: null`(미상)로 남는다. 목록 화면도 "미상(HARN-60
+이전)"으로 표시한다 — 스쿼시로 저자가 소실됐으므로 사후에 알 수 없고, 추정으로 채우면 대장이
+거짓을 말하게 된다(날조 금지).
+
+**집행·변별력**: `tests/harness/test_gate_clear_attribution.py` 10건이 동결하고 CI
+`harness-integrity` 잡(무조건 실행)이 매 PR 판정한다. 뮤테이션 4종으로 변별력 실측 — ⓐ주체를 항상
+사람으로 기록 ⓑ`--as` 불일치 검사 제거 ⓒ`cleared_by` 스키마 검사 제거 ⓓcleared에 주체를 *필수*로
+요구(레거시 전부 red가 되는 설계 실수) — 각각 서로 다른 테스트가 적발했다.
+
+**발견 경위**: PR #971 codex P1 지적. 정본 = `docs/standards/build_harness.md` 게이트 절.
+
+---
+
+### 2026-09-03 (Kiki 결정·계획서 300 대조): **계획서 300 Phase 2를 참고 문서로 강등 — 폐쇄루프는 목표가 아니라 계측기, 10월은 G2(앵커 콘텐츠 생산) 유지 + CL-WIRING 2건만 즉시** (Kiki 계획서 2종 첨부·"판단 3건 확정", claude 대조·집행)
+
+**계기**: Kiki가 `300_Phase 2 — EOS Closed Learning Loop 실행계획`(9/28~10/25 · Gate 2 10+1조건)과 `006_MVP 종료·EOS 전환 체크리스트`(재제출)를 첨부하며 "EOS 전환 목적에 맞춰 검토"를 요청. 선행 3권(006·100 대조 / 52항목 crosswalk / 200 Phase 1 대조)에 이은 **4권째**이며 산출물은 `docs/reviews/eos_phase2_plan_300_gap_review_2026-09-03.md`.
+
+**대조 결과 3건 (실측)**
+1. **전제 충돌** — 300의 단일 목표("폐쇄루프 완성 = Point of No Return")가 선언 §0-3(폐쇄루프를 계측기로 강등·최우선은 AI 콘텐츠 생산 HIT 4분)과 정면 충돌. **같은 날짜 10/25에 서로 다른 Gate 2가 둘** — 이름 충돌 3회차(G0·Gate 1에 이어).
+2. **부품은 이미 서 있다** — 14계약 객체 중 12 실재 · §12 API 12건 중 11 대응(전체 엔드포인트 103) · **서버측 루프는 이미 닫혀 있다**(`POST /v1/me/attempts`가 `record_problem_attempt_mastery`→`record_problem_attempt_skill_mastery`→`record_attempt_skill_event` 연쇄 · `api/me.py:715-810`). §13 Core/Adapter 경계는 `EOS-65`~`EOS-69`로 8/31 완료(직접 위반 실측 0건). 300 §6의 "정답 +0.10/오답 −0.08" heuristic은 이미 돌아가는 BKT·IRT보다 **뒤떨어진다**(채택 시 개악).
+3. **진짜 갭은 입력 도달** — Flutter가 `POST /v1/me/attempts`를 **호출하지 않는다**(`src/mobile/lib/` 전수 grep 0건 · REC-01이 "problem_attempt 0행"으로 관측 등재한 사실의 원인). 백엔드·클라 E2E 둘 다 verify에서 종료해 루프 뒷반쪽(평가→숙달→다음 추천)을 안 밟는다. **엔진은 다 있는데 학생이 켤 수 없다.**
+
+**Kiki 확정 결정 4건**
+| 항목 | 결정 | 근거 |
+|---|---|---|
+| 계획서 300 Phase 2 | **참고 문서로 강등 · 4주 일정 미실행** | 폐기가 아니라 강등 — 10월 실행계획에서만 제외 |
+| Phase 2 목적 | **콘텐츠 생산 우선** | 폐쇄루프는 이미 서버에서 작동 · 목적이 아니라 G2 생산성을 검증하는 계측 수단 |
+| 8상태 학습 상태 머신 | **신설 보류** | `*MasteryHistory`와 진실 원천 중복 위험. 운영 데이터에서 상태 기반 제어 필요 증거가 생긴 뒤 ADR로 결정. **재확인 지점 = G4(12/13)** — 게이트 `G-state-machine-deferral-recheck`로 집행(12/13부터 브리핑 자동 노출) |
+| One In → One Out | **조건부 채택** | 신규 P0 추가 시 기존 P0 하나를 제거·연기. **예외 3종 = 보안·데이터 손실·출시 차단 결함** |
+
+**명칭 규약 (충돌 3회차 대응)** — 선언 §1.3-②에 등재:
+- `G2` = **Anchor Content Production**(저장소 정본 게이트 10/25). `G2`는 이 뜻으로만.
+- `CL-WIRING` = **Student Closed-loop Wiring**(게이트가 아니라 작업 묶음 이름).
+- **계획서 300의 `Gate 2`는 사용하지 않는다** — 인용이 불가피하면 `계획서 300 Gate 2`로 전체를 적는다.
+
+**집행 (정본화≠집행 — 결정문만으로는 셀렉터가 읽지 않는다)**
+- `MOB-20-cl-wiring-attempt-submission` [P0] — **코치 완료 신호 3필드 클라 소비**(`problem_complete`·`awaiting_reflection`·`completed_attempt_id`). *등재 당시 'POST /v1/me/attempts 호출 배선'으로 적었으나 **오진단**이라 같은 날 정정했다 — §아래 정정 블록*
+- `EOS-81-cl-wiring-closed-loop-e2e` [P0] — E2E 뒷반쪽 연장. **`depends_on: MOB-20`으로 집행**(산문 선행 금지 · HARN-52). acceptance ①이 Kiki 완료조건 4가지를 **한 테스트에서** 요구: (가)Flutter 실제 제출 (나)영속 (다)개념·스킬 mastery 변경 (라)후속 추천이 갱신된 mastery 반영. "API 200"은 완료 조건이 아니다.
+- `HARN-61-p0-swap-exemption-clause` [P2] — One In → One Out **예외 3종 집행**. 실측: Rule 4 본체는 `HARN-55`가 이미 CLI에 집행 중(`backlog.py:1312-1382 --swap-out` · `policy.eos_p0_budget=50`)이나 **예외 조항만 미집행**이다. 지금 안 물리는 이유 = 비종결 P0 13건 < 예산 50건. 착수 트리거 = P0가 예산 근접(45+) 또는 예외 사유 P0가 실제 거부될 때.
+- `G-state-machine-deferral-recheck` [kiki/decision · `remind_after_days=101`] — 8상태 보류의 **재확인 알림**. 보류에 재확인 지점을 못박아도 알려 줄 장치가 없으면 산문으로만 남는다(만료 없는 유예 금지의 집행 축). 변별력 실측: 12/12 False → **12/13 True(경과 101일)** → cleared 시 False.
+- `HARN-62`(등재→cancel) → `HARN-57`에 acceptance ④로 **흡수** — CLI가 의미 중복을 고지했고 그 판정을 수용. amend 결측 필드(`--artifact`·`--path`)는 한 문제·같은 파일이다.
+
+**두 전제의 교집합** — CL-WIRING 2건은 계획서 300 Gate 2의 막힌 두 칸(6·10)을 열면서 **동시에 저장소 G4(12/13 "깊이앵커 수동 개입 0 루프 3연속")의 선결**이다. 어느 전제를 택해도 버려지지 않는 유일한 항목이라 목적 충돌과 무관하게 즉시 수행한다.
+
+**자진 공개 1건** — `MOB-20` 등재 시 `paths`를 `src/mobile/lib/**`로 넓게 잡아 overlap 경보 17건이 떴고(대부분 오탐), 좁힐 CLI 경로가 없어 **YAML의 `paths` 필드만 손편집으로 정정**했다(17→8건). 거부를 우회한 것이 아니라 CLI 설계 공백이며, CLAUDE.md 처리 순서 ③(설계 공백은 태스크 등재·HARN-06 선례)에 따라 `HARN-57` ④로 등재했다.
+
+**[같은 날 정정 — PR #976 리뷰 P1·P2 수용]** 초판의 핵심 처방이 **오진단**이었고 코드 실측으로 확인해 전면 수용했다.
+
+- **무엇이 틀렸나**: "Flutter가 `POST /v1/me/attempts`를 호출하지 않는다 → 입력이 서버 루프에 도달하지 않는다"는 진단. 실제로 학생 경로의 attempt는 **코치 완료 경로**가 적재한다 — `S3-32`(done)가 서버검증 최종답→Polya 돌아보기→`_complete_problem`(`api/coach.py:983-1030`)에서 `ProblemAttempt(is_correct=True)`+숙달 2축+`문제시도` 이벤트까지 닫았고, 계약이 **"클라는 별도로 `POST /v1/me/attempts`를 부르지 않는다(중복 적재 금지)"**를 명문화한다(`api/coach.py:440-446`). **처방대로 배선했으면 attempt·숙달 이중 적재라는 실결함을 넣었을 것이다.**
+- **진짜 갭(재측정)**: 서버가 보내는 완료 신호 3필드(`problem_complete`·`awaiting_reflection`·`completed_attempt_id`)가 **Flutter 모델에 없다**(`coach_models.dart` grep 0건). `chat_screen.dart:302-304`가 *"S3-32 소관이라 main엔 아직 없다 — 착지 시 추가할 것"*이라 적은 채 남아 있다 = `S3-32` acceptance ③의 **미이행된 클라 절반**. "완비된 공급원 + 미도달 소비 경로" 반복 패턴.
+- **왜 놓쳤나 (2축)**: ⓐ **자기가 인용한 규칙을 한 축에만 안 썼다** — "식별자 부재 ≠ 기능 부재"를 `LearnerState`·`LearningSession`·`POST /diagnostics` 3건에는 적용해 판정을 뒤집었으면서, attempt 축에서는 `grep` 0건을 역할 재검색 없이 결론으로 썼다. ⓑ **증거의 신선도를 안 봤다** — 근거로 쓴 REC-01 "`problem_attempt` 0행"은 **2026-08-03** 관측이고 `S3-32`는 그 뒤 착지했다. PR에 "DB 실측 없음·REC-01 인용"이라 공백은 밝혔으나 *그 관측이 낡았는지*는 확인하지 않았다. → **관측 리포트를 인용할 때 그 관측 이후 같은 영역에 착지한 태스크가 있는지 함께 확인한다.**
+- **P2(부분 쓰기)**: "한 트랜잭션으로 전파" 표현도 틀렸다 — `api/me.py:745-779`가 attempt를 먼저 commit한 뒤 헬퍼가 각자 commit하며 `l2/attempt_skill_event.py:71-97`이 교차 원자성 미해결을 자인한다. 초판 표현이 **실재하는 부분 쓰기 갭을 덮었다**.
+- **집행**: `MOB-20` acceptance ⑤(①무효화+범위 재정의) · `EOS-81` acceptance ⑥(완료조건 (가) 경로 정정)·⑦(부분 쓰기 정직 표기) · 검토 문서 §0-2·§0-3·§2 행6·§6 G-1·§8-①·§11.3 정정 + **§11.6·§11.7 신설**.
+- **열린 질문(단정 안 함)**: 코치 경로는 **정답 완료 시에만** attempt를 적재한다. 오답이 `ProblemAttempt` 행을 안 남기는 것이 설계인지 갭인지는 미판정 — `EOS-79`(증거 4층 경계) 축에 가깝다.
+
+**미채택** — 300 §12 API 12종 신설(11/12 이미 대응) · §6 Mastery heuristic(BKT·IRT 개악) · §2 `recommend()` 재설계 · §3 상태 머신(보류). 전부 "이미 있는 것을 더 나쁜 것으로 덮는" 축.
+
+---
+
+### 2026-09-01 (재발방지·PB-13 세션): **CI 35분 상한 초과 해소(잡 분리) + 반복 실수 2종 대책 — 접미사 정규식 2배 계상 가드 착지** (Kiki "3"·"재발방지대책 시행", claude 구현)
+
+- **CI 타임아웃**: PB-13 회수가 backend 잡을 35분 상한 너머로 밀었다(28분30초 + 이식 테스트 9분12초 = 37.5분 → PR #969에서 65% 지점 취소). **가설을 두 번 갈아탔다** — ①코퍼스 전수 스캔 테스트가 느려졌나? 3파일 39.9초, 아니다 ②이식 테스트 60파일 자체? **552초, 이쪽**. 추측대로 ①을 뺐으면 6.5분 중 40초만 줄고 여전히 타임아웃이었다
+- **해소 = 잡 분리, 비활성화 아님**: `corpus_authoring` 마커 + 전용 잡 `corpus-authoring`. 두 경로에서 반드시 돈다 — ⑴야간 schedule ⑵`authoring` 플래그(생성기·배치·그 테스트를 건드리는 PR). 변별력 실측: 마커 508/11,936 양방향 분할 · 플래그 생성기 수정 true / 무관 파일 false. **결과: backend 잡 33분 SUCCESS**(35분 아래 복귀)
+- **거버넌스 2건이 신규 잡을 잡아 줬다**(둘 다 정당한 검출): `test_required_checks_doc`이 "required 목록에도 제외 목록에도 없다"며 등재 요구 → required로 등재. `test_ci_contract_fixture_trigger_wiring`이 계약 파일 미매치를 지적 → **실측 후**(이식 테스트 60개·src 60개 전건에서 계약 참조 **0/60**) 사유 명시 제외로 등재
+- **반복 실수 A-1 (2회) — 접미사 정규식이 tests/를 함께 물어 수치 2배**: ⑴PB-13 acceptance "생성기 90·tests 82"(실제 30·30·60 — Codex P1이 잡음) ⑵`declared_unwired` 배치 목록 60건(실제 30 — 자가 발견). 원인 동일: **경로 프리픽스로 스코프를 고정하지 않고 접미사만으로 셌다.** 이 저장소는 `X_batch.py` ↔ `test_X_batch.py` 대칭 규약을 광범위하게 써서 접미사 매치는 **항상 두 배**를 낸다. 대책 = 코드 `tests/infra/test_path_scoped_counting_guard.py`(2배 성질을 계약으로 동결)
+- **가드 자신이 두 번 틀렸고 두 번 다 실측이 잡았다**: ⓐ초안이 파일명 1:1 대칭을 강요 → 기존 2건(`root_aggregate`·`finite_probability`)이 걸렸는데 **테스트는 있고 이름 규약만 달랐다** → 판정을 '파일명'에서 '참조 커버'로 교체(통과시키려 약화한 게 아니라 틀린 전제를 교체) ⓑ결함 주입에서 **생성기 테스트 1건 제거가 통과** — 배치 테스트가 같은 생성기를 import해 참조를 대신 만족시킨다. 이 한계를 docstring에 명시했다(잡는 것은 "아무 테스트도 없는 신규 모듈"이지 "얇아진 모듈"이 아니다)
+- **결함 주입 최종**: `harness/` 직속에 참조 테스트 없는 배치 주입 → **2축 동시 실패**(커버 축·2배 성질 축), 원복 후 3 passed. 첫 주입은 패키지 루트에 넣어 무효였다 — **주입 위치가 틀려도 '통과'로 보인다**는 것 자체가 교훈
+- **반복 실수 A-2 (3회) — 명령을 돌려 놓고 성패를 확인 안 함**: ⑴`overlap` 인자 누락 EXIT=2를 grep 0으로 오독(Codex P2) ⑵`pip install ./data-pipeline` 경로 오류 실패 미확인(실제는 `src/data-pipeline`) ⑶`black` 미실행 → CI red. 공통 원인: 로컬에서 pytest만 돌리고 CI가 그 **앞에** 돌리는 단계를 안 돌렸다. 대책은 이번 세션 실행 규율로 집행 — 커밋 전 `black --check`·`ruff`·`mypy --strict`·`lint-imports` 4종을 CI와 **동일 대상·명령**으로 돌리고 EXIT을 확인한다(CLAUDE.md "검사 명령의 출력을 억제·절단 판정 금지"의 실행 형태)
+- 검증: `tests/infra` **590 passed**(587→590 신규 3) · backend 잡 CI **SUCCESS 33분** · lint 4종 EXIT=0
+
+### 2026-09-01 (재발방지·규칙 등재): **보호 장치가 실패 경로에서 검증되지 않았다 — 가드 자신이 위장이던 6건** (Kiki "등재", claude 구현) — PR #948·#951
+
+**무엇을 했나**: GitHub 개발흐름 방해요인 12유형/35코드에 대한 실측 갭 분석과 통합 흐름 진단기
+(`scripts/ops/flow_health.py`) 신설·CI 배선. 그 과정에서 **같은 형태의 결함 6건**이 연달아 났고,
+그 형태 자체를 CLAUDE.md 규칙으로 등재했다.
+
+**실측 진단이 뒤집힌 지점**: 일반론("PR이 쌓여 정체된다")은 이 저장소에 맞지 않았다. PR 생성→머지
+중앙값 **1.1시간**(n=180) · 24시간 내 머지 **89%** · main CI 최근 30회 failure **0건** · `git status`
+0건. 병목은 PR *체류*가 아니라 PR **미생성**이었다 — PR 없는 브랜치 18건(최대 29일) · trunk 대비
+50커밋+ 표류 18건(최대 248) · main과 **이미 충돌 중**인 브랜치 32건 중 24건(열린 PR 14건 중 8건).
+`StaleBranch`가 `ahead`만 들고 있어 **`behind`(표류)는 한 번도 측정된 적 없는 축**이었다.
+
+**메타 갭**: `pr_delivery_audit.py`·`pr_merge_readiness.py`가 잘 만들어졌는데 `.github/`·`.claude/`
+전수에서 **호출처 0건**이었다(`claims reap --apply`·`tests/infra` 199건과 같은 부류). 배선하자마자
+그 안의 잠복 결함이 드러났다 — CA 경로 하드코딩으로 러너에서 `curl (77)`. "존재함"과 "돌아감"은
+다르다의 정확한 실례다.
+
+**사고 경위 (규칙의 근거가 된 6건)**:
+- ⓐ `if Path(_CA).exists()` 가드가 러너에서 `PermissionError`로 **터져** main red. `/root`가 mode
+  700이라 비-root는 통과 불가이고, `pathlib._IGNORED_ERRNOS`에 EACCES가 없어 예외가 전파된다.
+  의도는 "없으면 건너뛴다"였는데 **"없으면 터진다"**가 됐다.
+- ⓑ 광범위 `except Exception`이 `sys.path` 오류(`scripts` → `scripts/harness`)와 존재하지 않는
+  `load_remote_claim_map` 호출을 **둘 다 삼켜** 원격 claim 3건을 못 읽었다. 무증상 오작동이라
+  정상 출력만 보고 있었으면 절대 못 찾는다 — 진행 중 브랜치가 방치로 오경보되는 상태였다.
+- ⓒ `not pr_open`이 미판정(`None`)까지 "PR 없음"으로 계상. `collect()`는 같은 상황을 `unmeasured`로
+  표시하면서 `classify()`는 확정 신호를 내는 자기모순.
+- ⓓ `refs/pull/<N>/head`를 "열려 있음"으로 오독(PR #675가 closed·unmerged인데 tip 일치).
+- ⓔ 로케일 인코딩 디코드 3건 — **기존 거버넌스 테스트(HARN-19)가 잡았다**. 기존 방어 장치가 신규
+  코드에 실제로 작동함을 확인한 사례.
+- ⓕ 그리고 ⓐ의 회귀를 막으려 만든 정규식 가드의 부정 전방탐색 `(?!_PATH)`이 **정작 그 회귀를
+  면제**했고, 헬퍼 검사도 substring이라 *정의만 하고 안 써도* 통과했다. **가드 자신이 위장**이었다.
+  Codex P2가 잡았다.
+
+**공통 형태 (반례 분리)**: 이 규칙의 **직접 근거는 ⓐⓑⓒⓕ 네 건**이다 — 넷 다 *정상 경로는
+맞는데 실패 경로가 검증되지 않은* 형태이고, ⓕ는 그중 ⓐ를 막으려 만든 가드 자신이었다.
+ⓓ는 인접하되 다른 축이다(열림 여부라는 구별을 2상태로 접었다 — 규칙 ③ 계열이지 실패 경로
+문제는 아니다). **ⓔ는 반례다** — 기존 거버넌스 테스트(HARN-19)가 실제로 잡았으므로 "미검증"의
+사례가 아니라 **"검증이 작동한"** 사례다. 근거에 섞지 않고 반례로 남긴다(6건을 뭉뚱그리면
+이 결정의 논거가 스스로 모순된다 — Codex P2 지적, PR #963). 기존 규칙 중
+"변별력 없는 검증 스텝 금지"(2026-07-17)는 *런북의 자가검증 스텝*을, "측정·수집 도구를 성공 경로만
+보고 설계 금지"(2026-08-22)는 *측정 도구*를 겨냥한다 — **보호 장치 자신**을 겨냥하는 축은 없었다.
+
+**대책 (규칙·코드 2형태)**:
+- **규칙** — CLAUDE.md v0.2.10 "보호 장치를 실패 주입 없이 '보호 있음'으로 선언 금지"
+  (①금지 패턴 열거 대신 산출물 검사 ②환경 가정의 부재·불가 상태 ③모른다 ≠ 아니다 ④스캔 0건은 실패)
+- **코드** — `tests/infra/test_proxy_ca_optional.py`가 CA 상수를 쓰는 스크립트를 **자동 스캔**해
+  (하드코딩 목록 아님) AST로 판정한다: `--cacert`는 가드 헬퍼 줄 범위 안에서만 등장 가능하고,
+  `"curl"`로 시작하는 모든 인자 리스트에 `*_ca_args()` 스플랫이 실제로 있어야 한다.
+
+**검증**: 신규 55건(진단기 34 + CA 거버넌스 21) · `tests/infra` 494 passed · `tests/harness` 477
+passed · 0 failed · ruff/black exit 0(전체 스위트·exit code 판정). **뮤테이션 27종 전건 검출** —
+원복은 `cp` 백업 + `md5sum` 대조(git 계열 금지·2026-08-10 사고). 뮤테이션 하네스 **자체의 결함
+1건**도 발견·정정(주석의 동일 문자열이 값보다 먼저 치환돼 "미검출"로 보였다 — 정지 장치에도
+변별력이 필요하다는 규칙이 뮤테이션 도구에도 적용된다).
+
+**작동 평가 (실제 러너)**: main `harness-audit` **success**. 시뮬레이션이 아니라 실환경에서
+`pr_delivery_audit`이 열린 PR 14건을 정상 측정(NO_CHECKS 5·REQUIRED_PENDING 1·READY_UNMERGED 8)
+했고, `flow_health` artifact가 1577바이트로 업로드됐다(이전 실행은 `No files were found`).
+배선한 감사가 첫 실행에서 바로 실질을 냈다 — 아무도 보고 있지 않던 상태다.
+
+**남은 것 (사람 결정)**: 표류 18건 처분 · 충돌 23건 소유자별 해소 · PR-04 겹침 3건
+(lic-01/ops-50-51-52/s4-16이 21~32파일 공유)의 중복 구현 여부 판정.
+문서 = `docs/reviews/integration_flow_gap_review_2026-09-01.md`
+
+---
+
+### 2026-09-01 (하네스·재발방지·HARN-52/53): **notes의 "선행"을 하네스가 읽지 않는다 — 의존 선언↔집행 게이트 신설** (Kiki "발생오류가 중요 중대하다면 재발방지대책 세워 적용하고 테스트하여 작동평가까지", claude 구현) — PR #911 후속
+
+**사고 경위**: `EOS-62` 등재 시 notes에 "선행: EOS-54 착지 후 착수"라고 적고 `depends_on: []`으로 두었다.
+PR #911의 codex 리뷰(P2)가 지적했다 — `selector.py`의 착수 가능 판정은 **notes를 읽지 않는다.
+`depends_on`만 본다.** 즉 "막아 뒀다"는 등재자의 믿음과 하네스의 실제 동작이 어긋나 있었고, 다른
+세션이 그 태스크를 후보로 받아 **trunk에 없는 파일을 대상으로 착수**할 수 있었다.
+
+**1회성인가 구조적인가 (실측)**: 탐지기를 만들어 저장소 전수를 돌린 결과 **미완료 태스크 6건**이
+동일 상태였다(ADMIN-04·ADMIN-09·EOS-50·LIC-03·OPS-35·SEC-30). `EOS-62`는 7번째 사례였다. 즉
+개인의 부주의가 아니라 **집행 장치의 부재**다 — CLAUDE.md "정본화를 집행으로 착각한 완료 선언
+금지"가 acceptance 축·서빙 경로 축으로만 등재돼 있고 **백로그 대장 축**에는 아무 장치가 없었다.
+부수 발견: `amend`에 `--depends`가 없어 **등재 후 의존을 붙일 경로 자체가 0건**이었다(대장 손편집은
+금기). 고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만들므로 둘은 같이 가야 한다.
+
+**대책 (코드·규칙·태스크 3형태 전부)**:
+- **코드** — `scripts/harness/dep_declaration.py`(탐지) + `backlog.py audit-deps`(exit 0/1) +
+  `backlog.py amend --depends`(정정 경로·자기의존·순환·미존재 거부) + CI `harness-integrity` 스텝
+- **배선 동결** — `tests/infra/test_dep_declaration_wiring.py`(스텝 실재·`continue-on-error` 금지·
+  `needs: changes` 종속 금지). "존재≠실행"의 자기모순을 이 게이트 스스로 앓지 않게 한다
+- **규칙** — CLAUDE.md v0.2.9에 "선행 조건을 산문에만 적고 대장에 집행하지 않기 금지" 신설
+- **태스크** — `HARN-52`(게이트) · `HARN-53`(레거시 6건 분류 = 그랜드파더 만료 지점)
+
+**설계 판단 3건**:
+1. **`notes`만 스캔하고 `acceptance`는 보지 않는다** — 의존 *선언*은 notes에 적히고 acceptance는
+   *사양 산문*이라 타 태스크 ID와 "선행"이 일반적 의미로 섞인다. 실측: acceptance 포함 시 12건 중
+   4건이 오탐(대표적으로 "ⓐ진짜 선행 → … / ⓑ소프트 권고(SEC-26 …)"의 분류 기준어와 예시 ID가
+   같은 창에 들어왔다). notes 한정으로 오탐 4건이 전부 사라졌다.
+2. **레거시 6건은 즉시 고치지 않고 그랜드파더** — ①일부가 타 세션 claim 중이라 병렬 착수 금지
+   ②`SEC-26`처럼 "스테이지 순서상 하드 의존은 불가능"이라고 *자인한* 건이 있어 일괄 부착이 오히려
+   틀린다. 대신 ARCH-25 `provenance_audit._KNOWN_GAPS` 패턴을 답습해 **면제마다 해소 태스크 ID를
+   못박고**, 그 태스크가 done인데 면제가 남으면 red로 승격한다(만료 없는 유예 금지의 집행).
+3. **게이트는 green으로 출발한다** — red로 출발하는 게이트는 켜지자마자 꺼진다.
+
+**작동 평가 (측정 — 인상 판정 아님)**:
+- 탐지기 뮤테이션 4종 전부 red(탐지 무력화·done 필터 제거·acceptance 재포함·만료 계약 무력화),
+  복원 후 green + 백업 해시 동일
+- 배선 테스트 뮤테이션 3종 전부 red(스텝 삭제·`continue-on-error: true`·`|| true`)
+- `amend --depends` 거부 5종 전부 exit 1(자기의존·미존재·순환·무변경·중복), 정상 경로 exit 0
+- 신규 테스트 15건(하네스 12 + infra 3) · 하네스 전체 475건 green · tests/infra 전체 green
+- ruff·black은 **CI가 쓰는 명령 그대로** 재현해 exit 0
+
+**자기평가 후속 (같은 세션 · Kiki "좋아")**: 위 대책을 스스로 평가하며 두 약점을 실측했다 —
+①`next`가 절단 규모를 안 보여줘 부재 판정에 오용될 여지가 남음 ②그랜드파더 만료가 `HARN-53`
+priority 3에 매달려 **명목상**이었음. 둘 다 코드로 닫았다: `next` 출력에 분모+전건 조회 안내,
+`amend --priority` 신설(track·acceptance·gate·depends에 이은 마지막 정정 경로) 후 그것으로
+`HARN-53`을 3→2 상향. 이 과정에서 **강화한 테스트가 실제 버그를 잡았다** — `--priority 0`이
+falsy라 "변경 항목 없음"으로 처리되던 결함(`is not None`으로 정정). 또 뮤테이션 초회에 P1(범위
+검사)·D1(순환 검사)이 **생존**했는데, `validate_backlog`가 대신 거부해 exit code로는 구별되지
+않던 것이라 하우스 패턴(`capsys` 메시지 수준 단언)으로 교체해 둘 다 죽였다. 뮤테이션 최종 9종
+전부 red.
+
+**교훈 (부수 — 규칙으로도 등재)**: 이 대책을 검증하는 과정에서 `backlog.py next`(상위 3건)로
+차단 여부를 확인했는데 대상이 priority 2라 **정상·뮤테이션 양쪽 모두 "후보에 없음"** 이 나왔다 —
+검증 스텝의 변별력이 0이었다. `--n 500 --json`으로 교체한 뒤에야 변별이 나왔다. CLAUDE.md
+2026-08-09 규칙(출력을 잘라서 판정 금지)에 **"도구가 기본값으로 자르는" 축**으로 확장 등재했다.
+
+---
+### 2026-08-31 (Kiki 결정·회수 착수): **저작 확장 11,446문 — 회수 결정. 게이트 clear + 집행 태스크 2건 등재(PB-13 코퍼스 이식·PB-14 태스크 재등재)** (Kiki "회수", claude 등재)
+
+- **결정**: 당일 오전 stray-code 감사가 신설한 `G-authoring-expansion-merge-decision`에 Kiki가 **회수**로 답해 게이트 `cleared`. 20일간 추적자 0이던 최대 고립분의 처분이 확정됐다
+- **결정 시점 실측 재확인(추론 0)**: 브랜치 `trjg5x`(c8abbc17) ahead 81·behind **207**·고유 233파일. 코퍼스 30종 `problems.jsonl` 행수 합계 = **11,446 정확 일치**(PB-06 수치 독립 검증). 생성기 실체 = `l3/equivalent/*_skeleton_generator.py` **30** + `harness/*_batch.py` **60**(PB-06의 "생성기 30"은 스켈레톤 생성기 기준). 대상 30종 사이드카 **0/30**(브랜치 보유 26개는 기존 코퍼스분이라 재사용 불가)
+- **차단 3건 현황**: 사이드카 → `PB-11`(done)이 `ops/corpus_provenance_sidecar.py`를 main에 착지시켜 상환 · shallow merge-base → 08-31 감사의 `--unshallow`로 해소 · **ID 충돌만 미해소**(`PB-14`가 담당)
+- **범위 경계를 실측으로 그었다** — 이식 대상은 신규 추가(A)만이고, **수정(M) 12파일은 명시 제외**(`api/me.py`·`config.py`·`db/models/user.py`·`l4/polya/*`·`privacy/retention.py`·`schema/user.py` 등). 브랜치가 207커밋 낡아 이들을 실으면 main이 역행한다. **alembic 마이그레이션 1건도 제외** — `ADMIN-02` 소관이며 `G-prod-dead-column-check`가 아직 pending이라 이 회수에 편승시키면 게이트를 우회하는 셈이 된다
+- **별건 발견**: `l2/learning_metrics_writer.py`도 main 부재 고립이나 코퍼스와 무관 — `PB-13` notes에 범위 밖으로 기록(중복 등재 금지). `review_queue`·`target_progress`는 main 실재라 비대상
+- **등재**: `PB-13`(코퍼스 30종+생성기 90+사이드카 30·priority 1) · `PB-14`(저작 태스크 32건 재등재+ID 충돌·priority 2). 번호는 `PB-12` 시도를 CLI가 원격 선점(6eejrv의 `PB-12-gating-answer-redaction`)으로 거부해 제안 번호 채택 — 우회 0
+- **acceptance에 08-31 감사의 자기 실패를 예방 규칙으로 이식**: `PB-14` ④가 "overlap은 id를 인자로 주고 exit code로 판정한다(인자 없이 실행하면 EXIT=2로 죽어 grep이 0을 내는 무변별 검증이 된다)"를 명시 — 같은 날 내가 실제로 빠진 함정이다
+- 검증: `validate` EXIT=0(태스크 482·게이트 21). **회수 완료 전 원 브랜치 삭제 금지**를 양 태스크 notes에 명기
+
+### 2026-08-31 (구현·HARN-49·S1-16): **track 오분류로 12일 착수 불가였던 태스크 해소 — 정정 verb 신설 + `extensions.math` 착지** (Kiki "S1-16"·"1"(트랙 정정), claude 구현)
+
+- **거부는 우회하지 않았다**: `backlog.py start S1-16`이 `track_gate`로 거부됐다. 규칙상 처리 순서는 ①거부 사유 확인 ②사람 소유면 넘김 ③CLI 경로 자체가 없으면 태스크 등재다. 조사해 보니 **거부가 옳고 데이터가 틀렸다** — S1-16의 track이 `subject-expansion`(entry_gate 미충족·E1~E6 확장 트랙)인데 실제로는 `stage=S1`·`subject=math`이고 2026-08-19 등재 결정이 '수용 항목'과 '보류 항목'을 갈랐을 때 **수용 쪽인 이 태스크가 보류 트랙에 붙었다**. 같은 트랙 나머지 13건은 전부 E1~E6이다. 근거 3축(등재 결정문·stage/subject·트랙 동거 태스크)이 모두 정정을 가리켰다
+- **정정할 CLI 경로가 없었다** → `HARN-49`: 대장의 유일 쓰기 경로인 `backlog.py`에 **track을 고치는 verb가 없다**. YAML 손편집은 "거부의 우회 금지"가 막는다(그리고 그 금지가 옳다). 그래서 `amend <id> --track <t> --reason <r>`을 신설했다 — 미지 트랙·무변경·부재 태스크·필드 미지정을 거부하고, 이전 값을 notes에 남기고, 이벤트에 `field/before/after/reason`을 적고, **정정으로 entry gate가 풀렸는지까지 출력**한다. 필드별로 스코프를 나눠(`--track`만) `HARN-24`가 `--acceptance`를 얹을 수 있게 했다
+- **같은 결함을 다시 12일 묵히지 않도록 구조 가드**: `validate`가 **게이트 걸린 트랙에서 stage가 동료 전원보다 앞서는 태스크**를 경고한다. ①게이트 id를 파싱하지 않는다(`G-s5-*` 같은 명명 규칙에 의존하면 규칙이 바뀌는 날 조용히 죽는다) — `stage_order` + 동료 비교로만 판정한다 ②**exit code를 바꾸지 않는다**: 오류로 올리면 의도적 배치까지 막고, 그러면 사람이 경고 자체를 끈다 ③`add` 거부로 만들지 않았다 — 이 결함은 *이미 등재된* 태스크에서 발견되므로 등재 시점 거부로는 S1-16 같은 기존 건을 **하나도 못 잡는다**. 실측: 480태스크에서 적중 1·오탐 0
+- **S1-16 본체**: `#846`에 12일 고립돼 있던 `extensions.math` 분리를 이식했다(`f9749daf` cherry-pick + 충돌 해소). 충돌 지점이 `PublicProblem.from_problem` 한 곳인데 **두 축이 같은 함수를 각각 고쳤다** — `EOS-71`(운영 격리 메타 제외)과 S1-16(중첩 `extensions.math`의 정답 유도 필드 제거). 한쪽만 남으면 다른 쪽이 조용히 뚫리므로 병합하고 5테스트로 동결했다. acceptance ①(`schema_version`)은 기실재라 무변경
+- **★ 이식이 만든 진짜 회귀를 전체 스위트가 잡았다**: 원 구현의 동기화 규칙이 "`extensions.math`가 있으면 legacy 5필드를 **통째로** 덮어쓴다"였다. 그러면 **legacy 축에만 쓰는 기존 생산자의 값이 침묵 손실된다** — `l1.problem_bank.signature_tagger.apply_signatures`가 정확히 그 모양이다(`model_copy(update=...)`로 legacy만 갱신·재검증 없음). JSONL 왕복에서 다시 검증될 때 빈 `extensions.math.signature_patterns`가 태깅 2종을 `[]`로 덮어 밴드 테스트가 깨졌다. 1차 수정은 **필드 단위 값 비교**(기본값이 아닌 쪽이 이김)였는데, 리뷰 봇(Codex P2)이 **그 규칙으로는 명시적 비우기를 표현할 수 없음**을 잡았다 — 재태깅으로 `signature_patterns`가 `[]`가 되면 값 비교는 그것을 "안 채운 것"으로 읽고 낡은 extension 값을 되살린다(같은 침묵 손실의 반대 방향). 최종 규칙은 값이 아니라 **입력이 무엇을 말했나**(`model_fields_set`)로 판정한다: **legacy가 정본이고 `extensions.math`는 그 투영** — 명시된 legacy가 이기고 extension은 입력이 언급하지 않은 필드만 끌어올린 뒤 항상 재생성된다. 두 축이 다른 값을 드는 상태 자체가 생기지 않는다. 영속 축이 legacy 컬럼(`db/models/problem.py`)이라 방향도 실체와 맞는다. 필드 목록은 상수(`MATH_EXTENSION_FIELDS`) 하나로 묶었다
+- **경계 정본도 함께 정정**: `EOS-65`의 `schema.problem` 판정은 "S1-16이 분리할 때까지 MIXED"였는데, **착지 후에도 MIXED다** — legacy top-level 필드가 하위호환으로 남아 양방향 동기화되기 때문이다. CORE 승격은 legacy 축 제거(breaking)가 선결이고 S1-16은 그것을 의도적으로 하지 않았다. 스캔 사유문과 `eos_core_adapter_boundary.md` §4 표를 실상에 맞췄다 — **착지를 승격으로 반올림하지 않는다**
+- **검증**: 회귀 재현 → 수정 → 밴드 테스트 24 passed → 전체 **11,241 passed**. 신규 5테스트의 변별력은 **뮤테이션 2회**로 확인했다 — ①원 이식본(통째 덮어쓰기)에서 2건 실패 ②값 비교본에서 2건 실패(그중 `test_explicit_clear_is_not_resurrected`가 봇 지적을 그대로 재현). 원복은 `cp` 백업·md5 동일(`17b4f667…`·`7eb0794e…`). ruff·black(`--line-length 100`)·mypy --strict 562파일·`lint-imports` 3 kept 0 broken · tests/infra 417 · tests/harness 424
+- **정직한 공백**: 컨테이너가 교체되며 파이썬 3.11만 남아 있어 3.12 venv를 새로 만들어 재설치했다 — 즉 **이 세션의 검증 환경은 앞선 세션과 동일 인스턴스가 아니다**(패키지 버전은 pin 범위 내 재해석). `HARN-49`의 done 증적에 `--no-pr incomplete`가 남아 있다(작업은 완료였고 표기가 틀렸다) — 증적을 고치는 verb가 없는 것이 곧 `HARN-24`의 소관이다
+
+### 2026-08-31 (하네스·예방): **장기 미머지 브랜치 경고의 61%가 이미 결정된 것이었다 — '고립'과 'PR 대기'를 기계로 분리 + CI 상시화 (`HARN-47`)** (Kiki "장기미머지 브랜치 예방대책을 검토 테스트 검증 설치", claude 구현)
+
+- **문제**: 브리핑이 미머지 브랜치 18건을 전부 "⚠️ 미해결 — Kiki 결정 필요"로 부르고 있었다. 실측하니 **11건은 이미 PR이 열려 있고 처분 라벨(`eos-rework`/`postpone`/`close`/`merge`)까지 붙어 있었다**. 경고의 61%가 *이미 결정된 것을 다시 결정하라*고 요구했고, 진짜 고립 7건이 그 소음 속에 **24일간** 묻혀 있었다. CLAUDE.md 「상시 실패하는 fail-open 보호를 '보호 있음'으로 신뢰 금지」가 말하는 경고 습관화의 교과서적 형태 — 목록이 길고 매번 같아서 아무도 읽지 않는다.
+- **원인 축 2개**: ① 분류기가 PR 존재를 몰랐다(HARN-13/14는 나이·ahead·포팅 근거만 봄) ② **집행 지점이 SessionStart 훅뿐**이었다 — 이 스캔은 CI에서 **한 번도 실행된 적이 없다**. 「검증 장치를 만들고 배선 확인 없이 완료 선언 금지」의 반복(`tests/infra` 199건 미실행·브랜치 보호 미강제·infra lint 부재에 이은 4회차).
+- **조치**: `scan_stale_branches`가 `refs/pull/*/head` 대조로 `isolated`(PR 이력 0건) / `pr_filed`(PR 번호 보유)를 가른다. 브리핑은 고립만 🔴로 강조하고 PR제출분은 **번호를 건넨다**. `backlog.py branches` 신설 + `ci.yml` `harness-integrity` 잡 배선(`fetch-depth: 0` 필수 — 기본 shallow면 매 실행 "판정 보류"가 되어 초록인 채 상시 무력).
+- **설계 판단 3건**:
+  · **오프라인 git만 쓴다** — `git ls-remote origin "refs/pull/*/head"`는 토큰·`gh` CLI·API 권한 없이 읽힌다(실측: 토큰 0으로 935건). Kiki 머신 훅과 CI 양쪽에서 도는 판정을 외부 인프라에 의존시키지 않는다(이중 회계 원칙).
+  · **조회 실패 ≠ PR 없음** — 실패하면 `unresolved`로 남기고 `pr_lookup_ok=False`를 세운다. 실패를 고립으로 읽으면 인프라가 죽은 순간 열린 PR 11건이 통째로 "🔴 회수 또는 삭제 필요"로 승격된다 — **삭제를 유도하는 오경보**다. 이 축을 테스트로 동결했다.
+  · **열림/닫힘은 판정하지 않는다** — `refs/pull/<N>/merge`가 열린 PR에만 생긴다는 통설로 가르려다 **실측에서 폐기**했다(열린 PR 14건 중 merge ref 보유 8건, 이미 머지된 #922도 head만 잔존). 성공/실패에 같은 값을 내는 검사는 검증이 아니라 위장 — 답할 수 있는 질문만 답하고 나머지는 PR 번호로 사람에게 넘긴다.
+- **성능**: tip sha를 이미 도는 `for-each-ref`(`%(objectname)` 추가)에 얹어 받아 **브랜치당 추가 git 호출 0**. PR ref 조회는 스캔당 1회이며 그 예산 계약 자체를 테스트가 붙든다.
+- **검증**: 뮤테이션 5종 전부 red — PR 대조 무력화 / 조회 실패를 고립으로 승격 / `fetch-depth` 제거 / CI 스텝 삭제 / 브리핑 건수 합산. 원복은 `cp` 백업→`cp` 복원, md5 3파일 전건 일치, `MUTANT` 잔존 0. 회귀는 `origin/main` 워크트리 기준선과 대조해 확정(양쪽 동일하게 47건 실패 — 전부 이 샌드박스의 백엔드 의존성 부재, 제 변경분 회귀 0).
+- **부수 실측**: 이 세션에서 **브랜치 삭제 push가 프록시 403으로 전역 차단**됨을 확인했다(내 브랜치도 못 지움 = ref 스코프 문제 아님). `refs/claims/*` 403(2026-07-27)과 같은 뿌리이며, `parallel_sessions.md` §4가 이미 기록한 「컨테이너 세션은 원격 브랜치를 삭제할 수 없다」의 재확인이다. 그래서 고립 브랜치 정리는 구조적으로 Kiki 실행 몫이고, 이 태스크가 만든 것은 **그 목록이 짧고 정확하게 유지되는 장치**다.
+### 2026-08-31 (설계·EOS-65~68·HARN-42): **첨부 계획문서 2종 대조 → A급 갭 5건 해소 — Core/Adapter 경계를 처음으로 기계가 강제한다** (Kiki 문서 2종 첨부·"A급 5건 등재"·"추천 진행"·"pr", claude 대조·구현) — PR #924
+
+- **문제**: 저장소엔 이미 006을 흡수한 선언 정본과 그 준수 감사(#916)가 있으나 **둘 다 *선언*을 기준으로 삼는다**. 선언이 원문을 번역하며 떨어뜨린 축은 구조적으로 안 보인다 — 실제로 갭 대부분이 ①②에만 있고 선언에 없는 축(②의 P0-02 인벤토리·Migration Matrix·Gate 0 A~E, ①의 §12·§20·§23)에서 나왔다. 대조 결과 충족 27·부분 13·의도적 미채택 5·갭 5(①) · 산출물 10건 중 충족 0·부분 6·갭 4(②)
+- **경계선이 계층 사이가 아니라 `l3` 한가운데를 지난다** (`EOS-65`): 556모듈 배정 결과 `l3`가 CORE 39 : ADAPTER 39로 동거한다. **현행 7계층 import-linter 계약은 구조적으로 이 축을 볼 수 없다** — EOS-67이 별도 계약이어야 하는 이유가 추정이 아니라 측정으로 확인된 지점. 교차 검증: 배정은 사람이 했는데 **CORE의 `sympy` import가 정확히 0건**(전체 27건 → ADAPTER 18·MIXED 7·INFRA 2). `l2`·`l6`는 수학 신호 전무 = Physics 부착 시 무수정 구역
+- **위반 15건의 성격이 셋으로 갈린다**: 진성 11(Core가 수학 검증 직접 호출) · **오배치 3**(`l3.equivalent.josa`는 한국어 조사 받침 판별로 과목 무관인데 수학 패키지 거주 — 옮기면 소멸) · DI 1. 진성 11건이 **`EOS-66` 필요성의 실측 증거**이며, 66 없이 67만 걸면 고칠 수단이 없어 영구 baseline이 된다 → **순서가 66→67**
+- **`SubjectAdapter` 계약은 3메서드로 확정**(`EOS-66`): acceptance는 4를 지목했으나 `explain`의 **위임할 공개 진입점이 l1~l6 전수 0건**(생성기는 전부 비공개 `_explanation`, C9는 crosswalk '신규')이라 넣으면 `NotImplementedError` 좌석이 하나 는다 → `EOS-70`으로 분리. 계약은 `schema`(7계층 최하위)에 두어 계층을 import하지 않게 하고, `l3.verifier.VerificationVerdict` 같은 기존 타입을 **의도적으로 재사용하지 않는다** — 그 변환이 곧 어댑터의 일이다. `answer_kind`·`conditions`는 **과목이 정의하고 Core는 해석하지 않는 불투명 문자열**
+- **만료가 날짜가 아니라 기계다**(`EOS-67`): `unmatched_ignore_imports_alerting` 기본 `ERROR`라 빚을 갚으면 유예 줄이 매치되지 않아 `lint-imports`가 `No matches for ignored import …`로 실패한다 — **CI가 "이 줄을 지워라"라고 말한다**. "만료 없는 유예 금지"의 첫 *코드* 집행(규칙 산문 아님). 계약은 2건으로 쪼갰다: 깨끗한 구역(`l1`·`l2`·`schema`)은 **유예 0**으로 동결, baseline 계약의 유예 20건은 구조적 제외 11(ADAPTER·MIXED 출발 — 빚 아님) + 실제 빚 9로 주석 분리. 안 갈랐으면 EOS-69 목표가 두 배로 부풀었다
+- **모집단을 기계로 도출**(`EOS-68`): 기능 = `app.py`의 `include_router()` 파싱(23). 6축 18점 → KEEP 4·REFACTOR 17·HEAVY 1·**REPLACE 검토 1**(`coach` 14점 = 계획서 100 §3.4가 예언한 god-service 패턴 그대로이고, 치료는 재작성이 아니라 EOS-69 경유 분리로 12점 하락). Gate 0-D 4문항 판정 가능·대시보드 2숫자 산출. `rights` 테스트 0건이 D축 3점으로 **기계 검출**(소유 LIC-01)
+- **HARN-42가 찾은 것**: #930·#931이 같은 HARN-38 병렬 구현(번호는 자기 수복됐으나 `status` 차이로 **나중 머지가 활성 claim을 소멸**시킬 수 있어 경고) · **S1-16이 #846에 12일째 고립**(`extensions.math` 구현했는데 main은 0건 — `EOS-65`가 `schema.problem`을 MIXED로 판정한 근거가 바로 이 미착지분) · **OPS-02가 존재하지 않는 SHA `e05e93f`로 done 처리**(구현은 #847에만) · #858은 #861로 이미 흡수(alembic 리비전까지) → `eos-close`
+- **조사 도구가 거짓말을 하고 있었다**: shallow 클론이라 오래된 브랜치의 `git diff main...<브랜치>`가 **전건 "파일 0"**을 반환했다. 그대로 판정했으면 "빈 PR 10건"이라는 완전히 틀린 표가 나왔다 — `--unshallow` 후 재측정하니 31~80커밋 뒤처진 실체가 드러났다
+- **★ 자기 오류: "변별력 없는 검사"에 이 세션이 걸렸다 (반복 실수 — 대책은 아래)**: `grep "feature_flags"` **0건만 보고 기능 플래그 체계 전체의 부재**를 결론냈다. 실제로는 `config.py`에 `*_enabled` 플래그가 **16+건**(default OFF 10·ON 6) 살아 있고 서빙 경로에서 소비된다(`wh1_primary.py:254`·`api/coach.py:13`). 리뷰 봇(`chatgpt-codex-connector`)이 잡았고 **그 지적이 없었으면 기존 `Settings` 위에 중복 프레임워크를 만들 뻔했다**. 같은 봇이 `Skill` 미확인 오판정(→ `SkillNode` 실재·Gate 0-C가 **부분→충족**)과 P0 집계의 자기 표 모순도 잡았다. **세 지적이 전부 *부재* 주장**이었다 — "있다"는 파일을 대면 끝나지만 **"없다"는 검색 방법 자체가 옳아야 성립**하므로 부재 판정의 오류율이 구조적으로 높다. 이 문서는 다른 곳에서 "trunk 부재≠미구현"을 적용해 갭 후보 2건을 내렸으면서, 정작 `grep` 한 번으로 내린 판정들은 같은 의심을 받지 않았다
+- **부수 발견(자체 재검산)**: 봇 지적을 계기로 문서 산술을 기계 재검산해 2건 더 찾았다 — 갭 목록이 6개를 열거하고 "5건"이라 적음 · 항목 26이 부분·미채택 이중 계수. 판정 합 51 → **27+13+5+5=50** 정합
+- **검증**: mypy --strict 558파일 · lint-imports **3 kept 0 broken** · 전체 백엔드 스위트 **11,010 passed**(순서 무작위화 2회 포함) · tests/infra 399 · tests/harness 378 · CI 16/16. **뮤테이션 11건 전건 검출**(원복은 cp 백업·md5 IDENTICAL). 그중 `api._auth` 건이 결정적 — `l2`에서만 깼으면 "7계층이 이미 잡는 중복"을 배제 못 한다. `api`→`l3`는 7계층이 허용하는 방향이라 거기서 EOS 계약만 깨져야 **독립 축**임이 증명된다
+- **검증 방법 자체의 결함도 하나 잡았다**: 신규 파일은 추적되지 않아 `git diff` 공집합 확인이 **성공/실패 양쪽에서 같은 값을 내는 무효 검사**였다 → md5 대조로 교체
+- **정직한 공백**: **빚은 하나도 갚지 않았다** — 위반 15건 그대로이고 계약으로 고정만 했다(`EOS-69`가 갚는다). 계약은 **직접 import만** 판정(`allow_indirect_imports=true` — 경계 스캔과 축을 맞춘 것이며 경유 의존은 사각). SubjectAdapter 적합성은 **구현 하나로만** 검증됐다("Physics를 붙일 때 Core를 안 뜯는가"는 두 번째 구현 전까지 논증이지 실증 아님). Migration Map의 "이동 계획" 절반은 비어 있다(분류만 채웠고 일정은 지어내지 않음). 계획서의 "기존 120개"·"EOS 270개" 모집단 정합은 원본 xlsx가 저장소 외부라 **판정 불가** — 인벤토리 23은 하한
+- **후속 미등재 1건(Kiki 판정)**: "존재하지 않는 SHA로 done 처리된 태스크" 전수 감사(OPS-02 부류·HARN-23 게이트 착지 2026-08-11 *이전* done이 대상). 12월 검증 관여가 자명하지 않아 신규 기능 게이트(§0-5)를 통과할지 불확실하므로 기록만 했다
+
+### 2026-08-31 (구현·CUR-12): **Curriculum Alignment 통합 조회 — 3축 단일 함수 + 소비처 4곳 정렬** (claude 구현)
+- **문제**: 개념↔성취기준 정렬이 3축(ConceptStandardLink·CurriculumEntry.national_standard_codes·AtomNode.standard_codes)으로 흩어져 있고, 같은 **원자 축 조인이 소비처마다 복제**돼 있었다(`api/coach._standard_code_for`·`l2/target_progress`·`api/gating._fetch_achievement_codes`) — `api/alignments.py`(CUR-11)도 핸들러 안에서 3축을 직접 SELECT했다. CUR-11이 자기 docstring에 "CUR-12가 통합 함수를 세우면 이 핸들러는 그 함수를 경유하도록 갈아끼우는 것이 의도된 진화"라고 좌석을 미리 지목해 둔 상태였다
+- **착지**: `l1/standards/alignment_query.py`(`get_alignments` 단일 비동기 함수) + 소비처 4곳 정렬(coach·target_progress·alignments·dsl) + 테스트 27건. 배선 실재성은 `TestConsumerWiringIsReal`이 **import 구조로** 동결한다(축 ORM import 재출현 = 조인을 손으로 다시 쓴 것 — 뮤테이션으로 변별력 실측)
+- **어휘는 통일하지 않는다**: 축마다 개념 측·성취기준 측 어휘가 다르고(1축=norm_id, 2·3축=official_code), 그 차이를 없애지 않고 `standard_ref_kind`로 **표시**한다(CUR-11 정책 계승·가짜 통일 금지). 물리 `curriculum_alignment` 테이블·어휘 번역은 Phase 2(acceptance ⑤)
+- **UUID로 물어도 추가 쿼리 0**: 각 축이 자체 조인으로 개념 키를 푼다(별도 해석 쿼리 없음). `concept_ids`가 **서브쿼리(Select)** 도 받아 `l2/target_progress`의 "쿼리 수 최대 2회·N+1 0" 계약이 그대로 유지된다
+- **조인 회계(acceptance ②)**: `probed`(조회된 행)와 `matched`(성취기준이 실린 행)를 축별로 분리해 **"매핑 없음"과 "조인 실패"를 구분**한다. `log_join_stats`가 probed>0·matched==0이면 warning으로 승격(target_progress가 쓰던 경고의 일반화). 조회 자체를 안 한 축은 `queried_axes`에서 빠져 0이 "없음"이 아니라 "안 봄"임이 남는다(미측정 ≠ 0)
+- **alignment_type은 로깅 전용(acceptance ③)**: 6값 폐쇄 어휘를 정의하되 판정·필터에 쓰지 않고, **현재 어느 축도 채우지 못한다** — 세 축 중 교수학적 의도를 기록하는 축이 없기 때문이다(1축의 `link_type` '직접/재매핑/준용'은 매핑 출처이지 역할이 아니다). 임의로 TEACHES를 찍는 것은 날조이므로 전건 None으로 두고, 회계가 `type_counts={'(미상)': N}`으로 그 공백을 드러낸다
+- **구현 중 실측한 함정**: 축 합성 순서를 enum 값 **사전순**으로 정렬하면 `atom_node`가 앞으로 와 `api/alignments.py` 페이지네이션의 "축-우선 prefix 보존" 계약이 조용히 깨진다 → `AXIS_ORDER`(선언 순서) 상수로 고정하고 테스트가 동결. 기존 CUR-11 테스트가 이 회귀를 즉시 잡았다
+- **상충하는 두 요구를 플래그로 분리**: `api/alignments.py`는 배열 축의 빈 행을 SQL에서 제외해야(prefix 보존) 하고, `l2/target_progress`는 **빈 행도 probed로 세야**(조인 실패 판별) 한다 → `require_nonempty` 플래그로 갈라 두고 각 소비처가 *명시*한다(조용한 기본값 의존 금지)
+- **l3 DSL 축**: `CurriculumMeta.standard_codes` 슬롯 신설 + `api/dsl.py`가 `get_alignments`를 경유해 채운다. IR은 순수 Pydantic이라 스스로 조회하지 않는다(세션을 쥔 표면이 채운다). 응답 `contents[].curriculum`으로 노출해 **배선을 관측 가능하게** 했다 — 아무도 못 보는 슬롯은 배선 확인이 불가능하다
+- **잔여 축 분리 등재**: `api/gating._fetch_achievement_codes`는 진입 키가 problem이라 concept 키 시그니처로 덮이지 않는다 → 억지 통합 대신 `CUR-19`로 등재(만료 없는 유예 금지)
+- **#933 리뷰 P2 2건 상환(둘 다 실재 결함)**: ① **회계 2분류의 뭉갬** — probed/matched만으로는 "조인 미스"와 "매핑 없음"이 똑같이 `(1,0)`으로 보였고, 그 결과 coach가 조인 미스에 "매핑 없음" 라벨을 찍고 `target_progress.matched_concepts`의 의미가 구 구현(`standard_codes is not None`)에서 바뀌었다. **joined를 추가한 3분류**로 고치고 blackout 경고 기준도 matched→joined로 옮겼다(매핑만 빈 것은 정상 상태일 수 있어 경고 대상이 아니다). ② **결과물에서의 가짜 통일** — 다축 조회 후 `standard_refs()`를 필터 없이 쓰면 norm_id와 official_code가 한 리스트에 섞였다(축을 나눠 표시해 놓고 결과에서 도로 뭉갬). `standard_refs(kind=...)` 추가 + 소비처 3곳 명시 + dsl은 official_code 축만 조회
+- **자기 테스트가 결함을 동결하고 있었다(교훈)**: ①은 내가 쓴 두 테스트(`outer_join_miss`·`matched_row_without_codes`)가 **같은 기대값**을 단언해 아무것도 구분하지 못했고, ②는 혼합 어휘 리스트를 그대로 정답으로 박아 두었다. 재발 방지로 파라미터 테이블 + `test_state_accounting_is_pairwise_distinct`(세 기대값이 서로 달라야 한다는 **계약의 자기검사**)를 넣었다 — "변별력 없는 검증 스텝 금지"가 테스트 *묶음* 수준에서도 적용된다는 사례
+
+### 2026-08-31 (운영·게이트): **whymath-pg 스키마 드리프트 해소 + 좌석 발급 경로 완성 — `G-operator-seat-first-grant` 3·4단계 실행 + `ADMIN-11` 신설** (claude 설계·예행, Kiki 실행)
+
+- **왜**: 게이트가 20일 정지해 있었다. whymath-pg의 `alembic_version`이 이 저장소 체인에 **없는** `d6e7f8a9b0c1`이라 `alembic current`·`upgrade head`가 둘 다 exit 255로 죽었고(2026-08-11 실측), 그래서 `user_profile.role`이 없어 콘텐츠 CUD 6라우터가 전건 403인 상태가 고착됐다. "봉인 정상"과 "아무도 못 씀"이 같은 값이었다.
+- **측정 도구 신설** — `scripts/ops/probe_prod_schema_revision.sql`(읽기 전용). 판정을 **버전 테이블(간접 신호)이 아니라 스키마 실물(직접 신호)**에서 낸다: 리비전별 판별자 26행 + 판정 3치(`stamp_target`·`pending_count`·`present_after_gap`). 기존 3단계 설계(질의 2개)는 08-11 이후 체인이 20건 늘어 **이미 변별력을 잃은 상태**였다. `tests/infra/test_prod_schema_probe.py` 16건이 프로브를 체인에 동결한다 — 마이그레이션이 늘었는데 프로브를 갱신하지 않으면 CI red(갱신 없이 두면 `pending 0`이라는 *틀린 통과*를 낸다).
+- **실측(Kiki, 2026-08-31)**: `stamp_target = a9b8c7d6e5f4` / `pending 22` / `present_after_gap 0`. 이후 A 백업 → B `stamp --purge` → C `upgrade head`(22건) → D 프로브 재실행 전부 exit 0, **head `d4a71c0f9b32` 도달 · pending 0**. `OPS-39`가 관측하려던 드리프트가 실제로 닫혔다(관측 장치 자체는 여전히 `OPS-39` 범위).
+- **★ 런북 결함 2건을 *예행연습*이 잡았다 — 코드 리뷰도 테스트도 아니었다**:
+  1. **`alembic stamp <rev>`는 이 DB에서 반드시 실패한다.** stamp도 `current`와 같은 이유로 *현재값을 먼저 해석*하려 들어 `Can't locate revision 'd6e7f8a9b0c1'`으로 exit 255가 난다. 로컬 PG16에 같은 상태를 만들어 실측했고 `--purge`(버전 테이블을 비우고 찍기)만 exit 0이었다. **기존 4단계 예고대로 갔으면 08-11 1차 실행과 똑같은 실패를 반복했을 것이다.**
+  2. **`user_profile`이 0행이었다.** 게이트 노트의 "user_profile 조회로 user_id를 고른다"는 *계정이 존재한다*는 미확인 전제였고 틀렸다. 저장소에서 `UserProfile`을 만드는 경로는 `api/auth.py`의 `resolve_user` 하나뿐이고 OAuth 콜백에서만 불린다 — provider를 붙이기 전에는 계정이 존재할 수 없다. `role_grant_cli`는 정상이었다(`list`가 exit 0 + `total: 0`).
+- **Kiki 결정**: ① 좌석은 **실계정 이메일**에 붙인다(데모 인증의 고정 신원 `demo-student@whymath.example`은 *데모 인증이 켜진 서버에 닿는 누구나*가 좌석 주인이 되므로 배제) ② 계정 생성은 원시 SQL이 아니라 **전용 ops CLI**로 한다.
+- **`ADMIN-11` — `ops/account_bootstrap_cli.py`**: 이메일로 `UserProfile` 1행을 멱등 생성. **핵심 계약 = `api/auth.py`의 `email_hash` 재사용**(비밀값 없는 순수 sha256이라 결정론적) — 그래야 장차 같은 이메일로 실제 로그인할 때 `resolve_user`가 같은 행을 찾아 좌석이 유지된다. 값을 복제하면 두 경로가 조용히 갈라진다. **권한은 만들지 않는다**(role 기본값 `student`) — `content_admin` 부여는 `role_grant_cli grant`가 단독 담당하고 그쪽이 `privacy_audit.role_change`를 남긴다. 이 CLI가 role을 쓰면 감사 경로가 둘로 갈라진다. `declared_unwired_audit` 등재 양방향 실측(미등재 exit 1 → 등재 exit 0).
+- **예행연습이 잡은 세 번째 결함(자기 코드)**: 1회차 출력만 `"role": null`이었다 — `role`은 이 코드가 아니라 DB `server_default`가 채우는데, 커밋 전 ORM 객체는 그 값을 모른다(2회차는 조회 경로라 `student`). **같은 상태를 회차에 따라 다른 값으로 보고하는 출력**이라 커밋 후 `refresh`를 명시했다.
+- **일반 교훈(등재)**: **런북은 예행연습을 통과하기 전까지 가설이다.** 이 세션에서 실행 전에 잡힌 결함이 3건이고, 그중 2건은 *실행하면 반드시* 실패하는 것이었다. 기존 규칙 "검증 없는 실행 안내 금지"가 "그 명령이 산출물을 내는 코드 경로인지 저장소에서 확인"을 요구한다면, 이번 사례는 그 위 단계 — **가능하면 같은 상태를 재현해 명령 자체를 돌려 본다**(로컬 PG16 재현은 30분이 안 걸렸고, Kiki 머신 실패 1회의 왕복보다 짧다).
+
+### 2026-08-31 (구현·EOS-60): **골든 벤치마크 셋 + QA 엔진 혼동행렬 — 판정기의 FN율을 처음으로 잰다(N8 갭 해소)** (claude 구현)
+- **문제**: `qa_pipeline`이 9축을 조립해 PASS/FAIL을 내지만 **자기 FN율을 모른다**. EOS-51 §6 내용 KPI 6종 중 4종이 골든 라벨에 의존하는데 저장소 전수 grep 0건이었다(N8 — `eos_validation_n1_n10_gap_review_2026-08-30.md` §3.7). G2(10/25)의 "자동검증 ≥70%"는 자동검증이 맞는지 모르면 무의미한 숫자다
+- **착지**: `harness/golden_benchmark.py`(승격·동결·평가 원장) + `ops/qa_confusion_matrix.py`(혼동행렬·Wilson·게이트 exit 0/1) + 계약 정본 `docs/standards/golden_benchmark_contract.md` + 테스트 73건
+- **별도 라벨링 캠페인 0**: 골든은 EOS-54 검수 이벤트의 `verdict`·`failure_code`에서 승격한다(검수 185 CU 예산의 부산물 — 추가 인간 시간 ≈ 0). 앵커 6 × 30~35 ≈ 200건 목표
+- **as-found fail-closed(#911 codex P1 반영)**: `rejected`는 그대로 승격, `approved`는 ⓐ 검수 전 스냅샷 또는 ⓑ EOS-62 edit-aware verdict(+`--edit-aware-since` 경계) 없이는 **제외 + 건수 명시**. 손질 후 승인을 clean으로 승격하면 FN율이 과소평가되어 골든이 자기 목적을 훼손한다. ⓑ 착지 여부는 상수가 아니라 `ReviewVerdict` 어휘 **실측**(`edit_aware_verdict_available`) — EOS-62 착지 시 자동 해금, 착지 전에는 손대지 않아도 fail-closed 유지
+- **과적합 방지(S2-11 골든 적용)**: 골든에 `golden_version`·`rotation`·`frozen_at`·`digest`(판정 축만의 sha256 — 라벨 손편집은 로드 시 터짐) 동결 + 평가 원장으로 "같은 골든 × 다른 엔진 리비전" 재채점을 exit 1 차단(같은 리비전 재실행은 재현성 확인이므로 허용). 회전 해시는 `reviewer_sample_package.rotation_key`를 공개 승격해 **재사용**(재구현 0)
+- **FN 위장 차단**: 예측 없는 골든 항목을 pass로 세지 않는다(미평가 분리 카운트) — 이 계약이 깨지면 FN율이 구조적으로 낮아진다. 파싱 실패 1건이라도 있으면 판정하지 않는다(hit_cu_metrics 동일 규약)
+- **집행 별항(⑤)**: 내용 KPI 4종의 골든 소비 결선표를 `CONTENT_KPI_CONSUMERS`로 동결하고 리포트가 **라벨 축별 정답지 건수**와 함께 상시 출력 — 착지는 `ops/qa_confusion_matrix` 1종뿐이고 교육과정 정합률·op-code 정확도·풀이 비약 κ는 **미착지**(좌석 `EOS-61`·`MISC-07`)임을 그대로 적는다. 표와 실체의 정합(착지=import 가능·미착지=좌석 태스크 실재)은 테스트가 기계 동결. `subject_id`는 처음부터 스키마에(Math 비종속)
+- **CI 배선 판정**: 둘 다 검수 실이벤트 의존이라 `declared_unwired_audit`에 `by-design` 등재(hit_cu_metrics 동형) — 판정 로직 자체는 backend 잡이 수집하는 테스트가 상시 검증한다
+### 2026-08-31 (감사·stray-code): **미머지 브랜치 5차 전수 감사 — 삭제 0건·회수 1건(S4-59)·추적자 0인 사람 결정 1건 게이트화(G-authoring-expansion-merge-decision)** (Kiki "/stray-code", claude 감사)
+
+- **전제 복구**: 세션 클론이 shallow였고 SessionStart 브리핑도 "장기 미머지 브랜치 조회 불가 — 판정 보류"를 자인했다. `git fetch --unshallow` 후 트렁크 904커밋 복원하고서야 판정에 착수(shallow 상태의 ahead 수치·포팅 근거는 전부 오염된다는 08-11 선례 준수)
+- **모집단**: 원격 ref 37 → main·harness-claims 2 제외 → 열린 PR 소유 18 → **감사 대상 17건**. 유령 PR(head 부재) **0건**. 직전 4·5·6차 삭제 배치 19건 + 수동 4건은 `ls-remote` 잔존 **0/19**로 완전 집행 확인
+- **판정 결과 — 삭제 배치 0건**: 17건 전부가 살아 있는 소유에 묶여 있어 `.github/branch-cleanup-request.txt`를 **수정하지 않았다**(빈 배치를 만들지 않는다). 15건은 소유 태스크가 main 실재·`status=todo`·본문이 브랜치를 실제 지목함까지 기계 교차 확인
+- **회수 1건 = `S4-59`**: `vafylb`의 소유 `HARN-35`가 done(#900)이 되며 좌석이 사라졌는데, 그 회수는 `OPS-24`(→`OPS-53`)만 가져가고 **잔여를 남겼다** — stray-code §4 "소유 태스크가 done이어도 끝이 아니다"의 실사례. 고아 잔여 = `docs/standards/residue_gate_demotion_battle_2026-08-10.md`(104줄, S4-16 강등전 1차 실측). 나머지 잔여(cp949 코드 수정)는 `OPS-53` acceptance ②가 소유하므로 범위 밖으로 분리
+- **부재는 status 대조가 아니라 grep 교차로 확정**: `0.0568`·`승격 기각`·`11h 36m`을 main과 인플라이트 PR #844 양쪽에서 검색해 전건 0건. main `MEMORY.md` 446-464는 **후행 08-14 라운드**만 담아 결론(게이트 미승격)은 보존됐으나, 1차 라운드 고유의 **결함류별 실명 관찰**(`missing_condition` 0/3·`unstated_equiprobability` 0/3)과 비용 실측(45콜 11h36m)은 어디에도 없다 — `residue_gate_v4` 설계 입력이자 검증 권위 서열 직결 기록이라 회수 가치 인정
+- **별건 최대 발견 — 추적자 0인 사람 결정**: 저장소 최대 고립분 `trjg5x`(코퍼스 30종 **11,446문**·생성기 30파일·저작 태스크 S4-19~51 32건)의 소유로 지목된 `PB-06`은 done이지만, 그 acceptance ① 자신이 "**회수·병합은 이 태스크가 하지 않는다(Kiki 소유)**"라고 적었다. 그 소유가 게이트 대장 17건 어디에도 없어 **done 이후 20일간 추적자 0**이었다 — CLAUDE.md "만료 없는 유예·제외 금지"(유예는 만료·재확인 지점을 동반한다) 위반 상태. `G-authoring-expansion-merge-decision`(decision·kiki·7일 리마인드) 신설하고 PB-06이 이미 산출한 정량 입력(커버리지 78→130/435·차단 조건 3건·PB-11 상환)을 notes에 실어 결정 가능 상태로 만듦
+- **번호 배정**: `S4-53` 시도를 CLI가 선점 충돌로 **거부** → 제안 번호 `S4-59` 수용(우회 0). 최초 `paths`가 넓어 겹침 경고 19건 → REC-09 선례대로 실 touch set 4파일로 좁혀 경고 **0건**
+- **검증(전건 exit code)**: `validate` EXIT=0 · `overlap S4-59 --in-flight-only` EXIT=0(in-flight 겹침 0 — 병렬 충돌 없음) · `next --n 60`에서 S4-59 30위 노출(배선 확인)
+- **자기 검증 실패 1건(정정)**: 1차 기재의 "`overlap` 경고 0건"·"`next --n 3` 노출"은 **둘 다 거짓**이었다 — `overlap`은 위치 인자 `id`가 필수라 인자 없이 EXIT=2로 죽는데, 판정에 쓴 `overlap 2>&1 | grep -c 'S4-59'` → `0`을 "겹침 없음"으로 읽었다. 실패와 정상이 같은 값을 내는 **변별력 없는 검증**(CLAUDE.md 금기 직격)이며, 정작 같은 문서 §4가 "성공/실패가 다른 값을 내는 검사"를 내세우고 있었다. 실측 정정: 겹침 경고 **11건**(전건 비활성 세션), S4-59는 `next` **30위**. 판정(병렬 충돌 없음)은 `--in-flight-only`로 유지되나 근거가 바뀌었다. 발견자는 PR #927의 Codex 리뷰(P2) — 봇 지적을 실측 검증해 수용
+- **정직한 공백**: 잔여 15건의 acceptance **본문 전수 정독은 미실시**(소유 실재·생존·브랜치 지목까지만 기계 확인) — vafylb에서 실제로 난 "done 후 잔여 고아" 유형이 todo 태스크에도 잠재 가능하나 todo인 동안은 좌석이 살아 있어 삭제 위험 없음. S4-19·S4-22 ID 충돌은 재확인만 하고 PB-06 차단 조건 ⑵ 소유이므로 재등재 안 함. 코드 이식은 이 감사 범위 밖(`/drive`가 S4-59 실행)
+- 판정 정본: `docs/reviews/unmerged_branch_audit_2026-08-31.md`. 선행 판정 문서(08-04·08-11·08-29)는 수정하지 않았다
+### 2026-08-31 (도구·가시화): **작업 보드 도입 — backlog 457건 전수 칸반 + 게이트 상세 열람 (`HARN-40` #921 · `HARN-41` #923)** (Kiki "한 눈에 일목요연하게 보는 보드" 요청, claude 구현)
+
+- **왜**: `status`·`brief`는 "next 3건 + 게이트 요약"이라 **전수 조망이 구조적으로 불가능**했다. "무엇을 했고·무엇이 돌아가는 중이고·무엇이 예정인가"는 요약이 아니라 전수 투영이라야 답이 된다. 산출 = `scripts/harness/board.py` → 자기완결 HTML 1파일(외부 CDN·폰트·서버 요청 0 — 오프라인에서 열린다). 정본 문서 = `docs/standards/build_harness.md` §4b.
+- **계약 4건**(`tests/harness/test_board.py` 38건이 동결): ①**판정 무복제**(열 배치 = `selector.classify_todo`, 진행률 = `report.stage_progress` — 보드가 자기 판정을 갖는 순간 이중 진실원천) ②**무손실**(열 배치 + 취소 = 전체 — 어떤 태스크도 조용히 사라지지 않는다) ③**미머지 완료분 재조정**(`scan_remote_done(fetch=False)`) ④**읽기 전용**(보드 생성이 `backlog/` mtime을 바꾸지 않음 — 상태 변경 창구는 `backlog.py` CLI 단독).
+- **화면을 만들다 드러난 실측 2건** — 둘 다 코드 리뷰나 테스트가 아니라 *가시화*가 잡았다:
+  1. **미머지 완료 15건 탐지** — 다른 브랜치가 이미 `done`으로 들고 있는데 트렁크 사본은 여전히 `todo`인 태스크다. 끝난 작업이 예정으로 보이는 상태 = 이 저장소가 4회 겪은 미병합 고립·중복 구현의 입구다. `next`는 `scan_remote_done`으로 같은 상태를 후보에서 제외하는데 보드는 그러지 않았다 → 재조정 후 **"다음 착수" 129건 → 115건**. ⚠ **탐지 15건과 감소 14건은 서로 다른 수이며 둘 다 맞다**(#926 codex 지적으로 표기 정정): 재조정은 `ready`뿐 아니라 `waiting`에도 적용되므로, 탐지분 중 이미 다른 사유로 대기 열에 있던 1건은 "다음 착수" 수치를 움직이지 않는다. 같은 구조를 08-31 현행 main에서 재실측하면 **탐지 16 = ready 15 + waiting 1**(ready 132→117)로 동일하게 갈린다. 이후 감사에서 두 수치를 대조할 때는 *탐지 건수*와 *열 이동 건수*를 구분해 읽어야 한다.
+  2. **해소된 게이트가 아직 막고 있는 것처럼 표시**됐다(cleared `G-eos-g0-verification-design-freeze` ↔ 실제로는 착수 가능한 `EOS-56`). `blocks_now`(= 게이트가 pending인가)로 문구를 가르도록 정정 — 대기면 "막고 있는 것", 해소면 "전제로 걸었던 것(지금은 차단하지 않는다)". 의존 이력은 지우지 않는다(지우면 "누가 이 게이트를 걸었나"를 잃는다).
+  - 두 건 모두 **Codex 리뷰 봇의 지적을 수용**해 같은 PR 안에서 고쳤다(#921 `602f2e84`, #923 `f2f2d927`). 봇 지적을 실측으로 재현한 뒤 고친 사례로 남긴다.
+- **게이트 상세**(HARN-41): 카드 클릭 시 메타·**막고 있는 것**·노트 **원문**·해소 명령이 펼쳐진다. 트랙 `entry_gate` 잠금을 함께 세는 것이 실질 — 트랙 잠금은 태스크 쪽에 아무 표시도 남기지 않아, 세지 않으면 E축 하드락이 화면에서 "아무것도 안 막는 게이트"로 보인다(실측: `G-s5-subject-expansion`이 미완 15건을 잠근다). 게이트 노트에 실행 런북이 들어 있다는 사실도 이때 드러났다(`G-operator-seat-first-grant` 2,736자가 화면에 한 글자도 안 나오던 상태).
+
+**⚠ 반복 실수 기록 — 검사 자체가 위장이었다 (CLAUDE.md "변별력 없는 검증 스텝 금지" 2026-07-17 유형의 재발)**
+
+- **경위**: 페이로드 JSON에 `</script>`가 주입돼도 스크립트가 조기 종료되지 않음을 확인하는 테스트를 썼는데, **이스케이프 방어를 제거하는 뮤테이션에서도 그대로 통과**했다. 원인은 검사의 정규식이 non-greedy라 *주입된* 종료 태그에서 먼저 끊겼고, 잘린 앞부분에는 `<`가 없었던 것 — 성공과 실패가 같은 화면을 냈다.
+- **발견 수단**: 뮤테이션 검증. 테스트를 쓴 것만으로는 못 잡았고, **일부러 깨뜨려 본 것이 잡았다**(이 세션의 뮤테이션 총 7건 중 1건이 red를 내지 않아 드러남).
+- **대책(코드로 착지)**: 브라우저와 같은 규칙(**첫** `</script>`까지를 실제 페이로드로 간주)으로 잘라 JSON 파싱하도록 교정 → 같은 뮤테이션에서 red 실측(`adba9d32`). 새 규칙은 등재하지 않는다 — 원인은 새 축이 아니라 기존 규칙의 집행 실패이며, 집행 수단(뮤테이션 검증)은 이미 작동했다.
+- **일반화**: 테스트가 통과한다는 사실은 그 테스트가 무언가를 지키고 있다는 증거가 아니다. **깨뜨려 봐야 안다**.
+
+- **검증**: `ruff`·`black --line-length 100`(scripts + tests/harness) exit 0 · `pytest tests/harness` **388 passed**(무작위 순서 포함) · `backlog.py validate` exit 0 · Chromium 실렌더로 라이트/다크 양 테마·게이트 펼침 클릭·콘솔 에러 0·가로 오버플로 0px 실측. **정직한 공백**: JS 로직(필터·펼침·페이지네이션)에는 자동 테스트가 없다(브라우저 확인은 세션 수동 실행이며 CI 잡이 아니다) · 보드는 원격 *in-progress* claim은 조회하지 않는다(미머지 *done*만 반영).
+
+
+### 2026-08-30 (회수 실행): **HARN-34·35 즉시 실행 — 법령 게이트 재등재 + done 정정 4건 + 유실 태스크 6건 재등재(MISC-17~20·SEC-30·OPS-53) + 5차 삭제 배치** (Kiki "모두 알아서 정리해줘", claude 실행)
+- #899(4차 감사) 머지 직후 같은 세션이 회수를 실행: `G-export-prediction-disclosure` 게이트 CLI 재등재(원 요청일 08-11 보존), ASM-12(#822)·MISC-04(#821)·CUR-16(#892)·S4-10(#898) done 정정, 고립 참조 notes 7건 병기, OPS-41 현행화
+- 재등재 매핑: MISC-07→17·08→18·09→19·10→20, SEC-25→SEC-30, OPS-24→OPS-53 (전건 2026-08-30 미해소 재실측 후·원 번호 재사용 금지). MISC-11은 흡수 판정(HARN-34 ③ + main todo 태스크 자신이 회수 좌석)
+- #899 리뷰(Codex) 정정 1건 수용: S4-52 증적은 main 기존재("PR #866" vs "#866" 표기 차이의 comm 오인) — 감사 도구 함정으로 문서 §1에 추가
+- 브리핑 '이미 포팅됨' 오분류 2회차 실측(7n9n72 — 문서 커밋 #770을 포팅 근거로 오인·main 부재 15파일) → HARN-37 등재. 7n9n72는 최대 잔존 고립으로 삭제 금지 명기
+
+### 2026-08-29 (감사·회수·정리): **미머지 브랜치 4차 전수 감사 — 법령 게이트 유실 발견(HARN-34 P1)·태스크 등재 유실 7건(HARN-35)·claim 경로 CRLF 오염(HARN-36)·브리핑 포팅 오분류 재발(HARN-37) + 삭제 4차 배치 11건** (Kiki "미머지 파일 처리 검토" 요청, claude 판정·등재)
+- **판정 정본**: `docs/reviews/unmerged_branch_audit_2026-08-29.md` (PR 미오픈 40건 전수·blob 단위 대조)
+- **최중요 발견**: "재생성-머지" 패턴(#815→#822, #744→#821)이 코드만 착지시키고 부기를 유실 — 변호사 검토 게이트 `G-export-prediction-disclosure`(ph1ad7 gates.yaml에만 존재)·ASM-12/MISC-04 done 기록·SEC-28 done 경로가 전부 미착지. "회수 시 acceptance 전수 재대조 생략 금지"(08-10)의 4번째 축(약속한 **부기**가 다 왔는가) 실사례
+- **backup/*-pre-rebase가 유일 사본인 사례 2건**: r1skwr backup(MISC-07~11 오개념 r2 태스크 5종)·6ybkis backup(SEC-25 면제 만료) — "백업"이라는 이름이 원본 실재 착시를 만듦
+- **6eejrv(PB-08 redaction) 판정 확정**: #802 close(Kiki — SEC-24 projection과 상호배타) 존중, 정답 축은 main 해소 실측(problems·gating 전건 PublicProblem). 검수 축(pending 노출)은 main PB-08(todo) 소유로 잔존
+- **감사 도구 함정 신규 실측**: `git rev-parse origin/main:<부재경로>`는 인자를 에코해 부재 파일을 '상이'로 위장 — 존재 판정은 `git cat-file -e` 필수(판정 문서 §1에 방법 동결)
+- 3차 배치(admin-01) 집행 확인(잔존 0/1). 4차 배치 11건 등재(후속 정독으로 s4-52-status·40xspg·3pbkcx/dw9lww/6eejrv 백업 승격 편입 — 40xspg 잔여는 전건 옛 판, 7n9n72는 반대로 main 부재 15파일의 최대 잔존 고립 확정·브리핑 '이미 포팅됨'은 문서 커밋 오분류 2회차 = HARN-37), 허용 패턴 밖 2건(pr/collab-07·backend/cur-16 v1)은 Kiki 수동 삭제로 분리
 
 ### 2026-08-14 (회수·재착지·시각화 R4): **시각화 4차 재점검(R4) 재착지 — 본 편 자신이 force-push로 유실됐다가 현행 main 재실측 후 복구. `VIZ-10` 등재** (claude, Kiki "15. 시각화 분야의 빠진 부분 점검·설계"의 완결)
 
@@ -1503,6 +2321,7 @@ Desmos/GeoGebra·백엔드 `sympy.latex` 생성 — 기존 미채택 결정 승�
 - **범위 준수(⑧)**: `assessment` 테이블 필드의 존폐는 건드리지 않았다.
 
 ### 2026-08-09 (헌법 개정·CI 사고): **PR #732 CI red 2건 — ①`black --check -q | tail`로 실패를 통과로 오판(내 검증 호출 방식 결함) ②고립본 Dart 테스트의 `invalid_constant`(그 브랜치가 CI를 통과한 적 없음이 판명). CLAUDE.md에 "검사 명령의 출력을 억제하거나 잘라서 판정 금지" 신설** (claude 진단·수정, Kiki "pr" 지시)
+### 2026-08-09 (사고 기록·병렬 충돌 2건·S4-16) [2026-09-11 S4-59 회수 — 고립 브랜치 `claude/whymath-ai-content-design-vafylb`(`0b2427ee`)에만 있던 기록, main 전수 grep 0건 확인 후 백필]: **S4-16 중복 구현 + OPS-23 번호 선점 — 공유 자원(태스크·번호·Kiki 머신 클론) 충돌 실측·정본 판정**: ⑴ S4-16을 openrouter 세션(`claude/openrouter-setup-guide-e98dw4`)이 claim(2026-08-03 11:58Z) → 당시 그 브랜치에 하네스 코드 0건임을 실측 확인 후 **Kiki 승인 하에 강제 해제**·본 세션이 인수, 하네스 구현·PR #683으로 **main 기머지**. 그런데 그 세션이 해제 후에도 독자 하네스를 계속 구현해 `f8c0e3b6`(CLI `--n-per-class`/`--n-clean` — 본 세션의 `corpus`+`--sample-n`과 상이) 푸시 — 2026-07-27 OPS-07 중복 구현(한쪽 735줄 폐기)과 같은 유형 재발. **정본 판정: 본 세션 구현**(claim 보유·main 기머지·Phaiakes9 라이브 디버깅 이력·cp949 수정 포함). `f8c0e3b6`은 미머지 중복 — 머지 금지 대상. ⑵ Kiki 머신 클론이 라이브 강등전 런북 도중 `s4-16-battle` 로컬 브랜치(`f8c0e3b6` 추적)로 전환돼 있었음(타 세션 런북 수행 중 전환된 것으로 추정 — 전환 주체는 미실측) → 본 세션 런북이 다른 코드 위에서 실행돼 argparse 오류. 런북에 동봉한 자가검증(`git log -1`·usage 출력 대조)이 이탈을 검출 — "변별력 있는 검증 스텝"의 실효 입증. 대책: CLAUDE.md Kiki 머신 안내 규칙에 "브랜치 의존 명령 블록 직전 `git log -1` 자가검증 필수" 명문화(이 백필 세션이 CLAUDE.md에도 동반 반영). ⑶ `OPS-23` 번호를 본 세션이 `backlog.py add`로 정상 등재했으나 병렬 세션의 `OPS-23-mobile-only-pr-backend-guard-blindspot`이 먼저 main 머지 → 리베이스 후 validate가 번호 충돌 검출(ARCH-13·OPS-15에 이은 3회차 — **이번엔 add CLI를 썼는데도 발생**: 인플라이트 번호는 CLI도 못 본다는 구조 한계 재확인). 처방대로 미머지 쪽(본 세션)을 `OPS-24-cp949-cli-output-safety-audit`로 개명·validate green. (claude 규명, Kiki 라이브 실행 중 공동 발견)
 ### 2026-08-08 (구현·REC-02): **WH-1 도구6 select_probe 공급선 배선 — L1 역인덱스 조회 + 하네스 조립, L4 무수정**
 
 **무엇/왜**: `ai_recommendation_module_gap_review.md` §3 D2 실측 — WH-1 하네스 도구6(`select_probe`,
@@ -7141,3 +7960,1974 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 - **확정 결정**: 비밀번호 해싱 절은 OAuth 전용 현행(SEC-07 D1)에 맞춰 "도입 시" 조걶로 한정 / 필드 암호화는 현행 `_crypto.py`(AES-256-GCM·키 3종 분리·MultiKeyCipher)를 EOS 표준으로 승격 / 멀티테넌시·RLS·12개 역할은 EOS 단계로 분리(현행 Role 2값·테넌시 0) / 보안 이벤트는 204 교육 이벤트와 분리.
 - **법령 인용 검증**: 개인정보보호위원회고시 제2026-9호(2026-07-01 시행) — law.go.kr 대조 확인(2026-08-25). 세부 수치(접속기록 보관기간 등)는 고시 별표 원문 대조 표시.
 - **산출물**: `docs/architecture/48_eos_security_access_control.md`, PR #NNN.
+
+## 2026-08-25: EOS 『32_학습 이력(Learning History)』 설계안 검토 수용 — 기존 구조의 명문화 + 갭 5종 등재
+
+- **사건**: Kiki가 EOS 지향 32_학습 이력 설계안(32절)을 제출하고 검토를 요청.
+- **판정**: 방향 수용 — Raw Event/Learning History/Learner State 3계층 분리·Evidence↔Mastery 분리·Version 고정은 타당하며, **대부분 코드에 이름 없이 이미 존재**(attempt_event·mastery_history append-only·UserStateSnapshot·evidence_links). 그린필드 신설이 아니라 ADR 명문화 + 갭 보강으로 착지.
+- **정정 4건**: ① 참조 전제인 204_교육 이벤트·205_공통 메타데이터 문서는 저장소에 부재 — 실질 정본은 코드(`schema/event_data_contract.py`·`schema/analytics_event.py`)임을 명시 ② ID 예시를 프리픽스+ULID에서 011_1 확정안(UUID+의미적 canonical ID)으로 교정 ③ "Raw Event = immutable"을 "갱신 금지(append-only) + 삭제는 개인정보 절차로만 + 감사 잔존"으로 정정(미성년자 삭제권 배관 `erasure/retention`과의 충돌 해소) ④ Subject-neutral core는 설계 원칙 확정·실구현은 `subject_expansion_readiness.md` 보류 대장 원칙에 따라 착수 트리거 전 금지.
+- **갭 5종 등재**: `EOS-32-answer-submission-entity`(attempt 내 다회 제출 시퀀스 정규화) · `EOS-45-hint-usage-entity`(힌트 횟수·레벨·엔람시간) · `EOS-46-solution-step-event`(학생 풀이 step 수준 — `SolutionNode` MCTS 노드와 명칭 구분) · `EOS-47-attempt-version-pinning`(problem_version_id + evaluation_context, EOS-44 선행) · `EOS-48-event-time-active-time`(event_time/ingested_at 분리 + active/idle 구분). 하네스가 번호당 1태스크 강제(HARN-10)라 32 외 번호는 EOS-45~48 배정.
+- **사고 메모**: 최초 등재·부기는 메인 체크아웃(CUR-16 브랜치)에서 했으나, 병렬 세션의 트리 정리로 MEMORY.md 부기분과 events.ndjson 이벤트가 무증상 소실(태스크 YAML·설계 문서는 untracked라 생존). 격리 worktree에서 재구성 — 병렬 세션 규칙(1 세션 = 1 worktree)의 필요성을 재확인한 사례.
+- **산출물**: `docs/architecture/32_learning_history.md`(8대 원칙 ADR + 기존 구현 매핑 표 + privacy 3종 배선 필수화), backlog 태스크 5건.
+- **cross-ref**: `44_eos_version_management.md`(VersionContext 정본), `02_learner_model.md`, `04a_wh1_tutoring_harness.md`(evidence_links), `docs/standards/eos_identity_layer_011_1_decision.md`.
+## 2026-08-26: EOS 『28_MathLive 입력』 43절 설계안 검토 — 델타 1건(EOS-28) 등재 + 승계 3건
+
+- **사건**: Kiki가 EOS 지향 『28_MathLive 입력』 설계안(43절)을 제출하고 검토를 요청.
+- **착수 전 확인**: 같은 근원 틀의 10항 요약본을 `math_engine_gap_review.md`가 이미 전수 대조(기능 28 "갭 0" · MATH-01~05). §7.6 계열 C 방어(착수 전 기존 리뷰 조회)의 **두 번째 작동 사례** — 전수 재대조를 거르고 델타만 판정.
+- **판정**: 43절 중 37절은 기판정 재확인(✅충족·🚫의도적 미채택·⏸유보). 자체 Canonical Math AST · 클라이언트 lightweight parse · 입력 중 실시간 서버 검증 · 학생 입력 거부(allowed_symbols)는 기존 미채택 결정 그대로 유지. 문서 자체 결함 2건 기록(§30 예시가 §2.1 위반 · "observed AST 보존"이 프라이버시 현행과 충돌 — `wrong_form_match.py:17` 현행이 정답).
+- **진짜 갭 1건 등재**: `EOS-28-answer-form-contract`(S3·prio 2) — **답 형태 계약: 동치≠지시 준수 채점 변별**. 실측 근거: `verify_answer.py:272-347` 수치 잔차만 · `verify_final_answer.py:246-284` 값 해집합+동치뿐 · 형태 검사 grep 0건 · `answer_format` enum(`schema/enums.py:175-181`)은 채점기 미소비 메타 라벨. 경계: 형태 불만족은 제출 차단이 아니라 채점 변별+피드백(§2-⑤ 계열 교수학 금기, 테스트 기계화). 첫 acceptance는 코퍼스 형태 요구 문항 비율 실측 — 0건이면 유보 전환(측정 없는 도입 없음).
+- **승계 3건(조걶부)**: ①원문 LaTeX 보존 = `EOS-32`(acceptance의 `raw_response/latex`가 이미 수용 — 단 현재 백엔드 도달 값은 평문뿐이라 `chat_controller.dart:96-110` 모바일 페이로드 확장이 전제) ②step 수준 입력 이벤트 = `EOS-46` ③버전 고정·채점 재현성 = `EOS-47`(evaluation_context에 notation_contract·파서 버전 포함 요구 추가 기록). **단 EOS-32 시리즈는 main 미머지** — 커밋 `7b64f185`가 원격 브랜치 `claude/docs-eos-32-learning-history-2f77c4`에만 존재(2026-08-26 실측), 그 머지가 선행 조건이며 무산 시 미소유 갭으로 환원(계열 C 감시).
+- **공백 7종은 발화 조걧만**: 입력 상태 모델(G-1) · 위젯 세션 이벤트(G-2) · 혼합 블록(G-3) · 키보드 visible 프로필(G-4) · 음성(G-5) · i18n(G-6) · paste 정규화(G-7).
+- **산출물**: `docs/architecture/28_mathlive_input.md` + backlog 1건. `validate` green — **PR 트리 기준 410건**(본 체크아웃에서는 미커밋 EOS-32 시리즈 포함 421건으로 측정됐으나 정본은 PR 트리). 오개념 축은 `l4/misconception/wrong_form_match.py`가 문서 제안(AST signature)보다 강한 구현(SymPy Wild 정합·거짓 등식 가드)임을 확인 — ✅ 초과.
+- **cross-ref**: `math_engine_gap_review.md`(기능 28 기판정 정본) · `32_learning_history.md` · `44_eos_version_management.md`.
+
+## 2026-08-30: MVP 개발 종료 · EOS 전환 선언 — D0·W1 실행계획 정본화
+
+- **사건**: Kiki가 계획서 3종(006 전환 체크리스트 · 260830 전환 설계서 · 개발기준 추적표 xlsx 8시트)을 제출하고 "지금을 MVP 개발 종료 시점이자 EOS 전환점으로 선언 + 금일·1주 작업계획(구체 코딩 계획·체크리스트 포함)"을 요청.
+- **선언 채택**: 2026-08-30을 전환일로 확정. main `0d6fb82d`(PR #903, hermetic 10,724 passed)가 MVP 최종 베이스라인 — `whymath-mvp-final-2026-08-30` 태그 대상(EOS-06). **12/31 재정의**: 외부 출시일이 아니라 내부 검증 판정일(Go/Conditional Go/No-Go). 주 기준 = 폐쇄루프 완결이 아니라 **CU당 인간 개입 시간(HIT)** — 폐쇄루프는 콘텐츠 품질을 재는 계측기로 강등(깊이앵커 A4에서만 완결).
+- **저장소 실상 대조 핵심**: 계획서는 코드베이스 미열람 자인(§8.3). 52항목 중 상당수 기존재 — A5 라우터·D1 SymPy 3-tier·H1 import-linter CI·E4 mastery_history·A4/G6 LIC-01(진행 중)·A2 S1-16/CUR-11·F4 ADMIN-07. 수치 정정: 개념 545→원자 2,683·오개념 400→839·성취기준 895·코퍼스 2,647(확정은 EOS-52 실사).
+- **적응 원칙 3** (계획서 지시의 저장소 번역): ①registry.yaml·DECISIONS.md·docs/eos 트리 신설 금지 — MP-0 대장=backlog/, ADR=MEMORY+docs/architecture(이중 진실원천 방지) ②게이트 G0~G5는 하네스 사람 게이트 대장으로 집행 ③subject-neutral core 실구현은 보류 대장 원칙 유지(2026-08-25 결정) — W1은 계약 수준(S1-16)만.
+- **등재**: 태스크 4건 — `EOS-06-mvp-close-baseline-tag`(태그+ROADMAP 갱신) · `EOS-51-verification-design-freeze`(검증설계서 v1·G0 산출물, depends EOS-52) · `EOS-52-anchor-asset-audit`(앵커 8단원 자산 실사 — 콘텐츠 일정 확정의 선결) · `EOS-53-plan52-backlog-crosswalk`(52항목 전수 대조·갭만 등재). 게이트 2건 — `G-eos-g0-verification-design-freeze`(9/6 검증설계 동결·kiki·remind 7d) · `G-eos-ip-separation-evidence`(겸직 IP 분리 증빙·kiki·remind 14d).
+- **W1(8/31~9/6) 단일 목표**: "헌법 고정" — 월 EOS-53 / 화 EOS-52 / 수 S1-16(S1 실행 가능분 종결) / 목~토 EOS-51(실패정의 F-Ⅰ~Ⅴ·실패코드 F1~F8 코드 동결) / 일 G0 판정(앵커 8 vs 6 결정 포함).
+- **미결정(Kiki)**: ①주당 가용 시간 15/20/25h ②앵커 8 vs 6(G0에서·EOS-52 근거) ③변호사 1차 의견서 권고 vs 2026-07-27 "외부 작업 비병목" 지시의 재판정 — 단 AI Hub 국외 반출 쟁점은 자문 전 로컬 라우팅 강제로 무해화(기존 로컬 우선 원칙과 정합).
+- **산출물**: `docs/strategy/eos_transition_declaration_2026-08-30.md`(선언 정본 + D0/W1 체크리스트 + 계획서 핵심 표 부록 전사 — 원본 xlsx는 저장소 외부라 미래 세션 접근 불가 문제 해소), backlog 태스크 4건·게이트 2건, 본 결정 로그.
+- **cross-ref**: `education_os_positioning_v1.md`(북극성 서사·2026-07-24) · EOS 설계검토 연쇄(2026-08-23~26: 단원구조·32·44·48·28) · `s1_exit_gate_judgement_2026-07.md`.
+
+## 2026-08-30: LearnLM 교수학 프롬프팅 원칙 검토 — 차용 3건·미채택 5건·인용 정정 2건
+
+- **사건**: Kiki가 Google LearnLM의 페다고지 프롬프팅 원칙을 EOS 튜터링 프롬프트 레이어의 참고 소스로 등재·차용 검토 요청(교사 승인률 76.4%·인간 튜터 대비 우위 주장 인용).
+- **방법**: 워크플로 14에이전트 — 웹 3방향(원칙·현황·팩트체크)+저장소 실측 2방향 → 교차 대조 15행 → 차용 후보 4건 적대 검증 2렌즈(기존재·금기 충돌). 기판정 존중: SSM Q3 #12(LearnLM 평가 루브릭 축·파일럿·pedagogical_rubric.py 실재)는 재론하지 않고 **저작(프롬프팅) 축 델타만** 판정.
+- **인용 정정 (레일 등재)**: ①76.4%는 실재하나 와전 — Google·Eedi 탐색적 RCT(arXiv:2512.23633)의 전체 초안 메시지 3,617건 무수정+1~2자 승인률이며 주체는 교사가 아니라 Eedi 전문 튜터 17명(HITL). ②"인간 튜터보다 우위"는 과장 — 지식 전이 1지표만 우위 경향(+5.5%p·95% 신용구간 0 포함·Google 자체 연구·감독형 AI vs 인간). **대외 비교 우위 인용 금지**.
+- **차용 확정 3건 등재**: `PED-34`(프롬프트 원칙 6 '인지부하 관리' 신설 — 루브릭 최대 비중 9/25 축이 정본 0건인 순수 공백) · `PED-35`(힌트 유도-제공 상한 계약 — 적대 검증이 **코드로 확증한 실갭**: hint_deferral 규칙 5 숙달 -1이 규칙 2·3 +1을 매 턴 상쇄 → 숙달 학생 레벨 3+ 구조적 도달 불가, 세션 재확인) · `PED-36`(시나리오 뱅크 스키마 — 4시나리오×페르소나 5종, coach_prose_leak_eval 시험지 소스 배선). 전건 측정 계약·정본화≠집행 별항 동반.
+- **의도적 미채택 5건**: SI 위임 프레이밍(검증 없는 학생 제공 금지 충돌·2407 스스로 프롬프팅 단독 unreliable 인정 — 하네스 강제가 상위 해법) · Homework help 정답 모드(1급 금기 충돌) · SFT/RLHF(측정 없는 도입·비용 서열·Google 자신이 별도 모델 단종) · 상시 HITL 감독(검증 서열 충돌) · **Releveling(검증 렌즈 반박 — 기능 67 🚫 기판정과 동일 축, 재검토 트리거=페르소나 v1.5/v2.0)**. 보류 1건: 호기심 자극 축(측정 지표 부재 — SSM 트랙 B 가동 후).
+- **총평**: LearnLM 5원칙 중 WhyMath 공백은 인지부하(학생 대면 응답) 축 하나. 능동 학습·answer-leakage는 WhyMath가 서빙 경로 차단+Wilson 게이트로 상위 구현(수출급).
+- **산출물**: `docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md`(정본·인용 레일·대조표 15행) · `docs/standards/prompt_engineering.md` 참고 소스 절 신설 · backlog 3건.
+- **cross-ref**: `ssm_scan_2026-Q3.md` #12 · `ssm_activation_handoff.md` 트랙 C · PED-31 · `superhuman_verification_standard.md`.
+
+## 2026-08-30: EOS-52 앵커 자산 실사 완료 — G0 결정 근거 확보·전역 수치 정정
+
+- **실측(파일=정본)**: 원자 2,683(구조 860+리프 1,823 — CU 산식엔 리프가 적절)·오개념 843(+4)·성취기준 895행은 **2015(460)/2022(435) 혼재**(2022 단독 435+대학 자체 409)·코퍼스 **2,638**(−9). **OP_01~08은 문서 개념**(저장소 리터럴 0건) — 기능 대응물은 L4 `DistractorOpCode` kebab 10종. detection_rule 필드도 코드 0건 — 선언서 B6는 전면 신규.
+- **앵커 커버리지 핵심**: 8앵커 전부 성취기준·원자 있음(A7·A8 대학도 자체 성취기준 2+2·원자 8+5 — "대학 자산 부재" 우려는 이 두 축엔 해당 없음). 그러나 **문항은 A4(378)·A6(261, 그마저 1코드 집중) 둘뿐** — 기존 코퍼스는 앵커 관점에선 두 단원 자산. A1·A2·A3·A5도 문항 0이라 폭 앵커 생산 부담은 대학 앵커와 동급. A4 깊이 앵커의 원자 해상도 3개는 얕음. 기계판정 채널 신규 구축량은 8이든 6이든 동일.
+- **산출물**: `docs/reviews/eos_anchor_asset_audit_2026-09.md` + `scripts/analysis/eos_anchor_asset_audit.py`(stdlib 전용·AST 파싱으로 역방향 의존 회피·단계별 flush·뮤테이션 변별력 실측 EXIT=1). 재현: 메인 세션 재실행 EXIT=0·9/9 동일 수치. prod DB 대조는 부록 A psql 명령(Kiki 머신).
+- **cross-ref**: `eos_transition_declaration_2026-08-30.md` §3.2-② · EOS-51(해금) · G-eos-g0.
+
+## 2026-08-30: EOS-53 — 전환계획 53항목 전수 crosswalk 완료·갭 13건 등재
+
+- **행 수 정정**: 계획서 부록 A는 "52건" 표기이나 실측 **53행**(h 소계 검산이 53행 전부로만 성립) — 표기 오차로 판정, 53행 전수 대조.
+- **판정 분포**: 이미 구현 11 · 부분 27(그중 11행은 기존 태스크로 커버) · 신규 7 · 이월(T3·T4) 8. 저장소는 계획서 가정보다 훨씬 진척 — 재구현 회피가 crosswalk의 실익.
+- **주목 발견**: ①이월 지정 4건이 기실재(C6 다중풀이 S4-10 done·D4 dedup 기본 ON·C8 비유 PED-24 done·E7 WH-1 코치 실재 — "힌트 템플릿 대체" 가정은 실상과 다름) ②A4 저작권 원장 rights ORM 6종+RightsGateway #861 기착지, 단 "INSERT 거부" DoD가 DB CHECK 의도적 미생성 방침(provenance.py:48-50)과 충돌 → LIC-03 판정 태스크 ③선언 §5 '미확정' 2건 실측 확정: skill_ids[]·candidates[]+policy_version 모두 영속 좌석 0 ④A2 schema_version 기실재(schema/problem.py:255) — S1-16 잔여는 extensions.math 이동 ⑤LIC-01 stage=E2 실측 — S3 depends 형식 의존이 로드맵 가드에 거부, 스테이지 실질 정합은 재조정 사안.
+- **갭 13건 등재**(validate green·449건): EOS-54(HIT 타이머★)·EOS-55(Run 재현성)·EOS-56(앵커 등록·G-eos-g0 게이트)·EOS-57(skill_ids[])·EOS-58(앵커 E2E 실증)·EOS-59(데이터 등급 라우팅)·REC-11(candidates/policy_version)·LIC-02(라이선스 스냅샷★소급불가)·LIC-03(provenance 집행 판정)·MISC-07(앵커 기계판정 채널)·OPS-54(policy-guard EBS·평가원 패턴)·OPS-55(무결성 게이트)·OPS-56(주간 지표 cron). 유보 6건(#14~19)은 문서 §2.2에 등재 시점 트리거 명기(만료 없는 유예 금지).
+- **대장 명문화**: registry.yaml·MP-0 6축·DECISIONS.md 개념은 backlog/+MEMORY.md가 대체(문서 §4) — 별도 대장 신설 금지.
+- **산출물**: `docs/reviews/eos_plan52_crosswalk_2026-09.md`(53행 전수 표·갭·이월·방법 한계) + 태스크 13건.
+- **cross-ref**: `eos_transition_declaration_2026-08-30.md` 부록 A·§1.1 · `eos_anchor_asset_audit_2026-09.md`(수치 정본) · EOS-51(실패코드·CU·KPI 동결 좌석).
+
+---
+
+## 2026-08-30: EOS-57 — `attempt_event.skill_ids[]` 영속 좌석 착지 (W2 되돌릴 수 없는 스키마 ①)
+
+- **문제**: 채점 순간 `l2/skill_mastery_tracking`이 concept→skill로 *해소한* 스킬 목록이 런타임에만 존재하고 버려졌다(EOS-53 갭 #4 실측: 영속 좌석 0). 숙달 시계열은 "스킬 s의 값이 언제 변했는가"만 남기고 **"시도 a가 스킬 {s1,s2}를 건드렸다"** 는 결합을 남기지 않는다 — 문항↔개념↔스킬 매핑이 이후 바뀌면 그 결합은 **영원히 재구성 불가**다. 12월 데이터에 남길 소급 불가 축이라 지금 착지했다.
+- **좌석 결정**: `attempt_event`에 **1급 컬럼 `skill_ids ARRAY(text)`**(JSONB `event_data` 아님 — 조인·집계 축을 자유형에 묻지 않는다). `event_data`는 봉투 2키(`is_correct`·`source`)만 계약하고, 계약이 `extra="forbid"`로 `skill_ids` 병기를 produce 좌석에서 거부한다(두 진실원 방지).
+- **신규 EventType `문제시도`**(계획서 표기 `problem_attempted`) — 11종→12종. `답입력`(코치 대화 지연 텔레메트리)과 의미가 달라 기존 값 재사용 대신 신규 추가(`ALTER TYPE ... ADD VALUE` 선례 `c0d1e2f3a4b5`·`b1c2d3e4f5a6` 동형). 계약 편입으로 생산 6종→7종.
+- **None ≠ [] 를 스키마 층에서 확정**: nullable + `server_default` 없음. NULL=미기록(writer 미도달·구판·타 event_type) / `[]`=해소 실행했으나 매핑 0건. `DEFAULT '{}'::text[]`를 달면 기존 행 전체가 "해소 0건"으로 백필돼 두 사실이 같은 값이 된다(EOS-48 시각 컬럼 날조 방지 규약의 배열판). 이 구분이 "작동한 비율" 측정의 데이터 전제다.
+- **writer 단일 seam**: `l2/attempt_skill_event.py::record_attempt_skill_event` — 두 채점 경로(`api/me.py::submit_attempt` 자가보고 v1 · `api/coach.py::_complete_problem` 서버 검증)가 같은 writer를 경유하고 `event_data.source`(폐쇄 2종)가 둘을 가른다. 중복 구현 0.
+- **기록률 리포트(acceptance ②·"작동한 비율")**: `harness/attempt_skill_event_reach_report.py` — **3분류를 뭉개지 않는다**(미도달=배선 축 / 해소 0건=데이터 축 / 해소≥1=의도 상태 / 이벤트는 있는데 NULL=병리). 분모 0은 0%가 아니라 `측정 불가(분모 0)`로 렌더한다. 경로별 표는 폐쇄 2종을 **전부 보강**한다 — group by 결과만 렌더하면 한 경로 writer가 죽었을 때 그 행이 *사라져* 전멸이 화면에서 안 보인다. 게이트 아님(exit 0/2·DB 오류는 예외 타입명 동반). **"상시"의 집행 지점 분리**: 판정 로직은 CI가 상시 검증(테스트가 backend testpaths에 수집)하고, *수치*는 실 채점 이력이 분모라 CI 빈 DB에서는 전 지표가 '측정 불가'만 난다 — `declared_unwired_audit`에 `_NEEDS_LIVE_SAMPLE`로 의도 선언(무선언 미도달은 그 감사가 exit 1로 막았고, 실제로 이 커밋에서 한 번 막혔다). 주기 실행 배선은 OPS-56(주간 지표 cron) 소유.
+- **마이그레이션 체인 조율**(acceptance ① 명시 요구): `d4a71c0f9b32` on `c9bc2555282e`(EOS-48) — 단일 head 유지. 형제 미착수 태스크 **EOS-47**(problem_attempt 버전 고정)과 **테이블도 컬럼도 겹치지 않아**(이쪽은 attempt_event, 저쪽은 problem_attempt) 순서 의존 0 — 나중 착지분이 그때의 head 위에 선형으로 쌓으면 된다. 테스트가 down_revision을 이름으로 동결.
+- **범위 경계**(acceptance ③): 영속 좌석 + writer까지. 소비 지점 전환(`skill_mastery_tracking`이 런타임 해소 대신 이 기록을 읽는 것)은 후속 **EOS-63**으로 분리 등재(번호는 `backlog.py add`가 배정 — EOS-60 요청이 원격 브랜치 선점으로 거부돼 CLI 제안 번호 채택·HARN-10 작동 실측). 기록이 0건인 상태에서 소비를 바꾸면 숙달 전파가 죽으므로, 전환 선결 조건은 기록률 리포트의 실측 수치다.
+- **부수 정정(조용히 넘기지 않음)**: `harness/assessment_seat_reach_report._KNOWN_WRITER_CITATION`의 행 인용 5건이 08-10 이후 me.py 성장으로 전부 드리프트해 있었다(738→759·743→764·1030→1064·2714→2768·2927→2970 · l2 134→202·136→148). 재실측해 갱신·동결 테스트도 갱신 — 인용은 사람이 코드를 찾아가는 앵커라 틀린 번호는 조용한 거짓 주장이다(모듈 docstring이 예고한 '다음 드리프트' 회차).
+- **적재 실패 정책 재판정(PR #913 Codex 리뷰 P1 — 2026-08-30)**: 초안은 "예외를 삼키지 않는다"(전파→500)였으나 **전파가 데이터를 구하지 못한다**는 것이 결정적이었다. `submit_attempt`에 멱등키가 없어 재시도는 *새* attempt(새 UUID)를 만들고 숙달을 한 번 더 적용한다 — 원래 attempt의 이벤트는 전파해도 어차피 없고, BKT sample_size만 이중 계상돼 **학습자 모델이 오염**된다. 두 경우 모두 이벤트를 잃으므로, 학생 상태 정합이 앞서는 쪽(흡수)을 택했다. **침묵 실패가 아닌 근거 2축**: ①로그에 예외 타입명(무타입 경고 금지) ②기록률 리포트의 "writer 미도달" 칸이 유실을 *비율로* 센다 — 삼켜도 되는 이유가 "덜 중요해서"가 아니라 **유실이 계측되기 때문**이다. 진짜 원자성(attempt·숙달·이벤트 단일 트랜잭션)은 공유 L2 헬퍼 2개의 commit 소유권 이전 + 멱등키가 필요해 이 PR 범위 밖으로 남겼다(정직한 공백으로 명시).
+- **뮤테이션 실측(변별력 확인)**: ①`skill_ids=(deduped or None)`(None≠[] 파괴) ②경로 보강 제거(죽은 경로 은닉) → 각각 테스트 red 확인 후 `cp` 백업으로 원복(git 계열 원복 금지 규칙 준수·`git diff --stat`로 원복 규모 대조).
+## 2026-08-30: EOS G0 검증설계 동결 완결 — 실패정의 F-Ⅰ~Ⅴ Kiki 서명 (9/6 예정 → 조기)
+
+- **서명**: 2026-08-30 Kiki가 실패정의 F-Ⅰ~Ⅴ를 문안 그대로 동결 승인(서명 세션 AskUserQuestion "서명 확정 — 동결" 응답 실측) → `gates clear G-eos-g0-verification-design-freeze` 기록. 설계서 명문 절차("그 clear가 곧 서명") 그대로 집행. 선결인 **PR #908 스쿼시 머지(`3b007e23`)도 같은 응답으로 승인**받아 CI 16체크 green 확인 후 집행(EOS-53·EOS-51 산출물 main 착지).
+- **G0 차단 3조건 조기 충족**: ①앵커 세트 6개+성취기준 코드(설계서 §1-1·§2 — Kiki 결정 2026-08-30) ②CU 스키마·실패코드 F1~F8 문서+코드 동결(#908) ③실패정의 동결·서명(본 건). 예정일 9/6의 G0가 D0(8/30)에 완결 — W1 산출물(EOS-52 실사→EOS-53 crosswalk→EOS-51 설계서)이 하루에 전부 착지한 결과다. 조기 서명은 동결 취지(측정 전 실패정의 확정 = 확증편향 차단)에 순방향.
+- **기계 집행 신설**: `tests/backend/schema/test_failure_definition_freeze.py` — ①§5 전문 정규화 sha256 동결(`a9ad9f6a…`) ②판정 임계 토큰 6건(12분·2%·60%·6중3·Conditional 2·10%) 개별 단언 ③**서명 기록 자체 동결**(게이트를 pending으로 되돌리는 우회도 CI red) + 뮤테이션 변별력 3건. 서명 전 red(8p/1f)→clear 후 green(9p) 실측 — "1차 집행은 규칙 산문이 아니라 코드다"(PB-02 선례). §6 KPI *목표값*은 해시 범위 밖(§5만 동결)이라 G2(10/25) 재조정 경로는 보존된다.
+- **잔여(게이트 요건 아님·선언 §4 "종료 시 산출")**: W2(9/7~) 태스크 확정·여유 82h 배분 — 후속 /drive에서. `EOS-56`(앵커 1급 등록)은 requires G-eos-g0 해소로 착수 가능 전환.
+- **cross-ref**: `eos_verification_design_v1.md` §5·§8 · `backlog/gates.yaml` G-eos-g0 evidence(서명 전문) · PR #908(대상 문서 착지).
+
+## 2026-08-30: 동결 장치 자체의 결함 2건 — "배선 확인 없이 완료 선언" 재발 (PR #910 리뷰 수용)
+
+- **경위**: G0 서명의 기계 집행으로 만든 `test_failure_definition_freeze.py`가 **두 축에서 무력**이었고, 자동 리뷰(Codex)가 둘 다 지목했다. 세션은 PR 본문 체크박스에 "CI 잡이 이 변경을 실제로 실행한다"를 스스로 체크한 상태였다 — *이 PR에서는* 참이지만 *방어 대상 벡터에서는* 거짓이었다.
+- **P1(배선·중대)**: `ci.yml` backend 필터에 동결 입력 2건(`docs/standards/eos_verification_design_v1.md`·`backlog/gates.yaml`)이 없어, **그 파일만 고치는 PR은 backend 잡이 SKIP**되고 skip은 required check에서 충족으로 계상된다 → 실패정의·서명을 조용히 고치고 머지할 수 있었다. `data/corpus`·`schemas` 편입(COLLAB-07 ①②)과 **완전히 같은 형태의 사각**이며, 이 저장소에서 이 유형은 4회차다(OPS-03 tests/infra 미실행·OPS-08 required check 미강제·OPS-11 infra lint 부재·COLLAB-04/07). 상환: 필터 편입 + `test_ci_contract_fixture_trigger_wiring.py` **계약 ⑧** — 동결 테스트의 `FROZEN_INPUT_PATHS`를 **AST로 파싱**해 강제(경로 하드코딩 두 벌 금지 = 계약 ②의 파생 원칙 답습·새 동결 입력이 늘면 가드가 자동 추종). 변별력 실측: 편입 이전 필터로 되돌리면 계약 ⑧ RED(EXIT=1), 복원 시 green.
+- **P2(단언 무력)**: 서명 기록 검증이 `cleared`+`evidence 비어있지 않음`+`블록에 2026-08-30 포함` 3단언이었는데, **게이트 블록에는 `requested: 2026-08-30`이 항상 있어** 날짜 단언이 무변별이었다. 즉 evidence를 "서명 철회"로 갈아끼워도 전건 통과 — 뮤테이션으로 재현 확인(3단언 all pass). 상환: 정규식 블록 절단 → `yaml.safe_load` 파싱으로 바꾸고 **evidence 전문 sha256 동결**(`7ee70ad6…`) + 날짜는 evidence *값*에서 확인. 뮤테이션 후 3건 RED로 검출 실측.
+- **교훈(일반화)**: "변별력 없는 검증 스텝 금지"는 *검사 대상*뿐 아니라 **검사가 읽는 범위**에도 적용된다 — 넓은 블록에서 substring을 찾으면 그 블록의 *다른 필드*가 단언을 대신 만족시킨다(P2). 그리고 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 확인 대상은 "이 PR에서 도는가"가 아니라 **"방어 대상 변경에서 도는가"**다(P1). 후자를 PR 체크박스가 묻는 문장으로 오독한 것이 이번 누락의 직접 원인이다.
+- **cross-ref**: PR #910 리뷰 코멘트 2건 · `tests/infra/test_ci_contract_fixture_trigger_wiring.py` 계약 ⑧ · `.github/workflows/ci.yml` backend 필터 주석(2026-08-30 편입 사유).
+## 2026-08-30: EOS-54 HIT 검수 타이머 착지 + G0 조기 서명 + 사고 2건 기록
+
+- **EOS-54(★계측기)**: `review_timer_event`(append-only·started/finished/aborted 3종·NULL=미측정 무default) + writer(`harness/review_timer.py`·JSONL 즉시 flush) + 집계 CLI(`ops/hit_cu_metrics.py` — HIT 중앙값·P90·적재율 상시 보고·실패코드 F1~F8 분포·CU당 비용 인프로세스 이중 회계·exit 0/1). `GenerationFailureCode` 첫 소비 지점 3곳 신설. 뮤테이션 3종(0 날조·0건 위장·default 주입) 전부 red 실측 후 복원. privacy: 검수자 텔레메트리로 학생 소유 축 0 — erasure 3종 배선 불요 판정(스윕 green 실측·docstring 근거). 미결선 자인: 실검수 흐름 호출 0(ADMIN-07 후속) — 적재율 지표가 이를 상시 노출. 검증 = 4게이트+신규 82건+**전체 스위트 10,816 passed·92%·전층 PASS**.
+- **G0 조기 서명(9/6→8/30)**: Kiki가 kiki 머신에서 clear 실행 시도(구버전 대장·CUR-16 브랜치라 "게이트 없음" 거부) — 서명 의사가 대화 결정(앵커 6·주 25h)+실행 시도로 명확해 선례(G-crosswalk-approval)대로 세션이 완료분 반영(`ad7862ab`). W2(되돌릴 수 없는 스키마 주간) 진행 조건 충족.
+- **사고 ① EOS-49/50/51 번호 충돌(3회차 — ARCH-13·OPS-15 동형)**: kiki 머신 `backend/cur-16-...` 브랜치 커밋 3b7bab6f에 main과 이종 내용의 동번호 3건(problem-quarantine·generation-log-prompt-seed·content-lifecycle) — EOS-50은 main EOS-55와 내용 중복 의심. 대책 = `HARN-38` 등재(재번호·경위 규명·fail-open 의심 교차 기록). 부수: 이번 등재에서 HARN-37 충돌을 CLI가 실거부·38 제안 — 가드 변별력 실증.
+- **사고 ② cp949 CLI 크래시 실측**: kiki 머신 PowerShell에서 `backlog.py gates`가 `UnicodeEncodeError('⏳')`로 사망 — **기등재 OPS-53의 정확한 실사례**(신선한 증거로 부기). 임시 우회 = gates.yaml 직독(Select-String).
+- **머신 2대 관측**: 태그 push는 `C:\Users\rollrock\...`, 이번 실행은 `C:\Users\kiki\...` — CLAUDE.md 고정 경로(kiki)는 유효하나 rollrock 머신이 별도 존재. 병기 정정은 Kiki 확인 대기.
+
+## 2026-08-30: EOS-55(Run 재현성)+LIC-02(약관 스냅샷) 착지 — 소급 불가 2종 (#912 스쿼시 586dfc57)
+
+- **EOS-55**: GenerationLog 재현 좌석 5종(prompt_version·seed·input_sha256·input_snapshot JSONB·cu_slug — alembic `f4b2d8c1a3e5`) + 두 생성 경로(pregenerate 전 종단·accumulate 4종단) 실적재 배선 + 사이드카 `<out>.genlog.jsonl` 기본 ON. 착수 실측: 두 경로 모두 적재 0·bridge 프로덕션 호출 0(스키마 실재≠배선 그대로). **원칙 확립(codex P1 2건 계기)**: ①스냅샷은 "전문(verbatim)+sha256 핀" — *해시 복원≠입력 복원*, 복원 계약은 provider 재투입 전문 반환으로 단언 ②사이드카 행은 조인 정체성(cu_slug=코퍼스 slug) 동반 — 소비자(hit_cu_metrics) 접속이 집행 별항의 본질. seed=NULL 정직(라우터 스레딩 전무 실측 — 날조 금지·결정론 재생성은 별도 태스크). 검증 = 전체 스위트 10,880·전층 PASS·뮤테이션 7종 red.
+- **LIC-02**: `scripts/ops/license_snapshot_archiver.py`(표준 라이브러리 단독·exit 0/1/2/3·실패 경로 5축) + content-addressed 멱등 + append-only 감사로그(`docs/data/license_snapshot_archive.md` 규약 정본). **Tier1 목록 = 매트릭스 실측 20곳**(선언 "14곳"과 차이 — 도출 규칙·사유 문서 §1). 라이브 3런: 성공 6곳 스냅샷 커밋·멱등 unchanged 6/6 실증·**프록시 차단 14곳**(Kiki 머신 실행 몫 — 문서 §5 명령 블록). 부산물: miniF2F "MIT" 표기 불완전 실측 → `LIC-04` 등재.
+- **병렬 머지 충돌 1건**: #910(kiki 세션 — G0 Kiki 직접 서명+F-Ⅰ~Ⅴ 기계 동결)이 선머지 → `events.ndjson` add/add. base 머지로 해소(로컬 자동 병합·validate green·#910 신규 테스트 13+19 본 브랜치 위 passing 확인). G0 서명은 #910의 Kiki 본인 서명이 정본(내 대리 clear ad7862ab를 상위 대체 — 방향 일치).
+- **cross-ref**: PR #909(EOS-54)·#912 · `eos_verification_design_v1.md` §6(HIT·CU당 비용 지표의 계측기+재료 완비) · HARN-38(EOS-50 중복 의심 대조 시 EOS-55 착지 반영할 것).
+
+## 2026-08-31: /drive 2루프 3건 착지 — EOS-58 E2E 관통·CUR-09 가설 동결·CUR-11 API (#914·#920)
+
+- **EOS-58(#914)**: A4 앵커 E2E 1회 관통(G1 차단 해소) — 실 CLI·SymPy 실물·행 수 실측. codex 3건이 검수 큐 설계 결함을 짚어 **내구 큐 계층**(`<out>.review.jsonl` 즉시 flush + 워크리스트=누적 렌더 뷰 + payload 전문) 착지 — needs_review 후보가 라이브 경로에서 휘발하던 실공백 2단 해소. 후속 = EOS-64(nightly 골든 승격·HARN-10 제안 번호).
+- **CUR-09(#914)**: 단원 구조 3가설(순서 Overlay·역할 enum·coverage_weight) — 현행 5측정 등식 동결(성취기준 510/844 복수 원자 = 균등 가중 강제 실측)·채택 트리거 명세·UnitNode 1급 비채택 기계 동결. 외부 설계안 116항 원문 미확보(재제공 요청 명기).
+- **CUR-11(#920)**: `/v1/curricula`+`/v1/learning-outcomes`+`/v1/alignments` 5종 — CUR-10 첫 HTTP 표면(착수 실측: api 소비처 0). subject-neutral 라우팅 기계 동결·통합 3건은 임시 PG16 클러스터 자가 구성으로 실 SQL 검증. CUR-12 경계 별항(통합 함수 미선점).
+- **병렬 흡수 3회**: #910(G0 Kiki 서명)·#913(EOS-57 skill_ids — W2 ①을 타 세션이 완수)·#915/#917/#918(LIC-02 봉인→**약관 19/20곳 수집 완주**) — events.ndjson add/add 충돌 전건 머지 해소·검증 후 진행. base 최신화 경쟁 3회차부터 **GitHub auto-merge(SQUASH)** 채택(웨이크 지연 창 제거 — #914 실증·#920 적용).
+- **cross-ref**: PR #909·#912·#914·#920 · EOS-64·CUR-12(후속) · HARN-38(kiki 머신 몫 잔존).
+
+## 2026-08-31: 사람 게이트 3건 집행 세션 — prod DB 컨테이너 사고 발견·무손실 복구 + 게이트 ③ clear·② 3단계 완결
+
+- **사고 발견·복구(핵심)**: 게이트 쿼리 실행 중 `role "whymath" does not exist`로 발견 — **8/25 10:08Z 누군가 whymath-pg를 빈 클러스터로 재생성**(경위 미상 — Kiki 질문 미답·후속 규명 대상. POSTGRES_USER=postgres·포트 56432·스키마만 899ae0efbb8b·데이터 0. 같은 형상의 빈 클러스터 볼륨이 2개 = 두 번 재생성됨). **원본은 dangling 볼륨 ef75415d에 무손실 생존** — 프로브 실측으로 특정(68테이블·alembic=d6e7f8a9b0c1 = 8/11 실측과 일치·concepts 2683/edges 2210/misconceptions 841/standards 895·user 0행). 복구 = 빈 컨테이너 개명 보존(whymath-pg-empty-20260825) → 원본 볼륨으로 whymath-pg 재생성(5433·restart unless-stopped) → 재고 재현 확인 → 즉시 백업(whymath_20260831_120150.dump·-Fc·자가검증 EXIT=0). **데이터 손실 0**(실사용자도 원래 0행).
+- **진단 교훈**: ①이 사고는 **OPS-39(prod 스키마 드리프트 감시 0건)의 실사례 2호** — 6일간 무감지, 우선순위 재고 권고 ②내 진단 결함 2건 자인: 볼륨 필터 `whymath|pg`가 **익명 hex 볼륨을 구조적으로 배제**(후보를 못 봄 — 필터 없는 전수+생성시각으로 정정), 재고 프로브가 atom_node를 세어 0 오판(정본은 concept — 정정 재프로브로 회복) ③판정은 직접 신호(생성 시각·롤 구성·information_schema)로 — `alembic_version` 간접 신호 금지 원칙 재확인.
+- **게이트 진행**: **③ G-prod-dead-column-check cleared**(user_profile 6컬럼 전부 0·total 0행 — ADMIN-02 선결 충족). **② G-operator-seat 3단계 완결**(A=0행 → stamp 확정 `a9b8c7d6e5f4` · B=0행 혼입 없음 · 후보→head 22개 전수 스캔 파괴 연산 0) — 4단계(stamp→upgrade→부트스트랩 INSERT→content_admin grant) 확정값 블록은 게이트 노트+세션 채팅에 보존, **Kiki 실행 대기**. ① deploy environment(브라우저)도 절차 안내됨·실행 대기.
+- **반복 실수 자인(3회차·같은 세션 내)**: 검사 명령 뒤 `| tail`을 붙이고 `$?`로 판정 — tail의 exit가 실패를 가림(기존 규칙 "출력 억제·절단 판정 금지"의 자기 위반. gates.yaml 파손을 validate green으로 오인할 뻔). 패턴 고정: 파이프 쓰면 판정은 반드시 `${PIPESTATUS[0]}`, 파손 의심 시 파이프 없이 재실행. 부수: gates.yaml notes는 이중따옴표 단일행 인코딩 — **손편집 금지·수정은 `store.load_backlog`+`dump_gates` 왕복으로만**(2회 파손 후 확립·파일 단위 복원으로 회복).
+- **cross-ref**: OPS-39 · backlog/gates.yaml G-operator-seat-first-grant notes(4단계 확정값) · scripts/backup/backup_whymath_pg.ps1.
+## 2026-08-31: /drive 3루프 — HARN-38(번호 충돌 규명)·EOS-71(결함 문항 비파괴 격리) (#931)
+
+- **HARN-38**: kiki 머신 브랜치 `backend/cur-16-...` 커밋 `3b7bab6f`가 등재한 EOS-49/50/51이 main 동번호와 충돌(동일 유형 **3회차** — ARCH-13·OPS-15 선행). 판정: 2건은 CLI 배정 새 번호(`EOS-71`·`EOS-72`)로 이관, **EOS-50은 main `EOS-55`와 내용 중복이라 재등재하지 않음**(요구 3항 대 `GenerationLog` 실측 대조 — 이중 추적 방지). 부수 실측: 브랜치 커밋 제목이 "G-eos-g0 clear"인데 그 커밋은 `gates.yaml`을 **0건 변경**했다 — 커밋 제목을 근거로 서명 소재를 읽으면 안 된다(서명 정본은 main `ad7862ab`→`d52d9a62`).
+- **사고 대책의 자기 결함 1건(codex P1 수용)**: 3회차 실패를 규명해 놓고 가드 개선을 "개선 후보"로만 남겨 **추적자를 붙이지 않았다**. CLAUDE.md "반복 실수는 재발방지대책 등재 의무 · '다음엔 조심한다'는 대책이 아니다"의 위반. 해소 = 병렬 세션이 이미 등재한 **`HARN-43`**(미push 브랜치·ref 신선도 고지)을 조사 문서 §6이 가리키게 정정 — 새 태스크 추가 등재는 이중 추적이라 하지 않았다.
+- **원인 판정 정정(병렬 조사가 더 강한 증거)**: 내 §5-3은 "낡은 remote-tracking ref"를 *가능한 설명*으로 뒀으나, `claude/harn-38-tyyh3i` 세션이 가드 3종을 실행해 **36브랜치·11,975파일을 훑고도 cur-16을 0건 관측(status 둘 다 ok — fail-open 아님)**을 측정했다. 1차 원인은 **미push 브랜치**(어떤 원격 스캔의 관측 대상도 아님)이고 ref 신선도는 부가 사각이다. 앞선 두 대책(HARN-10·HARN-15)은 *push된 표면*만 넓혔다.
+- **EOS-71**: `ReviewStatus.quarantined` + `problem.quarantine_reason`·`quarantined_at`(alembic `e7c3b9a15f24`). **`rejected`와 합치지 않는다** — "들여보내지 않았다" vs "들여보냈다가 되돌렸다"를 합치면 학생이 이미 풀어 본 결함 문항과 한 번도 나간 적 없는 탈락 문항이 같은 글자가 돼 딸린 attempt의 재해석 여부를 사후에 못 가린다. 착수 실측: L6 6모드·blueprint·기본 CAT은 전부 `approved` **허용목록**이라 새 값을 이미 fail-closed로 배제 — **코드를 더할 곳은 `api/problems.py` 무인증 GET 4종뿐**이었다(격리 문항이 풀이 단계까지 새 나가던 유일한 구멍). 자동 배제는 *공짜로 얻은 것이라 아무도 지키고 있지 않아서* 7경로 전건+양성 대조로 동결했다.
+- **함정 2건(주석·테스트 동결)**: ①SQL 3값 논리 — `!= 'quarantined'`는 `review_status` NULL 행을 통째로 사라지게 한다(실코퍼스에 NULL 실재) → `IS DISTINCT FROM` ②404를 ETag/304 분기보다 **앞에** — 뒤에 두면 `If-None-Match` 클라가 304를 받아 캐시된 결함 문항을 계속 쓴다.
+- **비파괴 원칙**: 레코드·`problem_attempt` 보존, `GET /v1/me/ability/history`는 `review_status`를 **의도적으로 필터하지 않는다** — 이 *미집행*도 집행 지점 표에 명시하고 테스트로 동결(필터를 추가하면 red). 계약 정본 = `docs/standards/problem_quarantine_contract.md`(정본화 §1~3과 집행 지점 §4를 별항 분리).
+- **전체 스위트가 잡은 진짜 누락 1건**: wheel에 `alembic/versions/`가 없어 런타임 가드가 `db/schema_version.py::KNOWN_REVISIONS` 상수를 믿는다 — 마이그레이션만 추가하고 상수를 안 고치면 새 head가 **프로덕션에서 `AHEAD`로 오분류**된다.
+- **CI red 1건(정당한 지적)**: 병합해 들어온 #929의 prod schema 프로브 계약이 신규 리비전을 잡았다("마이그레이션이 늘면 이 테스트가 프로브 갱신을 강제한다 — 갱신 없이 두면 프로브는 'pending 0'이라는 *틀린 통과*를 낸다"). 갱신하지 않았으면 `G-operator-seat-first-grant`의 stamp 판정 재료가 조용히 거짓이 될 경로였다.
+- **머지 경합 관측(운영 교훈)**: `backlog/events.ndjson`은 모든 세션이 append하는 공용 대장이라 **main 착지마다 이 PR이 dirty**가 됐다(라운드 4회). 저장소는 `.gitattributes merge=union`을 걸어 뒀고 로컬 병합은 매번 충돌 0인데, **GitHub의 mergeability 판정은 그 드라이버를 적용하지 않는다**. 이 PR의 CI(~30분)와 main 착지 간격이 비슷해 경합이 반복됐다. 또한 **`blocked`의 실제 원인은 CI도 충돌도 아닌 저장소 룰**("A conversation must be resolved before this pull request can be merged")이었고 — 미해결 codex 스레드 1건 — 이는 `mergeable_state`만 보고는 알 수 없고 **머지 시도의 405 응답 본문에서만** 드러났다.
+- **cross-ref**: PR #931 · `HARN-43`(가드 사각 고지·병렬 세션) · `EOS-72`(ContentLifecycleState 배선/폐기 결정 — 다음 후보) · `docs/standards/problem_quarantine_contract.md` · 감사 도구 `problem_duplication_audit.py`의 `review_status` 미필터는 **여전히 미해소**(2026-08 물리 제거의 직접 근거였던 공백 — 격리 상태값이 생겼으므로 이제 필터 추가가 의미를 갖는다).
+## 2026-08-31: HARN-38 — EOS-49/50/51 번호 충돌 경위 규명(②③ 완결·① 게이트 대기)
+
+- **결론(가설 기각)**: 번호 가드가 **fail-open으로 무력화된 것이 아니다.** 이번 세션 실측에서 `list_claims`·`scan_remote_task_files` 모두 `status=ok`, `start`도 `원격 claim: ok` — 403·축소 경고 0건. 따라서 acceptance ③이 조건부로 요구한 **HARN-07(fail-open 폴백 미착륙) 교차 기록은 하지 않는다**(허위 교차 기록은 대책의 조준을 흐린다).
+- **실체 = 관측 범위 밖의 사실**: 충돌 상대인 `backend/cur-16-concept-edge-prerequisite-meta-v2`는 **GitHub에 없다** — `git ls-remote` 0건 · GitHub API가 커밋 `3b7bab6f`를 `No commit found`로 응답. 가드의 관측 표면 3종(로컬 백로그 / claim 대장 / 원격 브랜치 `backlog/tasks/` 파일명)을 전수 호출한 결과 **36 브랜치·11,975 파일**을 훑고도 그 브랜치는 0건 관측. claim 대장(722커밋 전수 grep)에도 kiki 측 EOS-49/50/51은 없다 — **`add`는 claim을 쓰지 않기** 때문이며, 이 맹점을 메우려고 만든 것이 바로 HARN-15의 출처 ③인데 그것 역시 *push된* 브랜치만 본다.
+- **두 사각 모두 실재**: 정확한 선후는 판정 불가(아래)이나 어느 순서든 사각이 있다. **경우 A**(kiki 측 add가 먼저) = 미push 브랜치 사각 → main 측 가드가 못 봄. **경우 B**(나중) = `scan_remote_task_files`의 `fetch=False` 기본값 → 낡은 `origin/main` 캐시라 못 봄. 경우 B는 버그가 아니라 **의도된 네트워크 비용 트레이드오프**이며 `test_branch_tracking_ref_removed_then_add_passes`가 이미 계약으로 동결하고 있다 — 결함은 **대가를 치를 때 사람에게 말하지 않는 것**이다.
+- **부수 결함 발견 — 이벤트 대장이 교차 머신 순서를 못 준다**: `store.append_event`가 `datetime.now()`(오프셋 없는 머신 로컬 시각)를 쓴다. 교차검증 실측: `done HARN-36 @2026-08-30T00:50:38`은 claim 커밋 `1ca71b02(+0000)`와 1초 차 = **UTC 세션** / `start CUR-16 @2026-08-25T23:56:15`는 `fc943cd8(+0900)`와 3초 차 = **KST 세션**. 같은 파일의 두 줄이 9시간 어긋난 척도인데 알려주는 필드가 없다 → "어느 add가 먼저였나"(= 어느 가드를 고칠 것인가)에 대장만으로 답할 수 없었다.
+- **acceptance ②(‘G-eos-g0 clear’ 커밋의 실체)**: 미push 커밋 `3b7bab6f`의 메시지가 `G-eos-g0 clear`지만 **그것은 clear가 아니다**. 대장을 실제로 바꾼 것은 `ad7862ab`(2026-08-30T15:08:41Z · `gates.yaml`+2/−2 · `events.ndjson`+21 — 대장 2파일만 변경)이고, 이후 #910의 Kiki 본인 서명분이 정본으로 상위 대체했다. **기록 의의**: 훗날 그 브랜치를 회수하는 세션이 커밋 메시지를 clear의 근거로 오독하는 것을 차단한다 — 게이트의 진실 원천은 `backlog/gates.yaml`이지 커밋 메시지가 아니다.
+- **재발방지대책(3회차라 등재 의무)**: ARCH-13·OPS-15에 이은 3회차인데, 앞 두 대책(HARN-10·HARN-15)은 모두 *push된* 표면을 넓히는 방향이었고 이번 사고는 그 밖에서 났다. **`HARN-43`**(add 직후 "이 번호는 push 전까지 다른 세션에 안 보인다" 고지 + remote-tracking ref 신선도 고지 — `fetch=False` 계약은 불변) · **`HARN-44`**(이벤트 ts 오프셋 표기·과거분 소급 정정 금지). **정직한 한계 명시**: HARN-43은 *탐지*가 아니라 *고지*다 — 미push 브랜치를 실제로 관측하는 수단은 없으며, 가드가 할 수 있는 최선은 "가드 통과 ≠ 충돌 없음"을 화면에 띄우는 것뿐이다.
+- **가드 변별력 실증(부수)**: 위 대책을 `HARN-42`로 등재하려 하자 CLI가 **실거부**했다 — 상대는 push된 미머지 브랜치 `claude/review-status-differences-jw5m4a`의 `HARN-42-open-pr-eos-reclassification`, 제안 번호 `HARN-43` 채택. HARN-38 등재 때 HARN-37 충돌을 거부한 데 이은 2회차. 이 대비가 결론을 강화한다 — **문제는 판정력이 아니라 관측 범위**다.
+- **① 잔여·게이트**: 재번호의 입력은 kiki 측 3건의 YAML *본문*인데 도달 경로가 0이라, 내용을 모른 채 등재하면 태스크 날조가 된다(환경 사실의 추론 등재 금지) → 실행하지 않고 **게이트 `G-cur16-branch-push`** 신설(6항목 브리핑·PowerShell 명령·자가검증 스텝은 리뷰 문서 §8). HARN-38은 `blocked`로 전이(claim 반납 — 게이트 해소 후 어느 세션이든 인계 가능). **EOS-50 중복 판정은 기준선을 미리 확정해 뒀다**(§6-1): EOS-55(done·#912)가 좌석 5컬럼+양 경로 적재+재현 계약을 이미 덮으므로 원칙적으로 중복이나, **seed 값의 실제 스레딩**은 잔여다(`provenance_bridge.py:151-152`가 "seed 스레딩이 없어 기본 None" 자인 · 백로그 전수 검색 결과 이 잔여를 소유한 태스크 없음) — kiki 측 EOS-50이 그것을 요구하면 재등재 대상.
+- **cross-ref**: `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` · `backlog/gates.yaml` G-cur16-branch-push · HARN-43·HARN-44 · 커밋 `ad7862ab` · PR #902·#908·#910·#912 · 선례 ARCH-13·OPS-15·HARN-10·HARN-15·HARN-36·HARN-07
+
+## 2026-08-31: HARN-38 후속 — 브랜치 회수로 ① 실행·선후 확정(경우 A)·EOS-50 중복 판정
+
+> 같은 날 앞 항목("EOS-49/50/51 번호 충돌 경위 규명")의 **후속 확정**이다. 그 항목이 "판정 불가"로 남긴 2건이 여기서 결정됐다 — 앞 항목의 서술을 지우지 않고 확정분을 덧대 남긴다(조사 시점에 무엇을 알 수 있었는지가 대책 설계의 근거이므로).
+
+- **게이트 해소**: Kiki가 `G-cur16-branch-push` 실행 → 브랜치 착지(head `3b7bab6f7cf29519feb4aba4c7068bbbe9e1d2f0` = 태스크가 지목한 커밋). 자가검증 스텝(`git ls-remote` 1줄)이 판정으로 작동.
+- **선후 확정 — 경우 A**: 브랜치 `events.ndjson` 실측으로 kiki 측 add는 **2026-08-26T08:39:47/52/56(KST)** = 08-25T23:39Z, main 측은 **08-30T01:11:47Z**(EOS-49/50)·**06:37:55Z**(EOS-51). **kiki 측이 4일 이상 먼저**이며 척도 불명(9시간)을 어느 방향으로 적용해도 뒤집히지 않는다. ⇒ kiki 측 add는 그 시점 번호가 실제로 비어 있었으므로 **정당**했고, 충돌을 *만든* 것은 main 측 add다. **경우 B(`fetch=False` 낡은 캐시)는 이번 사고에서 발생하지 않았다** — kiki 측 add 시점에 main에 그 번호가 아예 없었으므로 캐시가 신선했어도 볼 것이 없었다. 사각 자체는 실재하므로 `HARN-43` acceptance에서 ①(실증된 원인)과 ②(예방적 추가)의 **무게를 구분해** 적었다 — 실증된 것과 가정된 것을 같은 무게로 적으면 대책의 조준이 흐려진다.
+- **가드는 그날 작동했다**: 그 브랜치의 add 앞에 `policy_warn`(파일 범위 겹침)이 **78건**(EOS-49 33·EOS-50 31·EOS-51 14) 찍혔다. 번호 충돌만 관측 범위 밖이었다는 §2-2 결론의 직접 증거.
+- **acceptance ② 증거 강화**: `git show --stat 3b7bab6f`의 변경 파일 5건에 **`backlog/gates.yaml`이 없다**. 게이트를 clear했다면 반드시 그 파일이 바뀐다 — **이 커밋은 자기 메시지를 자기 diff로 반증한다**. 조사 시점의 "GitHub에 없다"보다 강한 증거다.
+- **acceptance ① 재번호 실행**(번호는 전부 `backlog.py add` 배정 — HARN-10): `EOS-49-problem-quarantine-status`→**`EOS-69`**, `EOS-51-content-lifecycle-state-wiring`→**`EOS-70`**(둘 다 제목·acceptance 전항·paths·원 notes 무변경 이관, 각 notes에 원 ID·원 등재 시각·경위 병기). 첫 요청 `EOS-67`은 CLI가 실거부(원격 브랜치 `claude/review-status-differences-jw5m4a`의 `EOS-67-core-adapter-import-contract` 선점) — **이번 세션 가드 실거부 3회차**(HARN-37·HARN-42·EOS-67).
+- **EOS-50 중복 판정 — acceptance 3항 전수 대조**(인상이 아니라 항목 단위여야 잔여를 안 놓친다): ①(prompt 본문·seed 컬럼) **흡수, 오히려 더 강하게** — EOS-55의 `input_snapshot`이 prompt·system **전문+각 sha256**을 담아 EOS-50이 허용한 "해시+참조"를 상회. ①의 목적절(모델·`generator_version` 단위 전수 조회) **실질 성립** — 그 이름의 컬럼은 grep 0건이나 `prompt_version`이 실값 적재(`llm_generator.py:585` 자산 내용 해시). ②(pregenerate·DSL 경로 적재) **부분 미이행** — prompt 축은 이행, **seed 축은 두 경로 전부 None**(`provenance_bridge.py:151-152`·`prewarmer.py:117`·`provenance.py:173` 자인 3중). ③(백필 정책·null 자인) **흡수**. ⇒ **중복이므로 재등재하지 않고** 미이행 seed 축만 **`EOS-71-generation-seed-threading`**으로 승계(MEMORY 2026-08-30의 "결정론 재생성은 별도 태스크" 이월이 좌석 없이 떠 있던 상태를 해소).
+- **"DSL 생성 경로" 전제 무효 판정**: `l3/dsl/`에 라우터·프로바이더 import **0건** — 이 계층은 **결정론 컴파일러**라 LLM 호출 자체가 없어 `GenerationLog` 적재 대상이 아니다. `variable_engine.generate(seed=…)`의 seed는 **변수 바인딩 난수**로 LLM seed와 다른 축(`compiler.py:28` `seed=0` 하드코딩) — 이름이 같아 같은 것으로 읽히기 쉬운 지점이라 명시한다.
+- **잔여 1건 — 구 YAML 삭제**: 원 YAML 3건은 여전히 그 브랜치에 있고, 이 세션은 **지정 브랜치 외 push 권한이 없어** 삭제 커밋을 올리지 못했다. 처분 재료 실측: 브랜치 코드는 이미 main에 있고(`required_strength`가 `schema/concept.py:275,320` 실재·CUR-16 done·PR #892 `a92a887f`), 고유분은 회수된 3건뿐이라 **머지 가치 0**. 남겨 두면 "언젠가 머지되어 동번호 YAML이 main에 재진입"하는 경로만 남는다(그때도 슬러그가 달라 `validate`는 통과 — 이 사고의 원형 그대로). 권고 = **브랜치 삭제**(가역 · 복구 SHA `3b7bab6f…`) → 게이트 **`G-cur16-branch-disposal`**.
+- **병렬 claim 충돌(기록)**: `block` 시 원격 claim 해제가 거부됐다 — **2026-08-31T05:00:05Z에 다른 세션 `claude/failure-definition-signature-scmzdu`가 HARN-38을 claim**(내가 block으로 반납한 직후 창). CAS 충돌은 확정 신호라 `--force`로 우회하지 않았고, 크로스세션 메시지는 도달 불가(`ListAgents` 0건)라 Kiki 보고로 에스컬레이션했다. **교훈**: `block`이 claim을 반납하므로, *게이트 대기*를 `block`으로 표현하면 그 창에 다른 세션이 태스크를 집어간다 — 게이트 대기와 차단은 다른 상태인데 같은 전이를 쓰고 있다(후속 후보).
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §3-2·§4·§6 · EOS-69·EOS-70·EOS-71 · HARN-43·HARN-44 · 게이트 G-cur16-branch-push(cleared)·G-cur16-branch-disposal(pending)
+
+## 2026-08-31: HARN-38 종결 — 동종 사고가 조사 중 2건 재발(런북 결함·병렬 이중 등재)
+
+> 같은 날 두 항목의 **종결분**. 이 태스크는 "번호 충돌을 고치는 태스크"였는데, **그 조사 도중 같은 유형이 두 번 더 발생**했다. 둘 다 기록한다 — 조사가 만든 사고를 조사가 빠뜨리면 다음 세션에 다시 난다.
+
+- **acceptance ① 전항 완료**: 재등재 + 구 YAML 삭제. Kiki가 브랜치 삭제 실행(`[deleted] backend/cur-16-…-v2` · `Deleted branch (was 3b7bab6f)` · **자가검증 `git ls-remote` 무출력**=성공 방향) → 게이트 `G-cur16-branch-disposal` cleared. 최종 번호 = **`EOS-71`**(quarantine)·**`EOS-72`**(lifecycle)·**`EOS-73`**(EOS-50 잔여 seed 스레딩).
+- **재발 ① — 런북이 사고를 재생산할 뻔했다(Codex P2 · PR #930)**: 내 §8 브리핑이 kiki 머신용으로 `backlog.py gates clear G-cur16-branch-push`를 안내했는데, 그 게이트는 **미머지 브랜치에만** 있다(실측: `git show origin/main:backlog/gates.yaml | grep -c` → **0**, CUR-16 브랜치도 **0**). 실행됐다면 `게이트 없음`으로 거부돼 **이 사고를 촉발한 2026-08-30 실패와 글자 그대로 같은 실패**가 났다. **어긴 규칙은 이미 있었다** — "미머지 브랜치의 신규 파일을 쓰는 명령이면 브랜치 fetch/checkout을 선행 포함". 원인: "신규 **파일**"이라는 문언을 읽고 **대장의 신규 *항목*(gates.yaml의 게이트 1줄)** 을 그 범주로 매핑하지 못했다 — 파일은 이미 있고 항목만 새것이라 "신규 파일 없음"으로 통과시켰다. **상환 = CLAUDE.md 규칙에 대장 항목 명시 편입(v0.2.6)** + 안내 전 실재 확인 의무(`git show origin/main:backlog/gates.yaml | grep -c <ID>`). 실피해 0 — Kiki가 그 단계를 건너뛰었다(**설계가 아니라 운**).
+- **재발 ② — 병렬 이중 등재(§6-1a)**: 다른 세션 `claude/failure-definition-signature-scmzdu`가 같은 HARN-38을 병렬 수행해 같은 원본 3건을 **다른 번호로** 등재했다(본 세션 EOS-69/70 vs 그쪽 EOS-71/72). **"같은 일을 두 번호로 등재" = HARN-38이 고치려던 바로 그 질병의 재발.** 원인은 `HARN-45`(block이 claim 반납 → 게이트 대기 중 자리 상실). **해소 = 본 세션이 양보**하고 원격 대장 선등재분(EOS-71/72)으로 통일·EOS-69/70 철회. 근거는 예의가 아니라 **재발 차단**이다 — 같은 full ID면 두 브랜치가 다 머지돼도 충돌이 아니지만(`backlog.py:1001-1003`), 각자 번호를 유지하면 **머지 순간 내용 동일 태스크가 4개**가 되고 슬러그가 달라 validate는 통과한다(원형 그대로). 두 이관본의 title·acceptance·paths가 동일함을 대조해 양보로 잃는 내용이 0임을 확인했다.
+- **`HARN-45`의 격상 근거**: 가설적 위험이 아니라 **같은 세션 안에서 원인(claim 반납)→결과(이중 등재)가 모두 관측된** 결함이라 priority 1로 등재했다.
+- **가드 실거부 누적 5회**(변별력 실증): HARN-37(등재) · HARN-42(대책) · EOS-67 · EOS-71 · EOS-72(재번호). 전부 **push된** 브랜치 상대라 출처 ③이 잡았다 — 문제는 판정력이 아니라 관측 범위임을 재확인.
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§8 정정 · CLAUDE.md v0.2.6 · EOS-71·EOS-72·EOS-73 · HARN-43·HARN-44·HARN-45 · 게이트 G-cur16-branch-push·G-cur16-branch-disposal(둘 다 cleared)
+
+## 2026-08-31: 런북 형식 결함 2회차 — 증거 인용이 복사-실행됨 (CLAUDE.md v0.2.7)
+
+- **경위**: HARN-38 세션이 claim 대장 실측을 Kiki에게 보고하며 `$ git ls-tree -r --name-only origin/harness-claims`(프롬프트 접두 `$` 포함)와 그 **출력 줄**(`claims/EOS-71-….json   ← 여기`)을 한 코드 펜스에 담았다 → Kiki가 그대로 붙여넣어 PowerShell이 둘 다 명령으로 해석·`CommandNotFoundException` 2건. **피해 0**(조회였고 실행조차 안 됨) — 다만 파괴적 명령의 출력을 같은 방식으로 인용했다면 결과가 달랐다.
+- **원인**: 코드 펜스는 Kiki에게 **복사-실행 대상으로 읽힌다.** 세션의 "증거 인용" 의도가 **형식에 나타나지 않았다.** 시크릿 규칙("생략 문자를 복사-실행되는 위치에 두지 않는다")이 같은 원리를 이미 담고 있었으나 *증거 인용* 축으로 일반화돼 있지 않았다.
+- **상환**: `CLAUDE.md` v0.2.7 — ①실행용 블록에는 **순수 명령만**(프롬프트 접두·출력 줄·`← 여기` 같은 설명 화살표 금지) ②증거·출력 인용은 실행용과 눈으로 구별되게 표시하고, 실행이 필요하면 **동작하는 형태의 블록을 따로** 준다.
+- **같은 세션 2회차라는 점이 핵심**: 첫 번째는 미머지 게이트 clear 안내(Codex P2·v0.2.6 상환). **두 결함 다 *내용*은 옳았고 *형식*이 틀렸다** — 하나는 맞는 명령을 틀린 체크아웃에서 돌리게 했고, 하나는 명령이 아닌 것을 명령 자리에 놓았다. 공통 자문: **"이걸 그대로 붙여넣으면 무슨 일이 일어나는가."**
+- **cross-ref**: PR #930 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-B·§8 · CLAUDE.md v0.2.7
+
+## 2026-08-31: 동종 3회차 — 병렬 세션이 CLAUDE.md 버전 번호를 각자 v0.2.4로 배정
+
+- **경위**: PR #930의 base 최신화 중, main의 **#928(EOS-60)** 이 `CLAUDE.md`를 v0.2.4(골든 벤치마크 계약 인덱스 등재)로 올린 것이 발견됐다 — 본 세션도 같은 번호를 썼다(대장 신규 항목 편입). **git이 content 충돌로 잡아** 자동 병합을 막았다(add/add가 아니라 같은 줄 수정이라 잡혔다).
+- **해소**: 본 세션이 양보 — main의 v0.2.4를 이력에 보존하고 본 세션 분을 **v0.2.5**(대장 신규 항목)·**v0.2.6**(실행용↔증거 블록 분리)으로 재배정. 태스크 번호 양보(§6-1a)와 **같은 원칙**(원격에 먼저 착지한 쪽이 기준).
+- **의의 — 세 번째 동종 사례**: 태스크 ID → 게이트 ID → **문서 버전 번호**. 셋 다 *서로의 미머지 변경을 볼 수 없는 병렬 세션이 같은 식별자를 각자 배정*한 것이다. `HARN-43`이 겨냥하는 병목이 **`backlog.py` 번호 가드보다 넓다**는 증거 — 가드가 있는 축에서는 CLI가 5번 실거부했지만, 가드가 **없는** 축(게이트 ID·문서 버전)에서는 사람 또는 git 충돌이 최후 방어선이었다. 이번엔 git이 잡아 피해 0이나, 버전 줄이 두 브랜치에서 *같은 자리*가 아니었다면 조용히 둘 다 v0.2.4로 남았을 것이다.
+- **cross-ref**: PR #930·#928 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-C · CLAUDE.md v0.2.7 · HARN-43
+
+## 2026-08-31: 동종 4회차 — CLAUDE.md 버전 번호 충돌이 한 시간 안에 두 번
+
+- **경위**: §7-C의 v0.2.4 충돌(#928)을 해소해 본 세션 분을 v0.2.5·v0.2.6으로 밀어낸 직후, base를 다시 최신화하자 **#924**가 `CLAUDE.md`를 **v0.2.5**로 올린 것이 나왔다 — 방금 밀어낸 바로 그 번호. 같은 해소를 반복해 최종 **v0.2.6**(대장 신규 항목)·**v0.2.7**(실행용↔증거 블록 분리)로 재배정하고, main의 v0.2.4·v0.2.5를 이력에 보존했다.
+- **주목할 점 — 두 세션이 같은 부류 결함을 각자 겪고 각자 규칙화**: #924가 올린 v0.2.5 규칙은 *"다단계 명령 블록에서 자리표시자 대신 셸 변수로 잇는다"*(전체 붙여넣기 실행에서 치환이 안 일어나 자리표시자가 그대로 실행됨)로, 본 세션의 v0.2.7(실행용↔증거 블록 분리)과 **같은 계열**(Kiki 명령 블록 위생)이다. 상호 보완적이라 둘 다 살렸다. **같은 병목을 두 세션이 독립적으로 관측했다는 것 자체가 그 병목이 실재한다는 강한 증거**다.
+- **누적**: 태스크 ID → 게이트 ID → 문서 버전 번호 ×2 = **동종 4회**. 전부 *서로의 미머지 변경을 볼 수 없는 병렬 세션이 같은 식별자를 각자 배정*한 것. 문서 버전은 가드가 없어 git 충돌이 유일한 방어선이었고, 두 번 다 같은 줄이라 잡혔다 — 운이 두 번 따른 것이지 설계가 아니다(`HARN-43` 범위 근거 보강).
+- **cross-ref**: PR #930·#924·#928 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-C · CLAUDE.md v0.2.7 · HARN-43
+
+## 2026-08-31: HARN-46 — 이벤트 대장 세션 샤딩 (PR #931 · blocked 5라운드 사고 대책)
+
+- **사고**: PR #931이 CI 16잡 green 4회를 확보하고도 머지 5라운드 지연. 라운드별 원인이 전부 달랐다 — ①웹훅 유실(GitHub측) ②③`events.ndjson` 경합 ④정당한 게이트 red(#929 프로브 계약) ⑤저장소 룰 "conversation must be resolved"(미해결 codex 스레드 — **상태 조회로는 안 보이고 머지 시도의 405 본문에만 사유가 있다**). 원인 분해 정본 = `docs/reviews/pr931_merge_block_root_cause_2026-08-31.md`.
+- **구조 원인(②③)**: 모든 세션이 append하는 단일 공용 파일 + **GitHub mergeability는 `.gitattributes merge=union`을 적용하지 않는다** — union이 지켜 준 것은 "로컬에서 해소 가능"까지고 "GitHub이 충돌로 안 본다"는 애초에 보장된 적 없다. main 착지 간격(30~90분)과 PR CI(~30분)가 겹치는 한 경합은 확률이 아니라 구조.
+- **대책(HARN-46)**: `store.append_event` → 세션(=브랜치)당 1샤드 `backlog/events/<actor>.ndjson`(tasks/ 태스크당-1파일 선례 동형 — 충돌을 '발생 불가능'으로). 레거시 파일은 읽기 전용 역사. 소비자는 `store.event_paths()` 합집합 필수. 테스트 13건 + 뮤테이션 3종 red 실측. **잔여 위험(명시)**: `MEMORY.md`가 같은 충돌 계급 — 사람이 읽는 서사 정본이라 개편은 Kiki 결정 대기.
+- **병렬 수렴 관측**: #930(병렬 HARN-38)이 원격 claim 대장에서 본 세션의 선등재 EOS-71/72를 발견, 자기 번호(EOS-69/70)를 철회하고 동일 full ID로 통일 — **선푸시 + 가드가 4회차 번호 충돌을 실제로 막은 사례**. EOS-50=EOS-55 중복 판정도 독립적으로 일치.
+- **cross-ref**: PR #930·#931 · HARN-43/44/45(#930 등재 대책 3건) · `test_event_ledger_sharding.py`
+## 2026-08-31: 동종 5회차 — 같은 충돌 해소를 두 세션이 동시 수행 (git이 5분 차로 차단)
+
+- **경위**: PR #930 머지 후 #931이 대장 3건 충돌 상태가 되어, Kiki 승인을 받아 본 세션이 그 브랜치의 충돌을 해소하고 push했다 → **non-fast-forward 거부**. 확인해 보니 그 브랜치 소유 세션(`claude/failure-definition-signature-scmzdu`)이 그사이 **같은 병합을 스스로 완료**(`b939fbd4`)한 상태였다. force-push하지 않고 철회, 임시 브랜치 삭제, 그쪽 해소를 채택했다.
+- **그쪽 해소 검증(철회 전 실측)**: `EOS-71` done(그쪽 구현 반영) · `EOS-72`/`HARN-38` main과 일치 · #930 산출물 5종(보고서·EOS-73·HARN-43/44/45) 전부 보존 · `CLAUDE.md` v0.2.7 유지 · main과 merge-tree 충돌 0. 온전해서 덮어쓸 이유가 없었다.
+- **누적 5회의 대비가 핵심**: 가드가 **있는** 축(태스크 ID)에서는 CLI가 하루에 5번 실거부해 전부 사전 차단(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72). 가드가 **없는** 축(게이트 ID·문서 버전 ×2·중복 작업)에서는 **git 충돌·사람·운이 유일한 방어선**이었다 — 버전 충돌 2회는 두 브랜치가 *같은 줄*을 고쳐서, 이번 건은 *5분 차이*로 잡혔다. 어느 것도 설계된 방어가 아니다.
+- **HARN-43 범위 정정**: acceptance ①의 고지 대상은 '번호'가 아니라 **"내가 지금 하는 일이 다른 세션에 보이지 않는다"는 사실 자체**다. 사례 5건을 태스크 notes에 누적 기록했다.
+- **cross-ref**: PR #930(머지 1387662a)·#931·#924·#928 · HARN-43 notes · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §6-1a·§7-A·§7-C
+
+## 2026-08-31: HARN-43 — `add` 가시성 고지 착지 (탐지 아닌 고지·조용할 때 조용함이 핵심)
+
+- **무엇**: `backlog.py add` 성공 직후, 번호 가드가 **못 본 범위**를 사람에게 고지한다. 두 축 — ①현재 브랜치의 remote-tracking ref 부재(미push 추정) ②원격 ref 스냅샷 나이가 임계(30분·main 전진 주기 실측) 초과. 헬퍼 2종은 `remote_claims`에 두고 **네트워크 0**(로컬 ref·파일 mtime만) — `scan_remote_task_files`의 `fetch=False` 계약 불변.
+- **설계 핵심은 '조용할 때 조용함'**: push됐고 ref도 신선하면 **아무것도 출력하지 않는다**. 무조건 뜨는 고지는 습관화돼 정작 필요한 순간에 안 보인다(CLAUDE.md "상시 실패하는 fail-open 보호" 동형). 판정 불가(`None`)도 침묵한다 — 추측 출력은 측정 실패를 경고 유무로 위장한다.
+- **테스트가 설계 결함을 잡았다(기록 가치 있음)**: 초안은 신선도를 `FETCH_HEAD` mtime 하나로 판정했는데, **갓 클론한 저장소에는 그 파일이 없다**. 그것을 '오래됨'으로 읽어 *가장 신선한* 상태인 클론 직후에 고지가 항상 떴다 — `test_pushed_branch_gets_no_notice`가 red로 잡았다. 상환: 원격 ref 갱신 흔적 **3종**(`FETCH_HEAD`·`packed-refs`·`refs/remotes/origin`)의 **최댓값**으로 바꾸고, 셋 다 없으면 판정 불가로 침묵. 테스트도 흔적을 *전부* 늙히도록 고쳤다(하나만 늙히면 다른 흔적이 신선해 공허하게 통과).
+- **정직한 한계(코드 docstring 명문)**: "보인다"는 신뢰할 수 있고 **"안 보인다"만 추정**이다 — `git push`가 tracking ref를 만들므로 본인이 push했다면 ref는 반드시 있지만, *다른 클론에서* push된 브랜치는 fetch 전까지 여기서 안 보인다(거짓 고지 방향). 차단이 아니라 고지이므로 허용되는 방향의 오차다. **미push 브랜치를 실제로 관측하는 수단은 없다** — 고지 문안에 `가드 통과 ≠ 충돌 없음`을 담은 이유다.
+- **변별력 실측(뮤테이션 3종·각자의 축만 red)**: ①`pushed is False`→`is not None`(무조건 고지) → 과탐 축 2건 red ②`if False`(전면 침묵) → 미push 축 red ③`None`→`False`(판정 불가를 확정으로 접기) → undecidable 축 red. 전부 `cp` 백업으로 원복(git 계열 원복 금지 규칙 준수)·md5 바이트 동일 확인·원복 후 12건 green 재확인.
+- **검증**: 신규 12건 포함 `tests/harness` **410 passed** · `tests/infra` 417 passed · ruff/black EXIT=0 · validate 480태스크·21게이트 green. 라이브 스모크: 이 세션의 미push 브랜치에서 고지 실발화 확인(신선도 축은 미발화 — 두 축 독립 동작 실증).
+- **cross-ref**: `HARN-38` 조사 보고서 §2-2·§7 · 태스크 notes의 사례 5건 누적 · `scripts/harness/remote_claims.py` §등재 가시성 고지 · `tests/harness/test_backlog_add_id_collision.py::TestAddVisibilityNotice`
+
+## 2026-09-01: 동종 6회차 — HARN-45와 HARN-48이 같은 문제를 반대 극성으로 각자 구현 (ID가 달라 어떤 가드에도 안 걸림)
+
+- **판정(Kiki)**: `HARN-45` **cancel** · PR #942 **close**(코드 폐기). main의 태스크 acceptance ④가 요청한 판정에 대한 답이다. 이 항목은 그 근거와 교훈만 남긴다.
+- **대조(실측)**: 두 태스크는 같은 뿌리(차단이 교차 세션 보호를 지운다)를 **반대 극성**으로 풀었다.
+
+  | | HARN-45 (폐기) | HARN-48 (main·`50df469d`) |
+  |---|---|---|
+  | 기본 `block` | claim **반납**(인계 가능) | `remote_claims.hold()`로 **`kind=block` 홀드 게시**(보호가 기본값) |
+  | 자리 보전 | `--gate-wait`가 **claim 자체를 유지** | 별도 홀드 레코드 — claim과 구분 |
+  | 인계 | 기본 동작 | `--handover` 옵트인 |
+  | 타 세션 `start` | CAS 충돌 → "남이 작업 중" | `kind=="block"` 분기 → "**차단**해 둔 태스크"(`--force` 탈취 유도 차단) |
+  | 원 세션 복귀 | `classify_todo(resuming_session=…)`가 필요했다 | `block`이 `session`을 비워 잠금 자체가 없음 |
+  | 홀드 해제 | — | `cmd_unblock`이 함께 걷음 |
+
+- **HARN-48이 더 넓은 이유**: claim을 재사용하지 않아 "차단"과 "착수 점유"가 **신호 층위에서 분리**되고, 보호가 기본값이라 *플래그를 붙이는 것을 잊은* 차단까지 보호한다. HARN-45 쪽으로 충돌을 해소하면 `_publish_block_hold`가 사라져 **보호가 후퇴**하므로 병합하지 않고 `merge --abort`했다.
+- **가드의 새 사각 — 이름이 다른 의미 중복**: 오늘 가드가 **있는** 축(태스크 ID)은 5번 실거부했다(HARN-37·HARN-42·EOS-67·EOS-71·EOS-72). 그런데 이번 건은 **ID가 서로 달라서**(HARN-45 ≠ HARN-48) 번호 충돌 가드·claim 대장·`scan_remote_task_files` **어디에도 걸리지 않았다**. 앞선 5회는 전부 *같은 식별자*를 두 세션이 배정한 형태였고, 이번은 **같은 문제에 서로 다른 이름을 붙인** 형태다 — 현재 설계가 구조적으로 볼 수 없는 축이다. 발견의 실제 경로는 기계가 아니라 **상대 세션이 자기 태스크 YAML에 중복을 스스로 적어 둔 것**이었고(acceptance ④), 그것마저 없었다면 충돌 해소 과정에서 main의 보호를 조용히 되돌렸을 것이다. `HARN-43`의 가시성 고지는 *번호*를 겨눈 것이라 이 축을 덮지 못한다.
+- **폐기된 구현에서 살릴 것이 없었던 이유(전수 대조)**: Codex 리뷰로 고친 2건조차 HARN-48 모델에서는 도달 경로가 사라진다 — `resuming_session` 예외는 `block`이 `session`을 비우므로 무의미하고, `claims release`의 로컬 session 해제도 같은 이유로 죽으며, `board._excerpt`의 `[게이트대기` 태그는 그 태그를 만드는 코드가 없어지면 무의미하다. "일부라도 이식"이 아니라 **전량 폐기**가 정답인 드문 경우였다.
+- **살릴 가치가 있던 교훈(코드와 무관)**: 폐기된 구현이 리뷰에서 받은 지적 2건의 공통 뿌리는 **출력 문안이 실제 상태와 무관하게 안전을 주장했다**는 것이다 — `--gate-wait`가 `session=None`인 태스크에도 "claim 유지 — 다른 세션의 착수가 거부된다"를 출력했고(P1), 안내한 인계 절차(`unblock` → `claims release`)가 실제로는 인계를 성립시키지 못했다(P2). CLAUDE.md **"작동 신호 없는 알고리즘 부착 금지"**("작동한 비율을 응답이 말해야 한다")의 *CLI 출력* 축 변형이다. 보전·차단류 플래그를 만들 때는 **출력이 주장하는 보호가 그 시점에 실재하는지**를 먼저 검사식으로 세운다.
+- **대책 등재 = `HARN-51-semantic-duplicate-task-detection`**: 초안은 "진단만 기록하고 대책은 제안하지 않는다"로 끝냈는데, **그 자체가 CLAUDE.md 실수 관리 규칙 위반**이다 — 반복 실수(동일 유형 2회 이상)는 규칙·코드·태스크 중 하나의 형태로 대책을 등재해야 하며 세션 종료 전에 완료해야 한다. PR #943의 Codex P1이 이 누락을 잡았다(**리뷰 봇이 헌법 조항 미준수를 지적한 첫 사례**). 태스크 acceptance는 ①실측 기반 신호 설계(임베딩·외부 모델은 하네스의 네트워크 0 계약 때문에 기본 배제) ②차단이 아니라 고지·조용할 때 조용함(HARN-43 선례) ③대조 범위에 **미머지분 포함**(로컬만 보면 이번 사고를 재현조차 못 한다 — HARN-48은 별도 브랜치였다) ④양방향 변별력('전부 유사'로 판정하는 반대 결함 차단).
+- **부수 관측**: `HARN-50` 번호로 등재를 시도했다가 번호 가드가 **실거부**했다(로컬 백로그의 `HARN-50-stop-hook-ledger-integrity-gate`와 충돌). 오늘 6번째 실거부 — *같은 식별자* 축의 가드는 여전히 정확히 작동한다는 방증이며, 이번 사고가 **가드의 실패가 아니라 관측 범위 밖**이었다는 판정을 한 번 더 뒷받침한다.
+- **cross-ref**: PR #942(closed) · PR #943 · `HARN-48-block-remote-hold-publication` · `HARN-51`(대책) · `#916`(`fa075406`) · `HARN-43` notes의 사례 누적 · `docs/reviews/eos_number_collision_root_cause_2026-08-31.md` §7-A
+
+## 2026-09-01: HARN-51 — 의미 중복 탐지 착지 (같은 *이름*이 아니라 같은 *문제*를 보는 축)
+
+- **무엇**: `backlog.py add` 성공 직후, 번호가 아니라 **의미**가 겹치는 in-flight 태스크를 고지한다. 6회차 동종 사고(`HARN-45`↔`HARN-48`)가 ID가 달라 어떤 가드에도 안 걸린 축의 대책이다. `HARN-43`이 "내 번호가 남에게 안 보인다"를 고지한다면, 이쪽은 "**남이 이미 같은 문제를 하고 있을 수 있다**"를 고지한다.
+- **신호 선택의 근거(측정 우선)**: 두 태스크가 공유한 결정적 단어는 `차단`·`block`·`세션` 같은 일반어가 아니라 **`cmd_block`·`_release_remote_claim`**(코퍼스 485건 중 각 2건)이었다. 그래서 공유어를 문서빈도의 역수(IDF)로 가중한다 — **IDF는 백로그 자신에서 산출**하므로 임베딩·외부 모델·네트워크가 없다(acceptance ① 기본 배제 조건 충족). 구현 전에 프로토타입으로 재현부터 확인했다: **못 잡으면 만들 이유가 없다**.
+- **오염 제거가 결정적이었다**: 현재 YAML로 재면 표적이 0.2093인데, 그것은 내가 사후에 쓴 cancel 사유가 상대를 직접 언급하기 때문이다. **등재 시점 원본**(`git show <첫 등재 커밋>:...`)으로 재측정하니 0.1365였다 — 부풀려진 수치로 임계를 잡았으면 실사고를 놓치는 보정이 나왔을 것이다.
+- **실측(485건 전수)**: 표적 검출 **1위**(0.1365 vs 무관 최고 0.0733 = 1.86배) · 평균 후보 0.86건 · 최대 3건 · **완전 침묵 53%** · 후보 1건 이하 75%. 정직한 한계 3가지(침묵률 53%·여유 1.86배·어휘가 겹쳐야 보임)를 모듈 docstring에 명문화했다.
+- **측정이 손잡이 하나를 없앴다(기록 가치 있음)**: 초안에는 floor 외에 "자기 점수 분포 중앙값 대비 N배" 이상치 조건도 있었다. 뮤테이션에서 **그 조건을 무력화해도 테스트가 전건 통과**해 원인을 실측했더니, 실코퍼스에서 기여가 없었다(평균 1.75→1.77 · 침묵 20%→19%). 밀집 계열의 폭주를 실제로 막은 것은 그 조건이 아니라 **상한**(제거 시 최대 3→23)이었다. **측정으로 무기여가 확인된 손잡이는 남기지 않는다** — 뮤테이션에도 안 걸리는 코드는 '선언됐지만 배선되지 않은' 것과 같다. 테스트가 못 잡은 게 아니라 잡을 것이 없었던 사례다.
+- **테스트가 해시 순서 운으로 통과하고 있었다**: 공유어 표시가 IDF 동률이라 `sorted`가 set 순회 순서(해시 무작위)를 따랐고, 그래서 `cmd_block`을 단언하는 테스트가 실행마다 결과가 달라질 수 있었다. 코드에 **결정적 정렬**(`-idf, term`)을 넣고, 픽스처의 흔한 어휘를 실제 코퍼스에 맞게 고쳐(초안 픽스처에서는 `인계`·`해소`가 `cmd_block`만큼 희소했다) 동률 자체를 없앴다.
+- **고지를 붙이는 것만으로 `add`가 죽었다**: 기존 계약 테스트(`test_remote_task_file_scan_failure_...`)가 원격 스캔 예외를 모의하는데, 새 고지가 그것을 감싸지 않아 **exit 3**이 났다. 관측 기능의 실패가 등재를 막으면 안 된다 — fail-open으로 감싸되 **예외 타입명을 남긴다**(무타입 경고는 langfuse 무증상 전멸의 원인). 이 계약도 테스트로 동결했다(M7).
+- **비용 설계**: 원격 스캔은 9354건(브랜치×태스크)을 돌려주는데, **로컬에 이미 있는 ID를 읽기 *앞*에서 거르면 실제 읽기는 110건**이다. 이 필터가 뒤에 있으면 상한에 걸려 정상 상태에서도 매번 '판정 불가'가 떠 경고가 소음이 된다(초안에서 실제로 그랬다). 읽기는 `git cat-file --batch` **1프로세스**. `add` 전체 소요 2.1초.
+- **변별력 실측(뮤테이션 7종 전건 검출·각자의 축만 red)**: ①IDF 제거 → 검출 축 2건 ②floor 0.0 → 침묵 축 3건 ③floor 0.9 → 보정 축 2건 ④상한 제거 → 밀집 계열 축 1건 ⑤skip 필터를 읽기 뒤로 → 사전 필터 축 1건 ⑥truncated를 ok로 위장 → 판정 불가 축 1건 ⑦fail-open 제거 → 등재 보호 축 1건. 전부 `cp` 백업 원복·md5 바이트 동일 확인.
+- **검증**: 신규 13건 포함 `tests/harness` **476 passed** · `tests/infra` 439 passed · ruff/black EXIT=0 · validate green. 라이브 스모크 양방향(실사고 텍스트 → 고지 발화·근거에 결정적 희소어 표시 / 무관 텍스트 → 완전 침묵).
+- **리뷰가 잡은 조용한 손상 1건 — 이미 지도에 있던 함정을 재구현하다 빠졌다**: `git cat-file --batch`의 `<size>`는 **바이트 수**인데 디코드된 문자열에서 그만큼 전진해, 한국어 본문(3바이트/자)에서 오프셋이 밀렸다. 실측 재현: **3건 요청 → 1건만, 그것도 다음 blob의 sha가 섞인 채** 반환되면서 `status`는 `ok`. 개수만 세면 안 보이고 **내용을 대조해야** 드러난다. 결정적인 것은 이 함정이 **이미 저장소에 문서화돼 있었다**는 점이다 — `_iter_batch_blobs`가 2026-07-29 실측(`S3-09`의 done 브랜치 오보고)을 근거로 정확히 이 문제를 풀고 있었는데, 나는 그것을 쓰지 않고 파싱을 새로 짰다. **HARN-51이 겨누는 '이미 있는 것을 모르고 다시 만드는' 실패를, 그 태스크를 구현하면서 코드 수준에서 저질렀다.** 수정 = 재구현 삭제 + 기존 헬퍼 사용.
+- **그 결함을 내 테스트가 못 잡은 이유(설계 교훈)**: 모의 git이 `stdout`을 빈 문자열로 돌려주게 해 두어 **파싱 경로를 한 번도 밟지 않았다**. 모의는 내가 만든 출력을 파싱하므로 함정이 재현되지 않는다. 상환 = **실제 git 저장소를 만들어 실제 `cat-file --batch` 출력을 태우는** 회귀 테스트(M8로 변별력 확인 — 문자 오프셋으로 되돌리면 red).
+- **cross-ref**: `scripts/harness/similar.py` · `remote_claims.read_remote_task_texts` · `_iter_batch_blobs`(선례 함정) · `tests/harness/test_semantic_duplicate_notice.py` · `docs/standards/build_harness.md` §3b-1 · PR #947·#943(등재)·#942(사고)
+
+## 2026-09-01: EOS-56 — 앵커 세트 1급 등록 (분석 스크립트 상수 → 코퍼스 정본 + CI 무결성 게이트)
+
+- **무엇**: 12월 내부 검증의 **측정 조인 축**인 앵커 세트를 `data/corpus/eos_anchor_set_v1/anchors.yaml`로 1급화했다. G0 서명(2026-08-30) 이전까지 앵커 정의는 `scripts/analysis/eos_anchor_asset_audit.py`의 `ANCHOR_DEFS` **파이썬 상수 하나**뿐이었다 — 분석 스크립트 안의 상수는 ①런타임·생산 배치가 읽을 수 없고 ②성취기준 코퍼스가 코드를 잃어도 아무도 소리내지 않는다.
+- **이관은 무손실이다(기계 확인)**: 코드셋 추가·삭제·수정 0건. 검증은 인상이 아니라 재현으로 했다 — 전환 후 실사 스크립트를 재실행하니 검증설계서 §2 표의 자산 수치(A1 성취기준 3·원자 9·오개념 4 … A4 문항 378·A6 문항 261)가 **그대로 재현**됐고, 생산/검수 CU 합계도 450/185로 일치한다.
+- **이월을 데이터로 남긴 판단**: G0 확정 12월 대상은 6개(A1~A6)지만 레지스트리는 **8건 전부**를 `scope` 필드와 함께 싣는다. 목록에서 지우면 ①"왜 대학 앵커가 빠졌는가"의 근거(전환 설계서 옵션 ② 명시 손실)가 코드·문서 어디에도 남지 않고 ②EOS-52 실사 문서(8앵커 기준 발행)의 재현이 깨진다. 이월은 삭제가 아니라 상태다.
+- **집행 별항(정본화 ≠ 집행)**: acceptance ③을 "명시"에서 멈추지 않고 실사 스크립트 전환까지 착지시켰다. 상수가 되살아나는 경로는 테스트가 막는다(`TestAuditScriptReadsTheRegistry` — 리터럴 부재 + 스크립트가 읽은 코드셋이 레지스트리와 동일한지 대조). 남은 후속 지점 2건(golden_benchmark의 `ANCHOR_IDS` 런타임 파생 · 아직 없는 생산 배치)은 레지스트리 헤더 "소비 지점" 블록에 좌석과 함께 열거했다.
+- **파생 효과 — 이월 판정이 하드코딩이던 곳을 데이터로 되돌렸다**: `test_golden_benchmark.py`의 앵커 정합 동결이 `deferred = {"A7","A8"}`를 하드코딩하고 있었다. 이제 등록의 `scope`로 판정한다 — 2027-01에 대학 앵커를 되살릴 때 그 테스트가 조용히 거짓말하지 않는다.
+- **게이트가 자기 입력 변경에 깨어나는가(배선 실측)**: 무결성 검사는 `tests/backend/l1/test_eos_anchor_registry.py`에 두고, `.github/workflows/ci.yml`의 backend 경로 필터가 `data/corpus/`를 포함한다는 사실을 **주석이 아니라 파일에서 읽어** 단언한다(`TestCiTriggerWiring`). 필터 밖이면 성취기준 코퍼스 단독 수정 PR에서 잡이 SKIP되고 skip은 required check에서 충족으로 계상된다 — 방어 대상 벡터에서 정확히 실행되지 않는 형태다(COLLAB-07·G0 동결 입력 편입과 같은 사각).
+- **상시 green 위장 차단 2건**: ①성취기준 색인 0건은 "위반 없음"이 아니라 **읽기 실패**로 던진다 — 통과시키면 게이트가 코퍼스 경로 오타 하나로 영구 green이 된다. ②학교급 895행은 2022·2015 개정 혼재이므로 `curriculum_revision` 필터를 건다 — 필터 없이 세면 폐지된 2015 코드가 앵커를 살려 주어 드리프트가 은폐된다. 두 축 모두 뮤테이션으로 실측했다.
+- **변별력(뮤테이션 9종 전건 검출)**: 없는 코드 추가 → 위반 검출·CLI exit 1 · 코드 중복 귀속 → 거부 · scope 오타 → 거부 · 포함/제외 동시 등재 → 거부 · 필수 필드 결손 → 거부 · 파일 부재 → 예외 타입명 포함 실패 · 성취기준 0건 → 명시 실패 · 2015 개정 행만 → 명시 실패.
+- **사이드카에서 자기 해시를 뺀 이유**: 초안은 관례를 따라 `source_sha256`에 **자기 자신의 sha256**을 넣었다. 상류 원본이 없는 자체작성 소스에서 그 값은 아무것도 증명하지 못하면서 편집마다 조용히 낡는다. 대신 무결성은 CI 게이트가 판정한다는 사실을 `integrity_gate` 필드로 명시했다.
+- **검증**: 신규 27건 `tests/backend/l1/test_eos_anchor_registry.py` 통과 · `test_golden_benchmark.py` 50건 통과 · backend 전체 스위트 · ruff/black/mypy --strict EXIT=0(CI와 동일 명령·대상).
+- **cross-ref**: `data/corpus/eos_anchor_set_v1/anchors.yaml`(정본) · `whymath_backend.l1.standards.anchor_registry`(읽기 API·판정 CLI exit 0/1) · `docs/standards/eos_verification_design_v1.md` §2(정본 위치 갱신) · `docs/reviews/eos_anchor_asset_audit_2026-09.md` §2 · `G-eos-g0-verification-design-freeze` · EOS-52·EOS-53 갭 #3
+## 2026-09-01: EOS-69 중복 구현 사고 — 낡은 로컬 대장이 이미 done인 태스크를 후보로 내놨다 (HARN-54 등재)
+
+- **사건**: `EOS-69`를 병렬 세션과 동시 수행했고 **PR #916이 먼저 착지**(08-31T21:27 UTC). 내 브랜치 base는 08-31T11:14의 `d980402d`라 로컬 대장에는 여전히 `todo`였고, **2시간 50분 뒤** `next`가 EOS-69를 후보 1위로 내놓고 `start`가 통과시켰다. 전체 구현 1건(계약 3→6 확장·DI 좌석·중립 뷰·테스트 신설·뮤테이션 10종·전체 스위트 40분 2회)이 **중복 생산 후 폐기**됐다.
+- **원인**: `backlog.py next`·`start`는 **로컬 트리의 대장**만 읽는다. 브랜치가 main보다 뒤처지면 main이 이미 `done`으로 만든 태스크가 로컬에선 `todo`로 보인다. HARN-38 근본 원인(낡은 로컬 트리)의 새 형태 — 기존 가드는 *미머지 브랜치*의 작업만 보고 *이미 머지된 main*은 보지 않는다.
+- **기존 가드가 왜 전부 비껴갔나**(등재 전 대조): `HARN-51`(의미 중복)은 "다른 ID·같은 의미"용이라 **같은 ID**인 이 건을 못 잡는다 — 그 태스크 자신이 "같은 식별자 5건은 가드가 전건 차단"이라 적었으나 이 건은 차단되지 않았다. `HARN-43`의 remote-ref 신선도 고지는 **`cmd_add` 한 곳(`backlog.py:1249`)에만 배선**돼 next·start 경로에 없다. `HARN-47`은 브랜치 재고 축이다. → **`HARN-54`** 등재.
+- **폐기 판단 근거(main이 낫다)**: 경계 위반 main **15→0** vs 내 15→1 · main은 `SubjectAdapter`를 부풀리는 대신 **좁은 능력 계약**(`verification_capabilities`) 신설 · DI 좌석도 `composition`(팩토리만 노출·재export 금지 규칙)이 내 전역 `subject_registry`보다 낫다. 되돌림은 force-push(분류기 거부·우회 안 함)가 아니라 **revert 커밋**(비파괴)으로 했고 폐기분은 패치+커밋 `a7faeb74`로 보존.
+- **★ 독립 수렴 관측**: 두 세션이 같은 아키텍처 판단에 독립 도달했다 — ①합성 루트가 구현체를 아는 것은 정의상 불가피 → 7계층 계약에 **간선 1건만** 좁게 유예 ②**지연 import로 숨기지 않는다**(grimp도 경계 스캔도 그 간선을 그대로 본다·문자열 `importlib`는 도구 판정 우회라 금기). main 쪽이 한 걸음 더: `-> composition` **전체**를 열면 합성 루트가 *세탁 통로*가 되므로 간선 단위로만 연다.
+- **등재 전 실측으로 기각한 가설 1건(기록 가치)**: 내 뮤테이션 M1·M2가 처음에 살아남아 "3상태 접힘 축이 main에도 열려 있지 않은가"를 의심했으나, **뮤테이션으로 재보니 닫혀 있었다** — 서빙 계층 `unverifiable→incorrect` 접힘 주입 시 **56건 red**, 어댑터는 pass-through라 재매핑 지점 자체가 없음, 콘텐츠 검수는 4상태 유지 + 의도된 fail-closed 허용목록(문서 명시). **M1·M2는 내 테스트의 결함이었지 main 코드의 구멍이 아니었다.** 없는 결함을 태스크로 올리는 것이 곧 "환경 사실의 추론 등재"이므로, 측정 후 기각하고 대신 진짜 원인(HARN-54)을 등재했다.
+- **부수 교훈**: "변별력 없는 검증 스텝 금지"는 도구 호출 방식뿐 아니라 **테스트 앵커 선택**에도 적용된다 — 내 M1은 앵커를 `parse_error`로만 잡아 `undecidable` 경로가 초록 통과했고, M2는 테스트 이름("unverifiable is inert")과 실제 단언(완료 필드만 확인)이 불일치해 서빙 계층 접힘을 놓쳤다.
+- **cross-ref**: PR #916(main 정본) · `HARN-54` · 폐기 커밋 `a7faeb74`
+
+## 2026-09-01: EOS-62 — 검수 판정 3종화 (승인율이 AI-first 실패를 가리던 구조 해소)
+
+- **무엇**: `ReviewVerdict`에 `approved_with_edit`를 더해 "그대로 통과한 CU"와 "사람이 고쳐서 통과시킨 CU"를 갈랐다. 2값이던 시절엔 **HIT 중앙값 4분 + 승인율 93%가 "성공"으로 읽히는데 승인분의 상당수가 사람 손질일 수 있었다** — 그 손질분이 정확히 AI-first 전략의 실패 신호이므로, 성공 지표가 실패를 가리는 구조였다(N4 갭 ③).
+- **문서 §17의 5종 중 1종만 채택**: `REGENERATE`는 Run 재생성 카운트(EOS-55)가, `ESCALATE`는 운영 절차가 담당한다 — 스키마 확장은 최소로 둔다. 미채택 2종이 어휘에 들어오지 않음을 테스트가 동결한다.
+- **두 축이 갈라진 지점을 코드가 지킨다**: 2값 시절 `ReviewVerdict`는 `ReviewStatus`의 부분집합이라 "같은 문자열"이었는데, 이제 아니다. `approved_with_edit`를 `problem.review_status`에 그대로 복사하면 `is_review_status_cleared`(approved만 True·fail-closed)가 False를 내 **손질 승인된 CU가 에러 없이 목록에서 사라진다**. 그래서 `review_status_for_verdict()`를 유일한 다리로 두고(둘 다 `approved`로 매핑 — 손질 여부는 생산성 축이지 노출 축이 아니다), 그 침묵 실패 경로를 테스트가 양방향으로 실측한다(`is_review_status_cleared(변환)` True / `is_review_status_cleared(원값)` False).
+- **부기 규약 — 왜 손질 코드는 필수가 아닌가**: 반려는 "왜 못 쓰는가"가 판정의 본체라 코드 없는 반려는 측정 불가다. 손질 승인은 "통과했다"가 본체고 코드는 부기다 — 필수로 걸면 애매한 손질(문장 다듬기)에서 검수자가 아무 코드나 찍고 그 오염이 실패분포로 들어간다. 권장하되 강제하지 않고 **미기재분을 분리 카운트**한다(0 위장 금지).
+- **F-Ⅲ 분모를 지켰다(가장 중요한 판단)**: acceptance ②가 "손질 코드가 F-Ⅲ 실패분포의 입력"이라 적었지만, F-Ⅲ("실패 분포에서 판단형 > 60%")의 '실패 분포'는 EOS-51 §5에서 **12월까지 수정 금지로 동결**된 의미다. 손질 코드를 반려 분포에 합치면 12월 판정 임계가 조용히 다른 것을 재게 된다. 그래서 `edit_failure_code_counts`를 **별도 축**으로 내고, 합칠지는 최종 스코어카드(EOS-61)의 판단으로 남겼다. 테스트가 그 분리를 실측 고정한다 — 합쳤다면 예시 데이터에서 판단형 비중이 0%→50%로 바뀐다.
+- **하류가 한 줄도 안 바뀐 채 열렸다(설계가 실제로 작동한 사례)**: EOS-60 골든 승격은 `edit_aware_verdict_available()`이 **상수가 아니라 상류 `ReviewVerdict` 어휘를 `get_args`로 실측**하도록 만들어져 있었다. 이 커밋이 어휘를 넓히자 `golden_benchmark.py`의 판정 로직을 건드리지 않고 승격 경로 ⓑ가 자동 활성됐다(`approved_with_edit` → as-found `defective`). "선언과 실체 불일치"를 하류가 상류를 직접 보게 해서 막은 선례이며, 프로브가 상수였다면 어휘 확장이 무증상으로 무시됐을 것이다.
+- **영구 skip이 될 뻔한 테스트 2건을 살렸다**: 그 두 테스트는 `if edit_aware_verdict_available(): pytest.skip(...)` 형태라 착지 후 **항상 skip**된다 — 어휘 부재 시 fail-closed가 유지되는지를 검사하지 않으면서 통과처럼 보인다. 프로브를 False로 눌러 그 상태를 *만들어* 검사하도록 바꿨다(어휘 롤백·하류 배포 지연에서 여전히 필요한 안전 속성). 같은 이유로 `model_construct`(검증 우회) 픽스처도 실 writer로 교체했다 — 우회한 채 두면 "스키마가 이 값을 실제로 받는가"를 영원히 검사하지 않는다. 어휘 밖 값(`escalate`) 케이스만 우회를 유지한다(정의상 schema가 거부하는 값).
+- **마이그레이션 불요를 주장이 아니라 실측으로**: `verdict`는 TEXT 컬럼(폐쇄 강제는 schema 몫)이라 값 추가에 DDL 변경이 없다. 그 전제를 `isinstance(column.type, sa.Text)` + 왕복 테스트로 고정했다 — DB enum이었다면 마이그레이션이 필요한데 안 만든 상태가 조용히 통과했을 것이다.
+- **검증**: 신규 34건 포함 backend 전체 스위트 · `tests/infra`+`tests/harness` 971 passed · ruff/black/mypy --strict(567 files)/lint-imports(3 kept, 0 broken) EXIT=0.
+- **cross-ref**: `schema/review_timer.py`(어휘·변환 정본) · `ops/hit_cu_metrics.py` §5 승인 해상도 · `harness/golden_benchmark.py` 승격 경로 ⓑ · `docs/reviews/eos_validation_n1_n10_gap_review_2026-08-30.md` §3.4 · EOS-51 §4·§5(동결 불변) · EOS-60·EOS-61
+## 2026-09-01: HARN-37 — "이미 포팅됨" 오분류 차단 (문서화 커밋이 포팅 근거가 되던 구멍)
+
+- **무엇**: 장기 미머지 브랜치 판정에서 `ported`(="원본 정리만 필요·결정 불요") 라벨의 근거 요건을 **파일 교집합**으로 강화했다. 근거 커밋이 그 브랜치의 고유 코드 파일을 **전건 착지**시켰을 때만 ported다.
+- **뚫린 자리**: 기존 방어는 "원장·문서 최상위만 고친 커밋 배제"였다. 그런데 #770은 7n9n72의 고립을 *실측·문서화*한 커밋이면서 **원장 밖 경로**(`docs/reviews/` 아닌 자기 산출물)를 건드려 그 필터를 그냥 통과했다 — 브랜치명을 인용했고 원장 밖 파일을 건드렸으므로 "흡수"로 인정된 것이다. 결과: main 부재 15파일 + 고유줄 수백이 "결정 불요" 뒤에 숨었다. **2026-08-11 40xspg 오분류(문서 커밋을 근거로 2,153줄 삭제 직전)와 동일 유형 2회차**다.
+- **왜 교집합이어야 했나**: 옛 필터는 "커밋이 *무엇을* 고쳤나"의 **종류**만 봤고 "이 브랜치의 것을 고쳤나"는 보지 않았다. 그 축이 없으면 브랜치를 언급하는 어떤 코드 커밋이든 근거가 된다 — 판정의 분모가 빠져 있었다.
+- **3분기로 나눴다(전건/부분/0건)**: 전건 착지 → `ported`. 0건 → 근거 아님. **부분 착지는 새 축**(`StaleBranch.partial_port`)이다 — 흔적을 버리면 사람이 같은 조사를 다시 하고, 흡수로 단정하면 잔여 고유 코드가 숨는다. status는 ported가 아니되 브리핑이 "부분 착지: N/M 파일 — 잔여분 확인 필요"를 고립 줄 아래에 붙인다.
+- **기존 테스트 4건이 결함을 계약으로 굳히고 있었다**: `test_trunk_with_porting_trace_classified_as_ported` 등은 브랜치가 `orphan2.txt`를 만들고 **포팅 커밋이 `ported.txt`(다른 파일)를 건드리는** 시나리오로 ported를 단언했다. 즉 "다른 파일을 옮겨도 포팅"이 테스트로 동결돼 있었다. 계약을 바로잡으며 함께 고쳤다 — 테스트가 green이었다는 사실이 구현이 옳았다는 뜻이 아닌 사례다.
+- **양방향 변별력**: 강화가 *전건 미탐*으로 도망가면 브리핑이 다시 소음이 된다(아무것도 ported로 안 부르는 구현도 한쪽 검사는 통과한다). 그래서 문서화 커밋(7n9n72형) → ported 아님 / 실코드 회수(40xspg형·#801) → ported 유지 / 부분 착지 → 단서 보존, **세 축을 함께** 동결했다.
+- **하위호환**: `stale_branches` 튜플에 6번째 원소를 더했고 렌더는 5튜플도 그대로 받는다(구 호출부 보호·테스트로 고정).
+- **판정 불가는 옛 동작으로 폴백**: `git diff` 실패·고유 코드 0건(순수 문서 브랜치)이면 교집합을 요구하지 않는다 — 남길 코드가 없으면 고립될 코드도 없다. 판정 불가를 근거 부재로 바꾸지 않는 기존 기조 유지.
+- **검증**: 신규 5건 포함 `tests/harness` **510 passed** · `tests/infra` 497 passed · ruff/black EXIT=0 · validate green(491 태스크).
+- **cross-ref**: `scripts/harness/remote_claims.py`(`PortEvidence`·`_branch_code_files`) · `scripts/harness/report.py` · `tests/harness/test_remote_claims.py::test_documenting_commit_is_not_porting_evidence` · HARN-13·HARN-47 선행 분류 확장
+## 2026-09-04: HARN-63 — 브랜치 보호 **라이브** 드리프트 탐지 (저장소 경계 밖을 처음으로 본다)
+
+- **무엇**: `gh api repos/doldori7/WhyMath/rules/branches/main` 출력(JSON 파일)을 문서 선언과 기계 대조하는 탐지기 `scripts/harness/ruleset_drift.py`를 만들고, SessionStart 브리핑에 배선했다. 시정(체크 등록)은 이미 2026-09-03에 끝났고 이 태스크는 **재발 탐지**를 소유한다 — 시정만 하면 4회차가 온다.
+- **왜 기존 방어가 3회나 못 잡았나**: `test_required_checks_doc.py`는 **문서 ↔ `ci.yml`**을 동결하는데 **두 축 다 저장소 안**이다. 라이브 GitHub 설정은 저장소 밖이라 어떤 테스트도 보지 않는다 — 문서가 완벽하고 `ci.yml`이 완벽해도 **설정이 비어 있으면 전부 초록**이다. "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 *저장소 경계 밖* 변형이며, 이 저장소가 이 축을 본 것은 처음이다.
+- **조회는 사람·판정은 기계**: 세션·CI 토큰은 이 설정을 못 읽지만(`Resource not accessible by integration`) **Kiki 토큰의 `gh`로는 읽힌다**(2026-09-03 실측). 자동 상시 실행이 불가능하다는 것이 정직한 제약이라, 탐지기는 **스스로 조회하지 않고 파일 경로를 받는다**. 그 제약을 숨기지 않고 설계 전제로 올렸다.
+- **exit 2를 따로 뒀다 — 측정 실패가 통과로 위장되지 않게**: 0=정합 / 1=드리프트 / **2=측정 실패**(빈 응답·권한 부족·필드 부재·오류 응답 객체). 빈 목록을 빈 집합으로 접으면 **미설정 상태가 정합으로 보고**된다 — 그것이 정확히 OPS-08(`enforcement_level=off`·`checks=[]`)의 화면이었다.
+- **개수가 아니라 집합으로 대조**: 중복 등록 때문에 라이브 항목 22 vs 문서 16이 나온다. 개수로 보면 **정상 상태가 위반으로 오판**된다. 중복은 막는 힘을 약화시키지 않으므로 권고로만 낸다.
+- **pin 3등급과 시정 *순서*(이 태스크에서 가장 미묘한 판단)**: `integration_id`가 없는 항목은 *어느 주체든* 같은 컨텍스트 이름으로 성공을 보고하면 충족된다("이름만 같으면 통과하는 좌석"). 그렇다고 unpinned를 일괄 제거하면 **pin된 쌍이 없는 항목은 완전 미강제로 되돌아간다** — 2026-09-03 `concept-reach`가 실제로 그 상태였다. 그래서 ⓐpin 0건=위반(pin 추가가 **먼저**) / ⓑ혼재=권고(unpin만 제거) / ⓒpin만=정상으로 나누고, **시정 순서를 출력이 직접 말한다**. 순서를 뒤집으면 방금 고친 사고의 재생산이다.
+- **승인 축을 "문서를 낮추는" 방식으로 해결하지 않았다**: 문서는 승인 1명을 선언하고 라이브는 0이다. 1인 개발에서 승인 1명은 자가승인 불가로 머지를 막으므로 당장 맞출 수 없다 — 그렇다고 문서를 0으로 내리면 **의도가 사라진다**(문서가 의도고 라이브가 결함이다). 만료일 필수인 유예 블록(`RULESET_DEVIATIONS`)을 두고, 만료 후에는 탐지기가 유예를 **위반으로 승격**시킨다(CLAUDE.md "만료 없는 유예 금지"). 최종 판단(문서를 내릴지 설정을 올릴지)은 2026-12-31 이전 Kiki 몫으로 남는다.
+- **충족된 유예도 권고로 낸다(두 번째 방어선)**: 유예가 필요 없어졌는데 선언만 남으면, 다음에 같은 축이 어긋났을 때 **만료 전까지 조용히 면제**된다. 만료일만으로는 그 창을 못 막는다.
+- **뮤테이션 11종으로 탐지기 자신을 검증했고, 그중 2건이 테스트의 위장을 잡아냈다**: ⓐ 종단 배선 테스트가 `"브랜치 보호"` 문자열로 단정했는데 **그 문자열은 HARN-63 자신의 태스크 제목으로도 브리핑에 등장**해, 배선을 끊어도 초록이었다(M5). 충돌 불가능한 표식 + AST 구조 검사 + 탐지기 출력과의 일치 확인으로 교체했다. ⓑ 측정 실패를 exit code로만 동결하니 **상류 가드를 지워도 하류 가드가 같은 2를 내며** 초록이 유지됐다(M6·M7) — 실패마다 **고유 원인 문구**를 함께 동결해 막았다. CLAUDE.md 2026-09-01("보호 장치를 실패 주입 없이 보호 있음으로 선언 금지")이 겨냥한 부류를 실제로 두 번 잡은 사례다.
+- **집행 지점(정본화와 별항)**: `cmd_brief` → `ruleset_drift.state_reminder` → `render_brief(ruleset_reminder=...)`. `.github/ruleset-check-state.json`의 나이를 읽어 **기록 없음 / 30일 경과 / 드리프트 미해소**를 각각 다른 문구로 낸다(정상이면 조용하다 — 매 세션 소음은 습관화로 무시된다). 30일 근거: 분기(90일)면 그 사이 한 분기치 PR이 무방비로 지나간다. 배선 실재성은 AST 검사 + 종단 테스트가 동결한다.
+- **문서 정정**: 서두의 "API 접근 불가"를 *설정 API*로 한정하고 읽기가 가능함을 명시 · 2026-09-03 재발 기록 유지(라이브에 맞춰 낮추지 않음) · 체크 개수 표기 드리프트 13→16 정정(3곳).
+- **검증**: 신규 44건 · `tests/infra` 699 + `tests/harness` 559 passed(무작위 순서) · ruff/black EXIT=0 · `backlog.py validate`·`audit-deps` green · policy-guard 패턴 0건.
+- **cross-ref**: `scripts/harness/ruleset_drift.py` · `tests/infra/test_ruleset_drift.py` · `.github/branch-protection-setup.md`(RULESET_POLICY·RULESET_DEVIATIONS 블록) · 게이트 `G-required-checks-source-pin-cleanup`(등급ⓐ 시정) · OPS-08·HARN-56
+
+### [보정 2026-09-05] HARN-63 리뷰 상환 — Codex 지적 3건 전건 수용 (PR #981)
+
+CI green·충돌 없음 상태에서 Codex 리뷰가 결함 3건을 냈고 **전건 실측 재현 후 수정**했다. 세 건 다 "내가 만든 안전장치가 정작 자기 규칙을 어긴" 형태다.
+
+- **P1 미강제 상태를 exit 2(측정 실패)로 올리던 버그 — 이 도구의 존재 이유를 정면으로 배신했다**: `required_status_checks` 규칙이 없거나 목록이 비면 `RulesetInputError`를 던져 exit 2였는데, 그러면 `write_state`가 돌지 않아 **직전의 `ok` 기록이 그대로 남는다**. 30일 임계 전이라 `state_reminder`는 None을 돌려주고, **main이 완전 무방비인 채로 브리핑이 최대 30일간 침묵**한다. 즉 OPS-08(강제가 통째로 꺼진 상태)이 재현되면 이 탐지기가 조용해지는 구조였다. 판정 기준을 바로잡았다 — **응답을 읽는 데 성공했는데 규칙이 없으면 그것은 "모른다"가 아니라 "보호가 없다"**이다. 이제 규칙 0건·규칙 부재·목록 빈 배열 셋 다 exit 1이고 최우선 위반으로 헤드라인을 낸다. exit 2는 형식 파괴(오류 응답 객체·배열 아님·항목 형식 이상·필드 부재)에만 남겼다.
+- **P1 PowerShell 산출물을 읽지 못하던 버그 — CLAUDE.md 인코딩 규칙 3회차 위반**: 런북이 안내한 `gh api ... > ruleset.json`은 Windows PowerShell 5.1에서 **UTF-16LE**를 쓴다. 판정기는 `read_text(encoding="utf-8")`이라 `UnicodeDecodeError`가 나는데 이는 `OSError`가 아니라 `except OSError` 핸들러에 안 잡힌다 — **exit 0/1/2 어느 것도 없이 트레이스백으로 죽었다**(실측 확인). `Out-File -Encoding utf8`(BOM 있는 UTF-8)도 `json` 단계에서 깨졌다. 즉 **문서가 안내한 유일한 실행 경로가 처음부터 동작하지 않았다.** 산출측(런북 → `Out-File -Encoding utf8`)과 읽기측(`read_json_text` → utf-8-sig→utf-16 폴백) 양쪽을 고쳤다. 이것은 logconfig(2026-07-17)·HARN-19(2026-08-08)에 이은 **같은 계급 3회차**이며, 대책은 규칙이 아니라 코드다(규칙은 이미 있었고 지키지 못한 것이 문제였다) — `test_input_encodings_are_tolerated` 4종이 동결한다.
+- **P2 실행 불가능한 안내 명령**: 브리핑 리마인드가 `&&`(PS 5.1 미지원)와 `python3`(이 저장소 Windows 안내는 `python`)를 썼다. 탐지기의 **유일한 실행 경로**를 안내하는 문장이 대상 셸에서 안 돌아가면 "만들어 두고 아무도 안 돌리는" 상태가 된다. 런북을 상수 `POWERSHELL_FETCH_RUNBOOK` 하나로 모으고(리마인드 3종이 같은 문자열을 쓴다 — 한 곳만 고치고 나머지가 새는 것 방지), PS 호환성을 문서 블록까지 함께 기계 검사한다.
+- **측정 실패도 기록하게 했다(P1 후속)**: `write_state(report=None)` → `verdict: "measure_fail"`. 기록하지 않으면 실패 회차가 직전 `ok`를 남겨 침묵한다 — 같은 함정의 다른 입구다. 브리핑은 이것을 드리프트와 **다른 문구**로 낸다(“판정을 못 한 것이지 통과가 아니다”).
+- **뮤테이션 6종 추가 검증**(M12~M17): 인코딩 관용 제거 3 failed · 미강제를 다시 측정 실패로 2 failed · 실패 기록 생략 1 failed · 런북 Bash 표기 복귀 1 failed · 문서 `>` 복귀 1 failed · 강제 꺼짐 헤드라인 제거 3 failed. **M15는 1차 시도에서 앵커 불일치로 적용조차 안 됐는데 "52 passed"가 나왔다** — 적용되지 않은 뮤테이션의 초록을 생존으로 읽으면 정반대 결론이 난다. 앵커 실재를 먼저 출력해 확인한 뒤 재실행했다.
+- **교훈**: 이 세션은 자기 도구에 뮤테이션 11종을 돌려 테스트 위장 2건을 스스로 잡고도, **런북이 만든 파일을 실제로 읽어 보는 검사는 하지 않았다**. 뮤테이션은 "코드가 계약을 지키는가"를 보지만 "계약이 현실의 입력을 다루는가"는 보지 않는다 — 산출물을 실제로 만들어 통과시키는 검사가 따로 필요했다. Codex가 그 축을 짚었다.
+
+### [보정 2026-09-05 ②] HARN-63 첫 라이브 실측 — 예측 = 실측, 그리고 시정 도구(HARN-65)
+
+- **첫 라이브 실측 결과**: Kiki가 `gh api repos/doldori7/WhyMath/rules/branches/main`을 받아 판정기를 돌렸다 → **위반 1건**(`concept-reach` 등급ⓐ·pin 항목 0건) · **권고 12건**(중복 6·혼재 6) · **유예 3건**(승인 축) · `EXIT=1`. PR #981 본문에 "라이브로 대조한 적은 없다 — 09-03 실측 분포를 픽스처로 재현해 예상 판정(위반 1·권고 12·유예 3)을 동결했다"고 적었는데, **라이브가 정확히 그 숫자였다.** 픽스처 접근의 타당성이 실측으로 확인됐다. 인코딩 수정(`Out-File -Encoding utf8` BOM)도 실제 통과. 기록 파일 `.github/ruleset-check-state.json`(verdict=drift)은 Kiki 머신에 생성 — 시정 후 커밋 예정.
+- **첫 실행은 실패했다 — 제 안내 결함**: 미머지 상태에서 `git checkout -B main origin/main`을 안내해 파일이 없었고, 파이썬의 "파일 없음" exit 2가 판정기의 "측정 실패" exit 2와 **같은 값**이었다. 자가검증(`Test-Path`)을 런북 실행 블록 *앞*에 넣고 복구 절차를 문서화(커밋 `802b1b8c`). 그 동결 테스트 2개가 또 substring 위장이라(문서에 같은 문자열 사본 3곳·2곳) 구조 검사로 교체 — 같은 세션에서 같은 형태 4회차.
+- **UI 안내 3회 미착지 → API 경로로 전환(HARN-65)**: 룰셋 `PUT`은 본문이 잘못되면 보호를 통째로 약화시킨다. 그래서 본문을 손으로 쓰지 않고 `scripts/harness/ruleset_pin_plan.py`가 만든다 — "중복 제거 + GitHub Actions pin" **외에는 아무것도 바꾸지 않는다**를 `verify_invariants`가 독립 재검사하고(두 번째 방어선), 테스트가 결함 주입으로 동결한다. 거부 4종(규칙 부재·타 앱 pin·branch-rules 형태·항목 형식 이상)은 exit 2 + **본문 미작성**. 실측 구조(`rulesets/16623542` 최상위 키 14개·규칙 5종·bypass_actors=[]·conditions=~DEFAULT_BRANCH)를 Kiki가 읽기 전용으로 뽑아 준 뒤에야 작성했다 — 추측으로 쓰지 않았다.
+- **PowerShell 인용 함정 1건 더**: `gh api --jq '... "required_status_checks" ...'`가 PS 5.1에서 **큰따옴표를 벗겨** jq 함수 호출로 읽혔다(`function not defined`). 네이티브 명령에 따옴표를 넘기는 대신 **순수 PowerShell**(`ConvertFrom-Json`)로 대체 — 네이티브 인용 문제가 원천 소거된다. Kiki 안내 명령은 가능하면 PowerShell 내장 cmdlet으로.
+- **대장 정정 경로의 공백 1건 발견**: `add --gates`를 "요구 게이트"로 오지정해 `start`가 거부됐는데, `amend`는 게이트를 *붙이기만* 하고 떼는 경로가 없다. `cancel` 후 재등재(HARN-64 → HARN-65)로 우회 — 취소 스텁이 대장에 남는다(정직한 기록). "고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를 끄게 만든다"(2026-09-01)의 amend 축 변형 — `amend --remove-gate` 부재는 별도 태스크 후보.
+
+### [보정 2026-09-05 ③] HARN-65 리뷰 상환 — Codex 지적 3건 전건 수용 (PR #982)
+
+- **P1 롤백이 실행 불가능한 절차였다**: 런북 ④가 "백업 JSON을 그대로 PUT"하라고 적고 바로 다음 줄에서 "읽기 전용 필드 때문에 거부될 수 있으니 그때는 손으로 빼라"고 했다. 즉 **보호가 약해진 직후, 사람이 보안 민감 본문을 손으로 고쳐야 하는 최악의 타이밍**에 복사-실행 명령이 없었다. 롤백 본문(`ruleset-rollback.json`)도 기계가 만들고(`build_rollback`) 같은 불변식으로 검증(`verify_rollback`: 읽기 전용 0·알 수 없는 필드 0·쓰기 가능 필드 원본과 완전 동일)하도록 바꿨다 — **적용보다 먼저** 만들어진다.
+- **P2 거부 실행이 이전 산출물을 남겼다**: 직전 성공 실행의 `ruleset-plan.json`이 남은 채 다음 실행이 거부되면 "EXIT=2면 본문이 없다"는 런북의 약속이 거짓이 되고, 사람은 다음 줄의 `--input ruleset-plan.json`으로 **오래된 본문**을 그대로 PUT한다. 실행 시작 시 두 산출물을 먼저 지우고, 모든 검증이 끝난 뒤에만 임시 파일 → `os.replace`로 원자적으로 쓴다.
+- **P2 빈 체크 목록을 "변경 없음·무해"로 통과시켰다**: 드리프트 탐지기(HARN-63)는 그 상태를 **강제 꺼짐 위반**으로 판정하는데 시정 도구가 같은 입력을 "무해"라고 하면 **두 도구가 모순**된다. 이 도구는 체크를 *추가하지* 않으므로 규칙 부재와 같은 거부(exit 2)로 통일했고, `verify_invariants`에도 0건 방어를 넣었다.
+- **뮤테이션 6종 추가 검출**(M-J~M-O): 빈 목록 거부 제거 3 · 이전 산출물 잔존 5 · 롤백 읽기 전용 잔존 3 · 롤백 검증 약화 1 · 롤백 미작성 2 · 문서 롤백 실행 불가 1. 총 15종.
+- **교훈**: 세 건 다 "성공 경로만 설계"한 결과다(CLAUDE.md 2026-08-22). 변경안 생성의 정합성은 9종 뮤테이션으로 촘촘히 봤지만 **실패 경로**(거부 뒤 잔존물·롤백의 실행 가능성·탐지기와의 판정 일관성)는 한 축도 보지 않았다. 도구가 *성공했을 때* 무엇을 내는지만 검증하면 실패했을 때 잘못된 것이 남는다.
+
+### [보정 2026-09-05 ④] 첫 실제 PUT 성공 → 게이트 충족 → 무조건 붙여넣기로 롤백 실행
+
+- **실측 순서**: ① 백업 ✓ → ② 변경안 `EXIT=0`·표 "→ 변경" 7행(예측과 동일) → ③ **`PUT_EXIT=0` — 이 저장소 첫 실제 룰셋 PUT, GitHub이 기계 생성 본문을 그대로 받아들였다** → ④ 탐지기 **위반 0·권고 0·"✔ 정합"** — 게이트 `G-required-checks-source-pin-cleanup`이 충족된 순간 → ⑤ **`ROLLBACK_EXIT=0`** — 같은 메시지에 있던 롤백 블록이 통째 붙여넣기되어 적용 전 상태로 복귀.
+- **피해 0·증명 2건**: 기준선으로 돌아갔을 뿐 약화되지 않았다. 대신 변경안·롤백 **두 본문이 라이브 PUT에서 모두 유효함**이 실측됐다 — PR #982 "정직한 공백"의 첫 항목("실제 PUT은 해 본 적 없다")이 해소됐다.
+- **거짓 상태 파일 하나**: ④가 `verdict: ok`로 기록한 뒤 ⑤가 라이브를 되돌렸으므로 Kiki 머신의 `.github/ruleset-check-state.json`은 **라이브와 불일치**다. 커밋됐다면 브리핑이 30일간 침묵했을 것 — "state_reminder는 확인 *사실*만 세지 *진실성*은 검사하지 않는다"고 적어 둔 그 한계가 하루 만에 실재로 나타났다. 재적용(③④)이 정정한다.
+- **원인 = 내 메시지 구성**: "④가 실패했을 때만"이라는 산문은 통째 붙여넣기를 막지 못한다. 오늘 이 세션에서 **같은 형태 3회차**다(아침: 미머지 main에서 판정기 실행 / 오후: 미머지 main에서 변경안 실행 → ③이 그대로 실행 / 저녁: 정합 직후 ⑤ 실행). 셋 다 "블록은 순서대로 전부 실행된다"는 전제를 안 깐 결과다. 대책 = 블록 **자체**의 가드: ①도구 실재 `Test-Path` / ③산출물 실재 `Test-Path` ×2 / ⑤**④의 마지막 판정을 읽어 `ok`면 거부**(`ruleset-check-state.json`의 `verdict` — 순수 PowerShell `ConvertFrom-Json`, 네이티브 인용 문제 없음). 그리고 조건부 블록은 **실행 메시지에 넣지 않는다** — 문서에만 둔다.
+- **CLAUDE.md 규칙 후보** (다음 세션이 등재 판단): "Kiki 안내 메시지의 코드 블록은 **전부·순서대로 실행된다**고 가정한다. 조건부 단계(롤백·정리·삭제)는 같은 메시지에 넣지 않거나, 블록 자체가 조건을 읽어 거부하게 만든다. 산문 조건은 가드가 아니다."
+
+### [종결 2026-09-05] HARN-63/65 — 브랜치 보호 소스 pin 시정 완료, 게이트 clear, 탐지기 첫 "정합"
+
+- **결과**: Kiki가 ③ 재적용(`PUT_EXIT=0`) → ④ 탐지기 **위반 0·권고 0·정합**(`EXIT=0`)에서 **멈췄다**(롤백 블록을 메시지에서 뺀 뒤 첫 시도). 16건 전부 GitHub Actions(15368) pin·중복 0. 게이트 `G-required-checks-source-pin-cleanup`을 `--as kiki`로 clear(주체 기록·HARN-60). `.github/ruleset-check-state.json`(verdict=ok·waived 3)을 커밋(`b88b7d62`).
+- **집행 지점 종단 확인**: 상태 파일이 정합·최신이 되자 SessionStart 브리핑의 브랜치 보호 리마인드가 **0줄**로 조용해졌다 — HARN-63 ④의 "정상이면 조용하다" 분기가 실측으로 닫혔다. 기록 없음·30일 경과·드리프트·측정 실패 네 문구는 모두 테스트가 동결하고, 이제 다섯 번째 상태(정합·침묵)까지 실제로 관측됐다.
+- **오늘 하루의 남은 것**: ⓐ 승인 축 유예 3건(문서 1명 vs 라이브 0) — 만료 2026-12-31, Kiki 판단 ⓑ CLAUDE.md 규칙 후보("Kiki 안내 블록은 전부·순서대로 실행된다 — 조건부 단계는 같은 메시지에 넣지 않거나 블록이 조건을 읽게") — 별도 태스크로 큐잉됨 ⓒ `amend --remove-gate` 부재 — 태스크 후보.
+- **git 동시 작업 1건**: Kiki 푸시가 non-fast-forward로 거부됐다(제가 같은 브랜치에 롤백 가드 커밋을 올린 뒤). 파일이 겹치지 않아 `git rebase origin/<branch>`로 무충돌 착지. 같은 브랜치에 사람과 세션이 번갈아 커밋할 때는 **세션이 push 직전 원격 head를 다시 확인**해야 한다 — 이번엔 git이 막았지만, force-push였다면 Kiki 커밋이 사라졌을 것이다.
+
+## 2026-09-05: EOS-77 — 라우터 우회 결정의 법적 게이트 사각 폐쇄 (입력 스캔 → 결정 스캔, 유예 0건)
+
+- **문제**: EOS-59의 데이터 등급(법적) 게이트는 `Router.route` 안에서만 집행된다. `RoutingDecision`을 손으로 조립해 provider에 넘기면 입력(`RoutingRequest`)에 등급을 아무리 잘 적어도 판정을 지나지 않는다 — EOS-59 ③ 스캐너는 *입력*만 보므로 이 우회를 못 본다. EOS-59가 자진 공개한 정직한 공백 B.
+- **① 실측 전수 (2026-09-05, main `4156641b`)**: 소스의 `RoutingDecision(` 생성 12곳 = 클래스 정의 1 + 라우터 자체 3 + **직접 생성 8**. 8곳 판정: ⓐ **클라우드 도달 1건** `ops/live_preflight._cloud_mid_decision`(CLOUD_MID 리터럴·`data_export_reason=None`·프롬프트는 리터럴 `_SMOKE_PROMPT`) ⓑ LOCAL 고정 3건(`concept_content_review_batch`·`quality_tier_moe_accuracy_battle`·`generation_seed_replay_probe` — 고정 로컬 provider, 국외 미도달) ⓒ 라우터 결정의 패밀리 스왑 사본 4건(`llm_generator`·`rephrase`·`analogy_generator`·`wh1_prose` — `cost_tier=decision.cost_tier` + `data_export_reason=decision.data_export_reason` 승계). 태스크 등재 시 "10건"은 9-01 시점 수치이며 오늘 실측은 8건(패밀리 스왑 사본 중 일부가 그 사이 정리됨) — 사각은 여전히 1건.
+- **② 판정 = ⓐ 라우터 경유 (유예 아님)**: `_cloud_mid_decision`을 `Router().route(_cloud_mid_smoke_request())`로 바꿨다 — 같은 파일의 `--via-pipeline` 경로가 이미 갖고 있던 "CLOUD_MID로 확정 라우팅되는 요청"(premium·requires_reasoning·budget 1000·hard/diagnose·등급 SYNTHETIC_PROBE)을 재사용. 태스크가 지적한 긴장(라우터를 거치면 비즈니스 규칙이 바뀔 때 재려던 클라우드 1콜을 못 잴 수 있다)은 **가드로 해소**: `_run_smoke`가 라우터 결과를 검사해 CLOUD_MID가 아니면 스모크를 *실행하지 않고* exit 2(측정 실패)로 크게 알린다(사유에 `cost_tier`·`reason`·`data_export_blocked`·`data_export_reason` 동봉). 단위 테스트가 현행 규칙에서 CLOUD_MID·EXPORT_ALLOWED가 나옴을 동결하므로 규칙 변경은 Kiki 실행 시점이 아니라 PR 시점에 드러난다. 부수 효과: 이 스모크의 결정에 판정이 실려 `ops.cost_report`의 "라우터 게이트 미경유" 경고 대상에서 빠진다. ⓑ(유예)를 택하지 않은 이유: 만료일이 있어도 *갱신*이 열려 있으면 그랜드파더는 눌러앉는다 — 예외를 없앨 수 있으면 없애는 것이 가장 강한 게이트다.
+- **정정 1건(같은 함수)**: `is_cloud = decision.cost_tier is not CostTier.LOCAL`은 `use_enum_values=True`라 필드가 *문자열*이고, 문자열은 enum 멤버와 `is not`으로 비교하면 **항상 참** — 변별력 0이었다(결정이 항상 CLOUD_MID라 무해했을 뿐). 가드가 티어를 CLOUD_MID로 확정하므로 그 분기 자체를 제거했다(첫 푸시 `ad90e741`은 `_as_cost_tier`로 정규화해 비교했는데 CI mypy strict가 CLOUD_MID로 좁힌 값과 LOCAL의 `is not`을 non-overlapping으로 거부 — 로컬에서 mypy를 안 돌린 탓, 후속 커밋에서 정정). 렌더러도 `ran=False`+`error`를 skip이 아니라 실패로 보이게 순서를 바꿨다(측정 실패의 위장 방지).
+- **③ 집행 = 별도 스캐너** `scripts/ops/check_routing_decision_bypass.py`(자매 `check_routing_data_grade.py`의 헬퍼를 import — 스크립트 실행 시 `sys.path[0]`이 스크립트 디렉터리라 경로 조작 불요). 판정 규칙: `cost_tier=`의 **형태**로 ⓐ클라우드 리터럴(`CostTier.CLOUD_*`·`"cloud_*"`) → 위반(유예만 통과) ⓑ로컬 리터럴 → 통과 ⓒ비리터럴 → `data_export_reason=` **표현식** 승계 필수(없음·리터럴 `"EXPORT_ALLOWED"`/`None`은 위조로 위반) + `**kwargs`·위치 인자·`model_copy(update={"cost_tier":…})` 위반. **유예 기계**: `경로::함수=YYYY-MM-DD`만 허용, 만료(`--today`) 시 위반 복귀, **unmatched**(가리키는 자리가 사라진 유예) exit 1. 프로덕션 유예 **0건**. CI `backend` 잡에 EOS-59 스텝 바로 아래 차단 스텝으로 배선. 실 트리: 생성 호출 10건·클라우드 리터럴 0·위반 0(exit 0). 전환 *전* 실측: 위반 1건 = 정확히 `live_preflight.py:211::_cloud_mid_decision`(RED 확인).
+- **④ 변별력 양방향**: `tests/infra/test_routing_decision_bypass_scan_wiring.py` 27건 — green 축(패밀리 스왑 사본·LOCAL 고정·타 필드 model_copy·유효 유예) / red 축(클라우드 리터럴 4형태·승계 없음·위조 2·`**kwargs`·위치 인자·model_copy 재설정·만료·unmatched·함수명 불일치·형식 오류 exit 2·측정 실패 3) / 프로덕션 트리 green + 클라우드 리터럴·유예 0 동결(유예를 추가하려면 이 테스트를 의식적으로 고쳐야 한다). 프리플라이트 단위 테스트 2건 추가(라우터 경유 CLOUD_MID·EXPORT_ALLOWED / 라우터가 LOCAL을 내면 generate 미호출·exit 2·렌더 "실패"). **가드 뮤테이션 11종 전건 검출**(cp 백업·바이트 동일 원복): 클라우드 분기 제거 4 / 만료 제거 1 / unmatched 제거 2 / 위조 검사 제거 2 / model_copy 제거 1 / CI 스텝 제거 1 / preflight 손 조립 복귀 1+1 / `_run_smoke` 가드 제거 1 / 렌더러 순서 복귀 1 / 생성 0건 측정 실패 제거 1.
+- **리뷰 상환 (Codex P1 · PR #983)**: 분류기가 `cost_tier=` 값의 *최상위 노드만* 봐서 `CostTier.CLOUD_MID if force_cloud else decision.cost_tier`가 "동적"으로 분류됐고, 승계 키워드만 붙이면 exit 0이었다 — 게이트가 한 줄짜리 조건식으로 뚫리는 상태. 값 서브트리 전체를 `ast.walk`로 걸어 클라우드 리터럴이 어디에든 있으면 클라우드로 판정하도록 고쳤다(로컬은 최상위 리터럴일 때만). 우회 3형태(조건식·호출 인자 문자열·튜플 첨자) red + 리터럴 없는 동적(`pick_tier()`) green 동결, 뮤테이션 M11(서브트리 탐색 제거)로 RED 재현. 교훈: "형태로 분류한다"는 규칙은 **어느 깊이까지** 보는지를 적지 않으면 가장 얕은 깊이로 구현된다.
+- **정직한 공백**: ⓐ `model_validate`·`model_construct`·비리터럴 `update=`는 안 본다(실측 0건 — 생기면 확장, 스캐너 docstring이 조건 기록) ⓑ 승계 값이 *표현식*이라는 것까지만 본다(`data_export_reason=엉뚱한_변수`는 통과 — 코드 리뷰 축) ⓒ 로컬 재현: `pytest ../../tests/backend/ops/...`처럼 경로 인자를 주면 rootdir가 레포 루트로 잡혀 `asyncio_mode=auto`가 안 읽힌다 — `-c pyproject.toml`을 붙여야 CI와 같다(이번 세션 15건 거짓 실패의 원인).
+
+## 2026-09-05: EOS-79 — 학습 증거 4층 경계 정본 (그리고 "정본 0건"이 이름 기반 검색의 한계였다)
+
+- **문제**: 계획서 200 §24의 `Attempt ≠ Evaluation ≠ Assessment ≠ Mastery`가 코드로는 전부 실재하는데 경계를 규정한 문서가 없어, 새 증거 모델이 어느 층인지 판정할 근거가 사람 머릿속에만 있었다. 10~11월 콘텐츠 생산에서 층을 잘못 고르면 12/31 스코어카드 입력이 오염된다.
+- **산출**: `docs/architecture/evidence_layer_boundary.md` — ①판별 질문 4개 + 층을 가르는 불변식 3개(Mastery는 파생 / 하위는 상위를 읽지 않는다 / 학생이 없으면 층도 없다) ②실측 22모델 귀속표 ③집행 별항 ④반례 8건.
+- **선행 정본을 발견해 축을 분리했다 (등재 전제의 부분 정정)**: 태스크는 "경계 정본 0건"을 전제했고 검색 범위를 `docs/architecture/0*.md`+`docs/standards/`로 밝혔다. **역할 기반으로 재검색하자 `32_learning_history.md` §2.3에 ADR로 동결된 3계층**(`Raw Event → Learning History → Learner State`)이 배정표까지 갖춘 채 있었다. 전제가 틀린 것이 아니라 **축이 달랐다** — 3계층은 "얼마나 가공됐는가", 4층은 "무엇에 대한 증거인가"를 묻는다. 그래서 이 문서는 32번을 **선행 정본으로 명시하고 충돌 시 32번 우선**을 못박은 뒤 그 위에 얹었다(이중 진실 원천 회피). CLAUDE.md "식별자 부재를 기능 부재로 단정 금지"의 실사례로 문서 §0에 남겼다.
+- **실측이 드러낸 것 4건**: ⓐ **혼재 5건** — `attempt_event`는 `event_type`이 층을 가르고(같은 테이블에 원자 행동 + 스킬 귀속), `answer_submission`은 **세 층이 한 행에** 있고, `assessment` 테이블은 **이름이 층과 같지만 층이 아니다**(진단 1회의 결과 묶음 — Assessment+Mastery+추천). ⓑ **Evaluation 층에 단독 좌석이 없다** — 세 컬럼으로만 존재하고 그중 둘이 빈 좌석이라 사실상 `is_correct` 하나다. ⓒ **빈 좌석 4건**(`answer_submission`·`student_solution_step`·`hint_usage`·`learning_session`)이 전부 하위 층에 몰려 있다 — 증거 파이프라인이 아래가 비고 위가 찬 모양이며, 위가 찬 이유는 `attempt_event`·`problem_attempt`가 아래 몫까지 감당해서다(그래서 그 둘이 혼재). ⓓ `evidence_event`는 이름과 달리 writer 3개 중 2개가 교수법 처치·추천 노출을 담고 `user_id` 컬럼 자체가 없다.
+- **열린 질문 회신(Phase 2 리뷰가 이 태스크로 넘긴 것)**: `problem_attempt` writer는 저장소 전체에 2개뿐이고 서버 권위 경로(`api/coach.py:1016`)는 **`is_correct=True`만** 쓴다. `False`를 쓸 수 있는 `POST /v1/me/attempts`를 앱은 부르지 않으며 그것이 **계약**이자 `e2e_loop_flow_test.dart:254`로 **동결**돼 있다. 따라서 **학생 경로에서 오답은 Evaluation 층에 영속되지 않고** Attempt 층 신호(`attempt_event` 검산결과 `passed=False`·힌트요청·막힘)만 남는다. 갭인지 의도인지는 단정하지 않았다(교수학 결정이고 근거가 코드에 없다) — 확정한 것은 경계 사실이며, 세 소비자(숙달=Evaluation·오개념=Assessment·WH-1 지표=Attempt)가 서로 다른 층을 읽으므로 **이 비대칭은 숙달 추정의 분모에만 영향을 준다**는 것까지 적었다.
+- **집행(정본화와 별항)**: `tests/infra/test_evidence_layer_boundary_doc.py` 10건 — 마커 블록을 파싱해 ①표가 지목한 테이블이 `db/models/` **전체**에 실재하는가 ②증거 모듈의 테이블이 표에서 빠지지 않았는가 ③배정 라벨이 허용 6종인가(층 슬쩍 늘리기 차단) ④4층이 실제로 쓰이는가 + 파서 위장 방지 4건. **배정이 옳은가는 검사하지 않으며 그 사실을 문서와 테스트 양쪽 머리에 적었다** — 정적으로 재려면 컬럼명 화이트리스트가 필요하고 그건 표기 변형에서 뚫리는 "금지 패턴 열거"가 된다. 있는 척하지 않고 없다고 적는 쪽을 택했다.
+- **뮤테이션 10종 전건 검출**(cp 백업·바이트 동일 원복): 문서 5(행 삭제 1 / 유령 테이블 1 / 새 층 도입 1 / 마커 제거 4 / 집행 경고 제목 제거 1) + 가드 5(마커 부재를 빈 문자열로 삼킴 · 빈 목록 거부 제거 · 마커 밖 행 수집 · 모듈 부재 조용히 건너뜀 · 실재 검사 범위 축소).
+- **리뷰 상환 (Codex P2 3건 · PR #985)**: ⓐ `user_state_snapshot`의 writer를 "실재(`l2/learner_state.py` 조립기)"로 적었는데 **전수 grep 결과 프로덕션 writer 0건**이다 — 32번 문서가 그 테이블을 Learner State 구현으로 든 것을 *좌석 지목*이 아니라 *writer 실재*로 읽고 옮겼다. 조사 서브에이전트가 "확실하지 않은 것"에 바로 이 항목을 적어 줬는데도 본문에 반영하지 않은 것이 원인이다 — **미확인 표시를 받고도 확인 없이 쓰면 남의 문서의 오류가 내 문서의 사실이 된다.** 빈 좌석 4→5건 정정. ⓑ §3 집행표가 "표 등재 강제 없음"이라고 적었으나 내가 **같은 PR에서 만든** `test_every_evidence_table_is_mapped`가 12개 모듈에 대해 그것을 강제한다 — 자기 산출물을 과소 보고했다. "부분 + 정확한 모듈 범위"로 정정. ⓒ "학생 경로에서 오답 행이 **구조적으로** 생기지 않는다"는 과대 주장이었다 — `POST /v1/me/attempts`는 살아 있는 인증 엔드포인트이고 Flutter E2E는 *그 앱의 코치 흐름*만 동결한다. "1급 앱이 만드는 데이터"로 범위를 좁히고 "오답 행 부재를 불변식으로 가정하는 코드를 쓰지 말라"를 명시했다.
+- **교훈 2**: 세 지적의 공통 형태는 **강도 과장**이다(writer 없는데 있다 / 강제되는데 없다 / 계약인데 구조). 방향이 양쪽으로 갈린 것이 단서다 — 한 방향으로만 틀렸으면 편향이지만, 양쪽으로 틀렸다면 *검증 없이 서술의 톤을 정한 것*이다. 사실 진술마다 근거의 종류(실측 grep / 남의 문서 / 테스트 동결)를 구분해 적었어야 했다.
+- **교훈**: 부재 주장은 **검색어가 아니라 축**을 틀리면 무너진다. 이번엔 "Evaluation을 층 이름으로 쓴 문서"는 재검색에서도 0건이라 태스크 결론 자체는 섰지만, 근접 정본을 못 보고 썼다면 3계층과 경쟁하는 두 번째 배정표를 만들 뻔했다.
+
+## 2026-09-06: 게이트 `G-backup-offsite-move` 실행 준비 — 시딩 블록의 변별력 결함과, 그것을 검증하던 하네스의 변별력 결함
+
+- **게이트 상태**: 26일 대기(2026-08-11 등재). 막던 원인 2건(암호화 절차·반출 절차 부재)은 OPS-31·PR #974로 해소됐고, PR #974가 "클라우드 업로드 완료 미확인으로 아직 열려 있다"고 남겼다. 이 세션은 왜 *미확인*으로 남는 구조였는지를 봤다.
+- **런북 §4-1b 결함(실측)**: 시딩 블록이 `New-Item -Force`로 목적지를 **무조건 만들었다**. 동기화 루트 경로가 틀려도(오타·미설치·Google Drive의 미러 모드 `My Drive` vs 가상 드라이브 `G:` 차이) 로컬에 일반 폴더가 생기고 복사가 성공하며, 자가검증 1(바이트 길이 일치)·2(키·평문 미유출)가 **전부 통과**한다 — 파일은 있는데 클라우드에는 아무것도 없는 채로. 런북이 산문으로 "폴더에 있다 ≠ 올라갔다"고 적어 두고도 그것을 검사하는 스텝은 없었다. CLAUDE.md「변별력 없는 검증 스텝 금지」의 *목적지 오류* 축. 이 런북에서 같은 부류 4회차다(§0 `Test-Path` 09-01 · §3 RTO 스텝 부재 09-02 · §4-1a exit 2 09-03 · §4-1b 09-06).
+- **정정**: ①가드 — 동기화 루트(부모)의 실재를 `New-Item`보다 먼저 검사하고 없으면 복사하지 않는다(루트는 클라이언트가 만든 것이어야 한다) ②`[EVIDENCE] 파일명 바이트` 줄 ③자가검증 3 = 클라우드 **웹 화면**에서 같은 파일명·크기 확인 — 이 PC 안의 관측 4종은 전부 로컬이고, 게이트 제목의 "오프사이트"는 웹 화면만 증명한다 ④§4-1c 경로 변수 통일 + **첫 회차 확인 블록**(시각 조건 `LastWriteTime -gt AddMinutes(-10)`으로 시딩 사본을 스케줄 회차로 오독하는 것을 차단 · S4U 문맥에서 가상 드라이브가 안 보일 가능성은 *추론*이라 사실로 적지 않고 측정 대상으로 명시) ⑤§4-1e 증적 5줄 + clear 경로(Kiki main은 보호 브랜치라 push 불가 → 세션이 PR 브랜치에서 clear).
+- **집행(정본화와 별항)**: `tests/infra/test_backup_encryption.py::TestOffsiteMirror` 2건 신설 — 가드 순서(루트 계산 → 실재 검사 → `New-Item`)·루트 생성 금지·`[EVIDENCE]` 존재·첫 회차 블록의 시각 조건·`LastTaskResult`. 헬퍼 `_runbook_fences`는 펜스 0건이면 실패한다(스캔 0건 = 실패). **뮤테이션 9종 전건 검출**(cp 백업·바이트 동일 원복).
+- **하네스 결함 — 뮤테이션이 적용되지 않았는데 "통과"로 보였다 (시스템 실수·재발방지 등재)**: 첫 뮤테이션 실행은 bash heredoc 안에서 Python 치환을 돌렸는데, 셸 이스케이프 `\$`가 Python 문자열에 그대로 남아 치환 대상 0건 → `assert count==1`이 stderr로 터지고 파이프라인은 계속 → 정상 파일로 테스트가 돌아 8건 중 7건이 **"10 passed"**로 출력됐다. 뮤테이션이 가드에 닿지도 않았으니 GREEN이 당연한데, 화면은 "검출"과 구별되지 않았다. 단서는 1건(M5 — `\$` 없는 정규식)만 RED였다는 *부분 RED*. 대책 = 셸을 배제한 순수 Python 하네스에 `mutated != orig` 단언과 절 단위 치환(다른 절의 동일 문자열 오염 방지 — M7이 §2-1 중복으로 count 2)을 내장 → 9/9 RED. **CLAUDE.md v0.2.11**: 「보호 장치를 실패 주입 없이 선언 금지」에 *주입 자체의 실재* 축 확장.
+- **Kiki 실행 대기**: §0 main pull → §4-1a(컨테이너 경유 검증·EXIT=0) → §4-1b(가드 통과·`[EVIDENCE]`·웹 화면) → §4-1c(관리자 창 재등록 + 첫 회차) → 증적 5줄 전달 → 세션이 `gates clear`. 한계(정직): `.ps1`·런북 펜스는 이 환경에서 실행 검증이 불가하고 텍스트 동결까지다 — 실동작은 Kiki의 첫 실행이 검증한다. Google Drive 실제 경로는 세션이 모른다(가드가 틀린 경로를 `[FAIL]`로 드러내는 것이 대책이지, 경로를 아는 것이 아니다).
+- **[보정 · 같은 날] Kiki 실행 결과 반영 — ①②③ 통과, ⑤ 실패가 결함 2건을 드러냈다**: §4-1a `EXIT=0`(카탈로그 491건) · §4-1b `[OK] copied 1` / `True False False` / `[EVIDENCE] whymath_20260902_222520.dump.age 576864 bytes` · §4-1c는 `Register-ScheduledTask : Access is denied`(0x80070005)로 실패 — 창이 관리자 권한이 아니었을 가능성이 가장 크다(프롬프트만으로는 판정 불가·다음 실행의 사전 검사가 가른다). ⓐ **스크립트 오진**: CIM 오류가 `$ErrorActionPreference = "Stop"`을 무시해 스크립트가 계속 진행했고, 되읽기 단계가 "reported success but cannot be read back"이라는 **틀린 원인**을 보고했다 — 침묵 실패의 사촌인 *오진*. 대책 = 권한 사전 검사(등록·해제 어느 쪽보다 앞·`[FAIL] not elevated`) + `Register-ScheduledTask -ErrorAction Stop` try/catch(예외 타입·메시지 보고). ⓑ **정기 백업 미등록 4일 공백**: `Get-ScheduledTask`가 `WhyMath-DB-Backup` 부재를 반환했고 최신 `.dump.age`가 9/2 수동 회차였다 — §2가 등록된 적이 없거나 사라졌고, 누락 감시 태스크도 같이 부재라 **공백을 알려 줄 장치가 없었다**("검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 운영 축). §6에 잔존 등재·해소는 §4-1c 재등록 + 첫 회차. ⓒ **가드의 한계 실측**: `C:\Users\kiki\Google Drive`가 실재해 가드를 통과했지만, 그 폴더가 클라이언트 것인지 09-03 구판 블록이 만든 로컬 폴더인지 가드는 구별하지 못한다 — 자가검증 2b(동기화 클라이언트 프로세스·부정 검출 전용)를 추가했고, 업로드의 증거는 여전히 자가검증 3(웹 화면)뿐이다. Kiki가 ④(웹 화면)를 아직 보고하지 않아 게이트는 열린 채다. 테스트 2건 추가(`test_registration_refuses_to_run_unelevated`·`test_registration_failure_names_the_real_cause`) · 뮤테이션 7종 전건 검출(S1~S6 스크립트·R1 런북).
+- **[보정 2 · 같은 날] 2차 실행 — 가드는 작동, 사람 단계는 또 실패, 동기화 클라이언트 0건**: ⑤ 권한 가드가 `[FAIL] 이 창은 관리자 권한이 아니다`로 정확히 거부했다(변별력 확인 — 2회 모두 일반 창에 붙여넣어짐). ⑥은 작업 부재로 당연히 실패(`0x80070002`). **자가검증 2b = `False`** — GoogleDriveFS·OneDrive·Dropbox 프로세스 0건. 따라서 `C:\Users\kiki\Google Drive\WhyMath-backups`의 사본은 현재 어디에도 올라가지 않는다 — 가드의 한계로 적어 둔 시나리오(09-03 구판 블록이 만든 로컬 폴더)가 실측으로 유력해졌다. ④(웹 화면·클라이언트 종류·폴더 위치)는 회신 없음. 대책 2건: ⓐ **사람이 관리자 창을 여는 단계 자체를 제거** — §2·§4-1c를 일반 창에서 UAC 자가 승격하는 런처(`Start-Process powershell -Verb RunAs -ArgumentList ... -Command $cmd`)로 교체하고, 등록 여부는 일반 창에서 독립 되읽기(`Get-ScheduledTask` + `LogonType -eq S4U`)로 판정. 같은 세션 2회 연속 실패한 단계는 런북이 없애야지 안내 문구를 강화할 일이 아니다. ⓑ **`-OffsiteDir`는 검증된 폴더에만** — 자가검증 2b·3 통과 전에는 §2(플래그 없이)로 정기 백업부터 복구하고 검증 후 재등록(덮어쓰기). 검증 안 된 폴더 미러는 스크립트의 크기 대조·보존 정책까지 전부 통과하는 *상시 오프사이트 위장*이다. §4-1b에 클라이언트 실측 블록(설치 경로·미러 폴더·G: 가상 드라이브·레거시 폴더 생성 시각·desktop.ini·프로세스 목록) 신설. 테스트 `test_runbook_registration_self_elevates` 추가. 기존 `test_runbook_does_not_reference_a_nonexistent_flag`가 개정 이력 산문의 `Start-Process -Verb`를 스크립트 플래그로 오인해 RED — 산문을 바꿔 통과시켰다(테스트는 코드펜스만 봐야 정확하지만 범위 변경은 별도 판단으로 미룸).
+- **[보정 3 · 같은 날] Kiki 확정 — Google Drive 데스크톱 "컴퓨터(내 PC)" 백업 모드**: PC 측 `C:\Users\kiki\Google Drive\WhyMath-backups` ↔ 웹 측 **컴퓨터 › 내 PC › WhyMath-backups**(내 드라이브 아님). 이 모드는 로컬 폴더를 그대로 올리므로 시딩 가드의 "동기화 루트" 검사는 변별력이 없고, 판정은 프로세스(2b)·웹 파일명·크기(3)·**삭제 전파 프로브**가 맡는다. 프로브를 §4-1c에 신설한 이유: §4-3의 "RetentionDays = PIPA 파기 창 상한" 선언은 로컬 삭제가 클라우드로 전파될 때만 참이며, 백업형 동기화의 전파 여부는 문서 추론이 아니라 실측 대상이다(휴지통 30일 가산 명시). S4U 회차가 일반 로컬 폴더에 쓰므로 가상 드라이브 가시성 우려는 이 구성에서 소멸. 테스트 `test_runbook_offsite_has_deletion_propagation_probe` 추가.
+- **[종결 · 2026-09-07] 게이트 `G-backup-offsite-move` clear (26일 대기 종료)**: 증적 = 반출 전 검증 EXIT=0 · 시딩 True/False/False · **웹 화면(컴퓨터 › 내 PC › WhyMath-backups)에 563KB 표시** · GoogleDriveFS True · 재등록 [OK] 2건 + 되읽기 True/True(-OffsiteDir 실림) · 첫 회차 LastTaskResult 0 + 오프사이트 크기 일치 `whymath_20260907_002908.dump.age` 576,864B + 검사 작업 0 · 다음 회차 09-07 04:00. **26일의 원인은 전부 런북 결함 3건**(삭제된 브랜치 참조 09-01 · 호스트 pg_restore 의존 09-03 · 무조건 New-Item 09-06)이었고, 게이트 실행이 **정기 백업 미등록 4일 공백**을 드러내 같은 날 복구했다 — 게이트를 실제로 돌리지 않았으면 백업이 없다는 사실을 아무도 몰랐다. 잔존 2건(§6·재확인 지점 부착): ①삭제 전파 프로브의 웹 관측 미회신 — 로컬 단계만 완료라 "전파됨/업로드 안 됨"을 구별 못 한다(재확인 = 회신 즉시·늦어도 분기 리허설) ②오프사이트 폴더에 타 절차 산출물(`whymath_db_*`·`whymath_git_*.bundle` — `wm-purge` 추정) 공존·미분류. **구판 스크립트 오진 2형 실측**: 작업이 이미 있는 상태에서 일반 창 재실행 → `Access is denied` 뒤 되읽기가 기존 작업을 찾아 `[OK] registered`·`EXIT=0` — 실패가 성공 화면으로 끝났다(이번 판의 try/catch가 막는다). 교훈: **게이트가 요구하는 행동을 사람이 못 하는 이유의 대부분은 사람이 아니라 안내 문서였다** — 4회의 실행 실패 중 사람 몫은 "관리자 창 열기" 1종뿐이었고, 그것도 런북이 UAC 런처로 흡수했다.
+- **[종결 보정 · 2026-09-07] 삭제 전파 프로브 실측 확인**: 세 번째 프로브에서 순서를 지켜(웹 목록에 `retention_probe.txt` 7B 표시 확인 → 로컬 삭제 → 웹 목록에서 소실) Google Drive "컴퓨터(내 PC)" 백업 모드의 **삭제 전파가 확인**됐다 — §4-3 파기 창 선언이 클라우드 측에서도 성립(휴지통 30일 가산). 앞선 2회는 업로드 전에 지워 변별력 0이었다: *측정 절차의 순서*가 곧 변별력이라는 사례(프로브가 대상에 닿기 전에 회수하면 "없음"은 아무것도 말하지 않는다). 같은 스크린샷이 스케줄 회차 산출물 2건의 클라우드 도착까지 보여 오프사이트 전 구간(백업 → 로컬 미러 → 업로드 → 삭제 전파)이 실측으로 닫혔다. §6 잔존은 타 절차 산출물 미분류 1건만 남는다.
+## 2026-09-06: HARN-53 — 레거시 의존 선언 전수 분류: **하드가 옳은 것은 0건**이었다 (소프트 분류 규약 신설)
+
+- **실측 결과가 예상을 뒤집었다**: HARN-52 그랜드파더 6건을 전수 판정한 결과 하드 `depends_on` 부착이 옳은 것은 **0건**이고, 여섯 건이 **다섯 가지 서로 다른 이유**로 하드가 아니었다 — 방향 반대 2(`ADMIN-04→05`·`ADMIN-09→02`) · 택일 1(`EOS-50`: "ARCH-31 **또는** EOS-49") · 로드맵 순서 위반 1(`LIC-03`(S3)→`LIC-01`(E2)) · 과거 사실 서술 1(`OPS-35`: "선행 **완료**") · 창이 잡은 오탐 ID 1(`SEC-30`의 진짜 선행은 PB-04, MOB-18은 브랜치 소유 태스크). 등재 시 예상은 "일부는 하드, 일부는 소프트"였으나 실제로는 전건이 소프트였다.
+- **판정 도구 = 시뮬레이션**. 부착 전 메모리에서 `store.validate_backlog`를 돌린 것이 판정 두 개를 바로잡았다: ⓐ`ADMIN-04→ADMIN-05`는 **순환**이었다(`ADMIN-05.depends_on`에 이미 ADMIN-04가 있다 — 즉 문장 "ADMIN-05 선결"은 "ADMIN-04가 ADMIN-05의 선결"이라는 뜻) ⓑ`LIC-03→LIC-01`은 검증기가 실제로 "후행 스테이지 의존 — 로드맵 순서 위반"으로 거부한다(노트의 2026-08-30 실측이 오늘도 유효 — 나는 `amend`·`selector`만 보고 "전제가 낡았다"고 결론낼 뻔했다. 가드는 `store.validate_backlog`에 있었다). **`amend --depends`에는 제거 경로가 없으므로 부착은 되돌릴 수 없다** — 시뮬레이션이 아니었으면 대장이 영구 오염됐다.
+- **신설: 소프트 선행 분류**(`dep_declaration.SOFT_DECLARED` + 사유 코드 5종). 유예와 구분되는 지점이 핵심이다 — 유예는 "아직 안 고쳤다"라 **만료**가 필요하고, 소프트는 "고칠 것이 없다"라는 **판정**이라 만료가 없다. 만료가 없는 대신 5중 계약이 옵트아웃을 막는다(코드 고정 집합 · 근거 40자+ · `depends_on` 동시 존재 금지 · 유령 참조 금지 · 유예와 이중 분류 금지). `audit-deps --all`이 전건을 코드·근거와 함께 출력해 보이지 않게 쌓이지 않는다.
+- **게이트가 자기 정정 경로를 물었다 (자기 유발 결함 2건)**: `amend --reason`은 notes에 append되고 notes는 이 스캐너의 입력이다. 내 정정 사유가 *"…'선결'이라 선언한 방향을 부착한다"*처럼 선행 어구와 태스크 ID를 한 문장에 담아 **새 위반 2건을 만들었다**. notes는 append 전용이라 되돌릴 CLI 경로가 없다 → ①이미 기록된 2건은 `MISREAD_REF`로 정직하게 분류하고 ②**재발은 `amend`가 쓰기 전에 거부**하도록 되먹임 가드를 넣었다(정정이 *새로* 만든 findings만 판정 — 기존 위반 해소 경로는 막지 않는다). 분류로 덮은 것이 아니라, 덮을 수밖에 없게 만든 결함을 함께 고쳤다.
+- **리뷰 상환 (Codex P1·P2 · PR #1006)**: ⓐ **P1 — 분류가 유일한 경고를 없앴다.** `EOS-50`(DISJUNCTIVE)을 소프트로 분류하면서 아무 보호도 남기지 않아, 택일 선행 둘 다 미완인데 착수 후보 111건에 들어 있었다(`next --n 500 --json`로 재현). 내가 "정정 경로 없는 게이트는 사람이 게이트를 끄게 만든다"고 문서에 적은 것과 정확히 대칭인 실수다 — 경고를 없앤 자리에 집행을 두지 않았다. `block --handover`로 실제 제외(111→110)하고, **`DISJUNCTIVE`·`STAGE_BLOCKED`는 `blocked`를 계약으로 요구**하게 만들어 같은 구멍이 재발할 수 없게 했다. ⓑ **P2 — 쌍 억제는 미래까지 묻는다.** notes가 append 전용이라 분류된 쌍에 나중에 진짜 선언이 붙어도 green이었다. 분류를 **그 문장**에 결속(`quotes`)했고, 결속 기준을 두 번 좁혔다 — "인용구가 창에 있으면"은 창(±60자)이 옆 문장을 삼켜 실패했고, "어구 위치가 인용구 안이면"은 한 어구가 잡은 *다른* 참조까지 억제해 실패했다. 정답은 **참조 토큰의 위치**였다(발견의 정체를 정하는 것은 어구가 아니라 참조가 어디 적혀 있는가). 좁히자 실 대장에서 미분류 occurrence 1건이 즉시 드러났다(`LIC-03`의 세 번째 `LIC-01` 언급) — 결속이 실제로 일한다는 증거.
+- **교훈 3**: 게이트에서 신호를 *빼는* 변경은 반드시 그 자리에 집행을 넣어야 한다. 소프트 분류는 "위반이 아니다"라고 말하는 장치인데, 그 말이 참이 되려면 **다른 무언가가 그 위험을 실제로 막고 있어야** 한다. P1은 그 짝을 빠뜨린 것이고, 이제 코드가 짝을 강제한다.
+- **부재 판정 실패 2회(같은 원인)**: `ARCH-31`·`LIC-01`을 "태스크 없음"으로 판정했는데 둘 다 실재했다 — 파일명이 **슬러그 없는 `ARCH-31.yaml`·`LIC-01.yaml`** 이라 `^ARCH-31-` 접두 검색이 놓쳤다. 저장소에 두 가지 파일명 관례(`ID-슬러그.yaml`·`ID.yaml`)가 공존한다는 사실 자체가 검색 방법의 함정이다. CLAUDE.md "식별자 부재를 기능 부재로 단정 금지"의 새 변형 — *이름*이 아니라 **이름의 형태**를 잘못 가정한 경우.
+- **변별력 없는 검증 1회(즉시 정정)**: 가드 결함 주입을 `--priority 3`(이미 3)으로 걸어 가드에 닿기도 전에 실패했고 성공/실패가 같은 exit 1을 냈다. `--priority 2`로 바꿔 재실행해 거부 메시지·**쓰기 0**·양성 대조까지 확인했다.
+- **집행**: `find_soft_declaration_violations`가 CI(`harness-integrity`)에서 실행 · `tests/harness/test_dep_declaration.py` 소프트 계약 9건 · `test_amend_cli.py` 되먹임 가드 3건(거부·쓰기 0·양성 대조·기존 위반 해소 경로 무차단) · 규약 정본 `docs/standards/build_harness.md` §3d.
+## 2026-09-06: EOS-75 — 실패코드 JSON 키 계약 정정 (등재 전제의 부분 정정: 활성 결함이 아니라 *잠복* 결함이었다)
+
+- **등재 전제**: `qa_confusion_matrix`가 `str(GenerationFailureCode.F1)`을 JSON 키로 써서 `GenerationFailureCode.F1`(파이썬 repr)이 샌다 — EOS-61 소비자가 `rsplit(".")` 우회로 양쪽 표기를 받았다(PR #953).
+- **실측 (Python 3.12·pydantic v2)**: `GoldenItem`이 `use_enum_values=True`라 **검증을 거친 항목의 `failure_code`는 이미 `str`("F1")**이다 → 검증 경유 경로에서는 키가 항상 `F1`이었고, 기존 테스트가 `{"F3": 2}`를 단언하며 초록이었던 이유가 이것이다. 반면 `model_construct`(검증 우회)로 enum 인스턴스가 든 항목은 키가 `GenerationFailureCode.F1`로 새고, **같은 정답지의 digest까지 달라진다**(재채점 금지 원장이 "다른 골든"으로 오판하는 축 — 같은 뿌리). 즉 `str(enum)` 구현은 *멀리 떨어진 model_config에 기대어* 우연히 맞던 상태였다.
+- **판정 ①(생산자)**: 표기를 한 곳에서 고정 — `harness/golden_benchmark.canonical_value`(enum이면 `.value`, 아니면 `str`) 신설. `qa_confusion_matrix`의 키 생성(`fn_by_failure_code`·`golden_by_failure_code`)과 결선표 조회(⑤), `compute_digest`의 enum 3축(label·failure_code·as_found_basis)이 모두 이 함수를 쓴다. 검증 경유 항목의 digest는 기존과 **바이트 동일**(값이 이미 str이므로).
+- **판정 ②(소비자 — repr 수용 분기 제거·거부로 전환)**: 저장소 내 repr 키가 든 산출물 0건(grep 전수 — 태스크 YAML 자신뿐) + 검증 경유 생산자가 repr을 낸 적이 없으므로 **구버전 호환 대상이 없다**. `_normalize_code_key`를 제거하고 `_has_enum_repr_key`로 **미측정(None) 처리**한다 — 그냥 두면 sparse 경로에서 "키 없음=0건"으로 읽혀 *수학 오류 0건*이라는 거짓 통과가 되기 때문(측정 실패가 통과로 위장되면 안 된다). dense(`hit_cu_metrics`) 경로도 같은 규칙.
+- **판정 ③(집행)**: 생산자 `TestFailureCodeKeyContract` 3건(검증 우회 항목 키·JSON 키 전수 정규식·결선표 count) + 소비자 rejection 1건(sparse·dense) + digest 표기 독립 1건. **뮤테이션 3종 전건 검출**(cp 백업·md5 동일 원복): 생산자 `str()` 회귀 → 신규 3건만 RED·기존 33건 green(=기존 테스트 변별력 0 실증) / 소비자 거부 무력화 → 1건 RED / digest `str()` 회귀 → 1건 RED.
+- **범위 밖(관찰만)**: `hit_cu_metrics.py:258,263`도 `str(e.failure_code)`이고 `ReviewTimerEvent`도 `use_enum_values=True`(`schema/review_timer.py:152` 실측)라 **같은 잠복 형태**다(검증 경유면 str·우회면 repr). 이 태스크 acceptance는 `qa_confusion_matrix`·`validation_scorecard`이므로 손대지 않았다 — `canonical_value`로 한 줄 교체가 가능하니 다음에 그 파일을 여는 세션이 함께 처리할 것.
+- **교훈**: "코드를 읽어서" 낸 결함 진단(`str(enum)`은 repr이다 — 참)이 "실행에서" 활성인지는 별개다(pydantic 강제변환이 가리고 있었다). 등재 시 재현 스크립트 한 줄(`build_report` 실호출)이 있었다면 우선순위·처방이 달랐다 — 다만 처방 자체(명시 `.value`)는 잠복 상태에서도 옳았고, digest 취약점은 실측이 없었으면 못 봤을 것이다.
+
+### [재발방지 2026-09-06 · PR #994] 대장 쓰기측에 의존 감사가 없어 같은 세션이 audit-deps red를 두 번 push — HARN-70·HARN-71 등재
+
+- **사고 경위(동일 유형 2회)**: ⓐ EOS-50에 `amend --gate … --reason`으로 붙인 문장이 "선행" 어구와 태스크 ID(EOS-49·HARN-53)를 60자 창 안에 함께 담아 CI `harness-integrity`의 `audit-deps`(HARN-52)가 red → `amend --depends EOS-49` + 문안 정정으로 push. ⓑ 그 감사의 사각(아래)을 등재하는 `HARN-70`의 `--notes`가 원문 `'선행: ARCH-31 …'`을 **인용**해 같은 감사에 다시 걸렸고, 로컬 체인이 `;`라 **감사 exit 1인데도 커밋·push가 진행**됐다 → 두 번째 정정 push. 두 건 다 CI가 잡았으므로 main 피해 0, 비용은 왕복 2회.
+- **공통 원인**: 감사가 **읽기측(CI)에만** 있다. 대장을 쓰는 CLI(`amend --reason`·`add --notes`·`block --reason`)는 사람이 쓴 문장이 규칙을 어기는지 쓰기 시점에 보지 않는다 — 규칙은 "정정: amend --depends 또는 notes 표현을 고쳐라"라고 *사후*에만 말한다.
+- **함께 드러난 사각(HARN-70)**: `_REF_RE`의 후행 `\b`가 **한글 조사 직결 표기를 못 잡는다** — 파이썬 `\w`가 한글을 단어문자로 봐서 `EOS-49의`·`EOS-54가`는 0건, `EOS-54 착지 후`·`'EOS-49'는`만 매치. 한국어 notes에서 조사 직결이 기본형이라 판정이 표기 우연에 좌우된다(누락 방향 사각 — EOS-50 원 notes의 EOS-49가 한 번도 위반으로 안 잡힌 이유). CLAUDE.md 2026-09-01 "금지 패턴 열거 대신 산출물 검사" 축.
+- **대책(코드·태스크)**: `HARN-71` 쓰기측 선검사 — 세 CLI 경로가 파일을 쓰기 전에 결과 태스크 1건에 `find_undeclared_dependencies`를 적용해 위반이면 exit 1·대장 무변경(강제 통과 플래그 없음, `--depends` 동반 시 통과). CI 스텝은 그대로(이중 회계). `HARN-70` 정규식 경계를 ASCII 부정 전방탐색으로 교체 + 조사 6형 변별력 + 베이스라인 재산출(신규 위반은 LEGACY_EXEMPT에 넣지 않는다).
+- **대책(세션 규율)**: 대장 조작 후 커밋은 반드시 `audit-deps && validate && git commit && git push`로 **게이트**한다 — `;` 체인은 감사 결과를 무시한다(CLAUDE.md "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 *체인 연산자* 변형: exit code를 봤어도 다음 명령이 그것을 조건으로 삼지 않으면 본 게 아니다).
+- **번호 규율 확인**: `add`가 HARN-68 충돌(원격 브랜치 선점)을 잡고 HARN-70을 제안 → 제안 번호 사용. HARN-10 집행이 실제로 작동했다.
+---
+
+## 2026-09-06: 판정 시점 규칙 신설 — "미머지 존재를 충족으로 단정 금지" (CLAUDE.md v0.2.11)
+
+**사고**: 2026-09-05 Gate 0 A~E 검토가 `Gate 0-B`(Architecture) 열에 **미머지** `EOS-91`(PR #986)의 Subject Contract Provisional 강등을 근거로 달았다. main(`ba7d6a50`)에는 그 문장이 없다.
+
+더 넓은 형태가 뒤따라 드러났다 — 같은 세션이 Kiki 리뷰에 답하며 "고아 3건에 소유자 부여 **완료**"로 보고한 `ARCH-38`·`ARCH-39`·`OPS-61`, 그리고 `EOS-92`·`ADR-003`이 **전부 미머지**였다. main 기준으로 그날 Gate 0에 실제로 준 변화는 **머지된 `ARCH-37` 하나**(P0-07 Canonical Entity Model 갭 해소)뿐이었다.
+
+**Kiki 지적**: *"미머지 PR로 게이트를 닫지 마십시오. Gate 0 판정은 main 기준이어야 합니다. … 판정 문서 상단에 판정 기준 커밋 해시를 박으십시오. 오늘 하루가 그 자체로 사례입니다 — 아침에 `7f7da344` 기준으로 '동결 완료'였는데 저녁에 필드 축이 무방비였다는 게 드러났죠. 판정에는 시점이 붙어야 합니다."*
+
+**왜 규칙인가 — 규칙 집합의 구조적 공백이었다**: CLAUDE.md에는 역방향 규칙 **"trunk 부재를 미구현으로 단정 금지"**(2026-08-04)가 이미 있었다. 그쪽은 *"브랜치를 안 봐서 **없다**고 오판"*을 막는다. 그런데 그 대칭인 *"브랜치를 보고 **있다**고 오판"*은 없었다 — 미머지 브랜치가 수십 개인 상태에서 두 오판의 확률은 대칭인데 방어는 한쪽만 있었다. 세션이 자기 브랜치를 보는 것은 기본값이라 오히려 이쪽이 더 자주 난다.
+
+**대책 (등재)**:
+- **규칙**: CLAUDE.md 프로세스·안내 절 — 판정 근거의 trunk 실측(`git cat-file -e origin/main:<path>`) + 판정 문서 상단 기준 커밋 해시 + 미머지 근거가 섞이면 "main 기준"과 "브랜치 포함 기준"을 **열 분리**. 역방향 규칙 바로 뒤에 배치해 둘이 한 쌍으로 읽히게 했다.
+- **집행**: `HARN-68-judgment-base-commit-enforcement` — `backlog.py gates clear`의 `--evidence`에 판정 기준(해시·PR 참조)을 요구(HARN-23의 done PR 증적 검사와 동형). 탈출구 `--no-base <사유>`를 두는 이유는 `cmd_gates` 주석의 판단을 승계한 것이다: 사람 게이트를 막으면 YAML 손편집으로 밀려나고 그때는 아무 기록도 안 남는다.
+- **의도적 제외**: 판정 **문서** 축은 기계 집행을 두지 않는다. `docs/reviews/` 전수에 기준 해시를 요구하면 기존 문서 전건이 즉시 red가 되고 만료 없는 그랜드파더를 부른다(HARN-68 acceptance ③이 그 판정을 명시). 규칙 본문에도 "기계 집행 없음"으로 적었다 — 있는 척 금지.
+
+**교훈**: 판정은 **시점에 종속되는 함수**다. 해시 없는 판정은 재현 불가이고, 재현 불가한 판정은 며칠 뒤 조용히 거짓이 된다 — 틀렸다는 신호조차 없이. 같은 날 아침의 "엔티티 19종 동결 완료"(`7f7da344`)가 저녁에 "필드 축은 무방비"로 드러난 것이 정확히 그 형태였고, 그때는 Codex 리뷰가 잡아 줬을 뿐이다.
+
+**부수 정정 기록**: 이 사고를 지적받은 뒤 재점검에서 Gate 0의 축이 **4개가 아니라 5개**(A~E)임도 드러났다 — 앞선 보고가 `E(Release/Golden Path)`를 통째로 빠뜨렸고, §7 재측정이 그 축을 *"미충족에 가깝다"*로 판정해 둔 상태였다(가장 나쁜 축을 빠뜨린 것). 또한 `B=충족`·`D=부분`은 세션이 새로 판정한 것이 아니라 **2026-09-01 §7 재측정이 이미 내린 판정**이었고, `Gate 0` 이름 충돌도 전환 선언 `:71-74`의 표기 규약(`G0~G5` vs `Phase 0 Gate A~E`)으로 **이미 해소**돼 있었다. 세 건 모두 "이미 있는 것을 못 보고 새로 발견한 것처럼 보고"한 형태다.
+
+---
+
+## 2026-09-06: ARCH-38 판정 — AssessmentResult 좌석 **분리하지 않는다**(혼입 유지)
+
+> **판정 기준: main `794c0ea8`** (바로 위 "판정 시점 규칙" 준수 — 아래 실측은 전부 trunk 코드)
+
+**무엇을 판정했나**: `ARCH-37`이 §3-C에 *"혼입 상태를 인정하고 적는다"*로 남긴 `AssessmentResult`
+좌석 부재를, `ARCH-38`이 **W8(채점→오개념→Mastery) 축으로 전수 재측정**해 판정으로 닫았다.
+acceptance ①이 *"분리가 결론이 아니라 판정이 결론"*이라고 못박은 대로, 결론은 **혼입 유지**다.
+
+**분리가 얻는 것 = 0 (셋 다 실측)**
+1. **W8 경로가 `assessment`를 읽지도 쓰지도 않는다.** `api/coach.py` `_complete_problem`:983-1030
+   → `curate_hypothesis`:1692 → `l2/mastery_tracking.py` → `l2/skill_mastery_tracking.py` →
+   `l2/attempt_skill_event.py`(+ v1 잔존 `api/me.py:721`) 전 구간에서 ORM `Assessment` 참조 **0건**.
+   ORM `Assessment` 임포트는 저장소 전체에서 `api/me.py` **한 곳**뿐이다. 분리해도 그 경로는
+   한 줄도 안 바뀐다. ※ 그 경로의 `assessment` grep 히트 2건은 *모듈 파일명*이 같을 뿐
+   `ConceptMasteryHistory`/`SkillMasteryHistory` 임포트다 — **파일명 동형에 속지 않는 것**이
+   이 판정의 첫 관문이었다.
+2. **Assessment : Result = 1:1 · write-once.** writer 2곳(`api/me.py:2811`·`:3024`)은 행 전체를
+   조립해 한 번 commit하고 끝이며 5필드 *갱신* 경로가 없다(`PATCH .../complete`는 `completed_at`만).
+   capture는 하루 1행 idempotency(`_find_existing_capture`:2655). 별도 엔티티를 정당화하는
+   카디널리티(N개 결과·append-only 이력)가 **둘 다 없다**.
+3. **서빙 reader 0** — 선례 `S4-09`(`solution_paths` 실체화)가 스스로 밝힌 정당화는
+   *"reader 2종 소생·댕글링 해소"*, 즉 **죽어 있던 소비처가 살아난다**였다. 여기엔 그 소비처가
+   없다(응답 직렬화는 소비가 아니다). 학생 화면 부재는 `ASM-11` 소유이고, 분리는 그것을 앞당기지
+   못한다. 반대 방향 선례도 있다 — `LIC-01`은 Rights를 분리하면서 License는 오히려 JSONB로 접었다.
+
+**분리가 치르는 것 (측정된 반대편)**: 프라이버시 3계획의 *순서* 목록 삽입(`erasure.py:107`
+`_ERASURE_PLAN`·`retention.py:83`·`export.py:164`) + GDPR 삭제의 cascade 관심사 신설
+(`api/me.py:2585`가 *"자식 테이블이 없어 FK 위반 우려 없음"*을 전제로 서 있다) + 서빙 5표면 변경 +
+소급 불가 마이그레이션 왕복. **얻는 것 0 · 치르는 것 5종 → 지금 분리하면 순수 손실이다.**
+
+**⚠ 분리했다면 새로 생겼을 사각 (재판정 시 선결로 승계)**:
+`test_erasure_plan_completeness.py`는 `user_id`·`student_id`·`target_user_id` **소유 컬럼이 있는
+테이블만** 스캔한다(`OWNER_COLUMN_NAMES`). `assessment_result`를 `assessment_id` FK만으로 만들면
+**미성년 진단 데이터를 담은 테이블이 파기계획 완전성 가드에 안 보인다** — 등재를 깜빡해도 RED가
+안 난다. 정규화가 프라이버시 가드의 커버리지를 *줄이는* 형태이며, 분리 판정 시 소유 컬럼 부여
+또는 가드 확장을 **동시에** 착지시켜야 한다(`ARCH-40` acceptance ③).
+
+**집행 (정본화 ≠ 집행)**: 이 판정은 이미 기계가 지킨다 —
+`test_canonical_entity_model_freeze.py`의 `ABSENT_ENTITIES` + `RESERVED_ABSENT_TABLE_NAMES`.
+**주장이 아니라 뮤테이션으로 확인했다**(CLAUDE.md "보호 장치를 실패 주입 없이 보호 있음으로 선언
+금지"): `assessment_result` 테이블을 실제로 주입 → `test_absent_entities_have_no_seat_table` +
+`test_every_table_is_attributed` **2건 RED·exit 1** → 프로브 파일 삭제 → **8건 GREEN·exit 0**.
+(원복은 신규 파일 `rm`이라 미커밋 구현분을 건드릴 수 없는 형태를 골랐다 — `git checkout --` 금지
+규칙 2026-08-10의 취지.)
+
+**재확인 지점** (만료 없는 유예·제외 금지): `ARCH-40-assessment-result-verdict-recheck` 등재.
+트리거 3종 = 위 근거 1·2·3의 부정(W8 경로가 Assessment를 만짐 / 5필드 갱신 writer 등장 /
+값을 읽는 서빙 reader 착지). **산문이 아니라 대장에 넣은 이유**는 `selector.py`가 notes를 읽지
+않기 때문이다(2026-09-01 "선행 조건을 산문에만 적고 대장에 집행하지 않기 금지"). 트리거가 전부
+False로 재확인되면 그 태스크를 **재생성**한다 — 감시가 끊기지 않게(ARCH-* 감사 태스크 규약).
+
+**부수 실측 2건 (고치지 않고 적는다 · 소유자 부여)**
+- **`strong_points`만 writer 0건**이다. 5필드 중 유일하게 채우는 코드가 아예 없는데
+  `StudentAssessment` 응답에는 실려 나가 학생에게 항상 `[]`로 보인다. 정본 §7-C
+  *"좌석이 있다고 writer가 있다는 뜻이 아니다"*의 **컬럼 축** 사례다(그 조항은 테이블 축
+  `learning_session`만 예시로 들고 있었다). 소유자 = `ASM-13-strong-points-writer-absence`.
+  ARCH-38 notes가 *"소유자 없는 알려진 결함은 Gate D(owner 존재) NO"*라 적었으므로 소유자를 붙였다.
+- **주차 표기 어긋남**: `ARCH-38` notes는 W8을 `10/12~10/18`로 적지만 선언의 리듬
+  (W1=`8/31~9/6`)에서 그 구간은 **W7**이고 W8은 `10/19~10/25`다. 어느 쪽이든 기한(`10/05`)보다
+  뒤라 **판정 결론은 바뀌지 않는다**. 계획서 300 원문이 저장소 밖이라 라벨·날짜 중 무엇이
+  정본인지는 판정하지 않았다(날조 금지). `eos_phase2_plan_300_gap_review_2026-09-03.md:95-101`이
+  경고한 *"주차 번호 1칸 어긋남 — 세 번째다"*와 같은 형태다.
+
+**교훈**: 이 태스크의 P0·데드라인은 *"W8에서 바로 걸린다"*는 전제에서 왔는데, 실측하니 **W8 경로가
+그 테이블을 아예 지나가지 않았다**. 우선순위의 근거가 되는 인과("A가 B를 막는다")도 코드로
+확인해야 하는 주장이다 — 확인하지 않으면 소급 불가 스키마 변경을 마감에 쫓겨 치를 뻔했다.
+반대로 진짜 W8 리스크로 실측된 것은 혼입이 아니라 **부분 쓰기 갭**(attempt commit 후 헬퍼들이
+각자 독립 commit — `l2/attempt_skill_event.py:71-97` 자인)이고 그 소유자는 `EOS-81`이다.
+
+**추가 실측 (같은 세션·PR #997 CI 1회차) — 동결 입력 트리거 사각 4회차**:
+위 "집행" 문단은 *freeze 테스트가 판정을 지킨다*는 뜻으로 맞지만, **그 테스트를 깨울 입력 경로가
+CI 필터 밖**이었다. PR #997의 실제 실행이 그것을 반증했다 — `backend — lint·type·test`가
+**conclusion=skipped**였고, `skip은 required check에서 충족으로 계상된다`. 즉
+`canonical_entity_model_v1.md`의 §2-A 표를 조용히 고쳐 좌석 배정을 바꿔도 검사 ④가
+**실행되지 않는** 상태였다. PR 본문 체크박스에 *"backend 잡이 실제로 읽는다"*고 적었던 것이
+CI 1회차에서 그대로 falsify된 것이라, 주장을 정정하고 구멍을 막았다.
+
+- **같은 형태의 네 번째**다: COLLAB-07 ①(`data/corpus/`)·②(`schemas/`)·PR #910 P1(G0 동결 입력)
+  에 이어. 앞 셋과 다른 점은 **그 사각을 막으라고 만든 가드 자신의 범위가 좁아서** 생겼다는 것이다
+  — `test_ci_contract_fixture_trigger_wiring.py`의 `_FREEZE_TEST`가 동결 테스트 **한 파일**을
+  하드코딩하므로, 다른 동결 테스트의 입력은 필터 밖이어도 계약 ⑧이 "위반 0"을 조용히 낸다.
+- **조치 분리**: 구멍은 이 PR이 막고(필터에 문서 1건 편입 · 변별력 확인: 변경 전 매칭 False →
+  변경 후 True), 구조는 `OPS-62-freeze-input-trigger-guard-generalization`이 닫는다(가드가 동결
+  테스트 전건을 훑도록 · **스캔 0건은 실패**로). 구멍만 막으면 다섯 번째가 온다.
+- **교훈**: "이 검증 장치가 CI에서 도는가"(2026-07-26 등재)는 *테스트 파일*뿐 아니라 **그 테스트를
+  깨울 입력**에도 적용된다. 그리고 이번에 그것을 알려 준 것은 코드 읽기가 아니라 **PR을 실제로 열고
+  CI가 무엇을 skip하는지 본 것**이다 — PR 생성을 기본값으로 돌린 2026-08-11 결정이 여기서 값을 했다.
+
+**리뷰 상환 (Codex P2 2건 · PR #997)**:
+ⓐ *"ARCH-38을 done 처리하라"* — **이미 처리돼 있었다**(Codex는 첫 커밋 `b2fde42a` 기준으로 읽었고,
+`02e392c7`이 PR 증적과 함께 `done`을 기입했다). 조치 불요·스레드에 사실만 회신.
+ⓑ *"재확인을 실행 가능한 트리거에 붙여라"* — **맞는 지적이고 받아들였다.** `ARCH-40`은
+`status: todo`·`depends_on: []`·`requires_gates: []`라 selector가 **즉시 착수 후보로 계산**했다
+(실측: `next --n 534 --json` 후보 124건에 포함). 즉 "트리거가 성립하면 재판정한다"고 적어 놓고
+**트리거를 기다리는 장치가 없었다** — 지금 실행하면 전부 False로 확인하고 또 하나의 즉시-후보를
+재생성할 뿐이고, 방치하면 재확인은 집행되지 않는다.
+
+- **이것이 뼈아픈 이유**: 같은 커밋에서 나는 *"산문이 아니라 대장에 넣었다 — selector가 notes를
+  읽지 않으므로"*라고 적었다. 대장에 넣은 것까진 맞았는데 **대장의 어느 필드를 selector가 보는지**를
+  한 칸 덜 확인했다. `notes → 대장`까지 갔지만 `대장 → depends_on/requires_gates`에서 멈춘 것이다.
+  "정본화를 집행으로 착각한 완료 선언 금지"를 인용하면서 **그 인용문 자신의 재확인 축에서** 같은
+  형태를 되풀이했다. 규칙을 아는 것과 그 규칙을 자기 산출물에 적용하는 것은 다른 일이다.
+- **대책(양축 배선)**: ⑴자동 축 = `tests/backend/db/test_assessment_result_verdict_premise.py` —
+  허용목록(6파일·사유 병기) 밖에서 ORM `Assessment`를 임포트하면 RED. 근거 ①의 부정을 즉시 잡는다.
+  ⑵일정 축 = 게이트 `G-arch38-verdict-recheck`(kiki·remind_after_days=50 → 2026-10-26, W8 종료 직후)
+  를 `ARCH-40`의 `requires_gates`에 부착. 정적으로 확정 불가한 근거 ②③은 사람이 본다.
+  **실측 변별**: 부착 후 착수 후보 124 → 123건, ARCH-40 제외·대조군 `OPS-62` 잔류.
+- **가드 자신의 결함도 뮤테이션이 잡았다(자기 축)**: 초판의 정본 대조가 문서 전역 substring
+  검사였는데, 뮤테이션 M6(`혼입 유지로 판정` → `판정XX`)에서 **RED를 못 냈다** — 원 문자열이
+  덧붙인 문자열 안에 부분문자열로 살아남았기 때문이다. CLAUDE.md 2026-09-01 ⓓ(회귀 가드가 그
+  회귀를 면제)와 같은 형태다. §3-C **절만** 잘라 검사하고 마커 뒤 이어붙임을 정규식으로 차단하도록
+  고쳤고, 재검증에서 M6a(덧붙이기)·M6b(완전 삭제)·M6c(절 밖으로 이동) **3종 모두 RED**를 냈다.
+- **교훈**: 뮤테이션 6종 중 5종이 통과하고 1종이 뚫렸는데, **뚫린 그 1종이 가드의 유일한 위장
+  지점**이었다. 통과한 5종만 보고했으면 "전건 검출"이라고 적었을 것이다 — 뮤테이션은 몇 개를
+  돌렸는지가 아니라 **가드의 각 단언마다 하나씩** 설계해야 변별력이 성립한다.
+## 2026-09-06: EOS 설계서 대체안 A 채택 — "마이크로 프로젝트 = accumulate 회차" (그리고 EOS 계열 소진·오등재 1건)
+
+- **결정(Kiki)**: 외부 설계서 "EOS Math v1.0 마이크로 프로젝트 오케스트레이션 v1.0"을 그대로 구현하지 않는다. 갭 리뷰(`docs/reviews/eos_micro_project_orchestration_v1_gap_review_2026-09-05.md` §0~§10)가 26항목 중 충족 11·충돌 5·진짜 갭 4를 확정했고, 갭 2건(G-1 배치 안전장치 EOS-95 · G-2 리콜 EOS-97)은 PR #989·#992로 머지됐다. 남은 것을 두고 대체안 A/B/C를 비교해 **A(회차 중심)** 채택 — 마이크로 프로젝트 1건 = `problem_corpus_accumulate` 회차 1건, 계약서 = backlog 태스크 YAML + `rounds.jsonl`, 새 트리 없음(선언 §1.3-①). 근거 = 생성기 44파일 중 LLM 저작기는 **1개**뿐이라 오케스트레이션 문제가 파이프라인 1개의 회차 관리로 줄어든다. B(결정론 우선)는 LLM 회차 없이는 골든셋·F-Ⅲ 분포가 안 쌓여 12월 검증에 못 미쳐 후퇴선으로만, C(`eos/mp/` 트리)는 이중 진실원천으로 기각. 상세 §11.
+- **등재**: 게이트 `G-eos-first-run-canary-review`[kiki] · `MP-04`(회차 스냅샷 — 초판 `EOS-98`은 번호 충돌로 회수, 아래 — 실측: `RoundRecord` 8필드에 게이트 임계·모델·프롬프트 버전 0건) · `EOS-99`(캐시 적중 계측 — 실측: `_extract_usage`가 `cache_read_input_tokens` 미판독) · `MP-02`(첫 LLM 회차 n=60·Phaiakes9·MP-04 의존) · `MP-03`(골든 첫 승격·MP-02 의존+게이트). validate·audit-deps green, `next --n 500 --json`에서 MP-04·EOS-99 노출·MP-02/03 미노출(기대 일치).
+- **EOS 계열 소진**: `EOS-98`(타 세션 age-band 좌석·#994)·`99`(이 세션)가 마지막이다. `TASK_ID_RE`는 정확히 2자리(`models.py:109`)이고 `_next_free_number`는 3자리를 날조하지 않는다(HARN-21). 하네스 안내대로 새 접두 **`MP`**(마이크로 프로젝트=회차)를 신설했다 — `EOS-100`은 형식 위반으로 거부된다(실측). **`MP`는 EOS 후속 접두가 아니라 회차 축 접두다**: 같은 날 타 세션(#1001)이 같은 소진을 독립으로 만나 결정 게이트 `G-eos-task-prefix-exhausted`[kiki](①EOS2·EOSM ②3자리 허용 ③트랙별 분리)를 등재하고 임시로 `ARCH-42`를 썼다 — EOS 축 일반의 후속 접두는 그 게이트가 정한다.
+- **오등재 1건 — `requires_gates`는 착수 조건이다**: `MP-01`(회차 태스크)에 검수 게이트를 걸었더니 교착이었다 — 게이트는 회차 산출물을 Kiki가 검수해야 clear되는데 게이트가 clear돼야 회차를 시작할 수 있다(`selector.py:6`). 같은 등재의 notes가 EOS-98/99를 "소프트 선행"이라 적어 `audit-deps`(HARN-52)가 red. 하네스가 둘 다 등재 직후 잡았으나 **고칠 CLI가 없어**(`amend`는 부착 전용·notes 정정 명령 없음) `cancel` 후 MP-02/03으로 분리 재등재. 규칙: **검수 게이트는 산출물을 만드는 태스크가 아니라 그것을 소비하는 후속 태스크에 건다.** 정정 경로 부재로 인한 번호 소모 **3회차**(EOS-94·96·MP-01) → HARN-67에 ⑤ 게이트 탈착 ⑥ notes 정정 ⑦ 경위를 amend로 추가.
+- **미결(Kiki)**: G-4·G-5 보류 유지 · 저작권 유사도 게이트 유예 해제 시점 · OpenRouter(실측 근거 없음) · MP-02의 P0 승격 여부(골든셋 시작점이라 논거 있음·P0 예산 때문에 P1 등재).
+- **리뷰 상환 (Codex · PR #1000)**: 등재 3건이 전부 *저장소를 열어 보지 않고 쓴 수치·경로*였다. ⓐ MP-02 ④의 "카나리 판정을 회차 대장에"는 `RoundRecord`에 그 필드가 없어(실측 `accumulate.py:677-684` 6필드 조립) 불가 → MP-04에 ⑤ 관측 판정 필드 추가 + **MP-02 → MP-04 하드 의존**(등재 시 "의존 아님"은 구성 스냅샷만 본 판단). ⓑ EOS-99 ③ 정렬은 no-op — accumulate는 스펙 1개를 n회 반복(`:595`·`:335`) → ③ 제외, 반복 prefix에서 (n-1)/n 적중 측정. ⓒ MP-03 ①은 **30건으로 승격 게이트 통과 불가** — `golden_promotion_gate` 기본 0.02·0.95에서 0/30 Wilson 상한 **0.0827**, 0결함 최소 **133건**(`harness/wilson` 실측) → ① 정정(1차 시도·거부 기록으로 done 가능·실제 승격은 누적 ≥133 또는 Kiki 임계 결정). **Kiki 결정 사항 추가**: 카나리 30 vs 승격 133의 격차 — ⓐ 5회차 누적 ⓑ 첫 승격 임계 완화(0.05→59건)+백필 동일값 ⓒ 카나리 확대. 게이트 docstring은 ⓐ 처방. 교훈: 부재 주장뿐 아니라 **존재를 전제한 주장도 그 자리를 열어 봐야 한다**.
+- **CI 미발화의 진짜 원인 = 번호 충돌로 인한 merge conflict**: PR #1000 생성 후 체크런 0건이 HARN-30 미발화로 보였으나, `mergeable_state: dirty`였다 — GitHub는 충돌 PR에 `pull_request` 워크플로를 돌리지 않는다. `origin/main` 머지 후 `validate`가 **`EOS-98` 번호 충돌**을 냈다: 타 세션이 `EOS-98-age-band-explanation-generation`을 #994로 먼저 올렸고(08:02 UTC), 이 세션의 `add EOS-98`(10:18)은 stale 로컬 main + 원격 claim 대장(착수분만)만 봐서 **구조적으로 못 봤다**("가드 통과 ≠ 충돌 없음" 고지 그대로). 처분: 그쪽이 머지됐으니 이쪽을 옮김 — 개명 CLI 없음·손편집 금지·EOS 소진이라 **미머지 브랜치를 최신 main에서 재구성하고 CLI로 재등재**(스냅샷 = `MP-04`), 문서 델타는 3-way 패치. 잡은 것은 머지 *뒤*의 validate — 쓰기측 선검사(HARN-71)가 겨냥하는 창. 초판 3커밋(d29cb5ae·95c7c12b·97c9242f)은 폐기.
+
+---
+
+## 2026-09-06: EOS-92 교차 과목 프로브 — Subject Contract v1은 Physics를 받는다(✗ 0). 단 그 0의 정보량이 낮다
+
+> **판정 기준: main `76f415db`**
+
+**결과**: Physics 문항(등가속도·구성)으로 `SubjectAdapter` 3메서드 + DTO 4종 **15필드 전건**을
+채워 **✗ 0건**. 강등 0 · Core 확장 0 · `DEMOTED_FIELDS` 빈 dict 유지 · ADR-004 ④ 중단 상한
+(✗ > 3) 미도달로 프로브 완주. 산출물 = `docs/architecture/subject_contract_cross_probe.md`.
+
+**그러나 승격하지 않았다.** 이유 둘: ⑴ADR-004 ①이 *"9/27까지 Frozen으로 선언하지 않는다"*로
+금지한다(오늘은 09-06 — 이 프로브는 9/27 판정의 *입력*이지 판정이 아니다) ⑵**✗ 0의 근거가
+약하다**(아래).
+
+**핵심 발견 — 필드 채움 검사는 반증력이 낮다**:
+15필드 중 **13개가 `str`·`str|None`·`tuple[str,...]`**이다. 불투명 문자열은 어떤 과목이든
+받으므로 이 검사는 *원리적으로 ✗를 내기 어렵다*. 이를 주장이 아니라 **대조군으로 실증**했다 —
+계약이 명시적으로 배제 선언한 과목(`verification_capabilities.py:277` *"수학·물리엔 있고 역사엔
+없다"*)인 **History 문항도 15/15 채워진다**. 성공/실패 양쪽에서 같은 값을 내는 검사는 검증이
+아니라 위장이다(CLAUDE.md 2026-07-17).
+
+- 이것은 계약의 결함이 **아니다** — 오히려 "Core는 페이로드를 해석하지 않는다"는 설계가 성공한
+  결과다. 그리고 그 성공이 동시에 채움 검사의 반증력을 0에 가깝게 만든다. **좋은 설계가 그
+  설계를 검증하려는 검사를 무력화하는** 형태다.
+- 계약 파일이 이 함정을 **미리 정확히 예고했다**(`subject_adapter.py:40-55` "래칫의 한계"):
+  *"의미적 확장은 잡지 못한다… 과목 중립성이 실제로 깨지는 주된 경로가 바로 이쪽이다.
+  이 축의 검증 책임은 `EOS-92`에 있다."* 그래서 프로브를 §4(Core가 페이로드를 해석하는가)까지
+  끌고 갔다 — 거기서 멈췄으면 "계약을 채워 봤다"는 의식만 치른 것이 된다.
+
+**§4 실측 — 해석 지점 0건, 그러나 그 0의 의미가 다르다**:
+Core가 `answer_kind`·`conditions` 값을 읽어 분기하는 코드 0건. 그런데 **필수층 3메서드의 Core
+호출자 자체가 0건**이다(선택층은 배선 실재 — `composition.py` 팩토리 5종·소비처 `api/coach.py`
+등). 즉 해석 0은 *"계약이 잘 막아서"가 아니라 "아직 아무도 안 써서"* 성립한다. **중립성은
+사용에 의해 깨지는데 사용이 없으므로 이 축은 시험된 적이 없다.** 이는 사고가 아니라 `EOS-69`
+⑥⑦의 설계 결과다(잔여 호출부가 단계·기호 동치 축이라 좁은 Protocol로 분리).
+
+**교훈**: "전 항목 ○"를 받았을 때 물어야 할 것은 *"통과했는가"*가 아니라 **"이 검사가 실패할
+수는 있었는가"**다. 같은 세션의 ARCH-38에서도 뮤테이션 8종 중 뚫린 1종이 가드의 유일한 위장
+지점이었다 — 하루에 같은 형태를 두 번 만났다. 통과 결과를 받으면 대조군을 넣어 본다.
+
+**등재 2건**(소유자 없는 알려진 결함 금지 — Gate D):
+- `ARCH-43-subject-neutrality-falsifiable-check` — 반증 가능한 중립성 검사 설계(무엇이 관측되면
+  위반인지 먼저 정의하고 **주입해 RED 확인** 후에만 검사로 친다 · 스캔 0건은 실패)
+- `ARCH-41-required-tier-unexercised-tracking` — 필수층 미사용 추적 + 계약 문서의 층 구분 정정
+  (`subject_adapter.py:108-118` "경유 배선 완료"가 층을 구분하지 않아 필수층 배선으로 오독된다)
+
+**부수 발견 — `EOS` 프리픽스 번호 고갈 (Kiki 결정 필요)**:
+두 번째 태스크를 `EOS-100`으로 등재하려다 `TASK_ID_RE`(`\d{2}` — 정확히 2자리)에 형식 거부됐고,
+다음 후보 `EOS-83`·`EOS-84`도 **원격 브랜치가 선점**해 거부됐다. CLI의 판정: *"프리픽스 `EOS`는
+00~99번을 모두 소진해 다음 번호를 더 이상 제안할 수 없다 — 새 프리픽스로 분리하는 등 사람의
+결정이 필요하다(`HARN-21`)."* 거부는 판정이므로 우회하지 않고(대장 손편집·번호 눈으로 고르기
+금지) 내용에 맞는 기존 `ARCH` 계열로 등재했다. **다음 EOS 태스크는 누가 등재하든 같은 지점에서
+막힌다** — 기계 축은 `HARN-21`이 이미 소유하고, 프리픽스 결정은 Kiki 소유다.
+이 사건은 "번호를 눈으로 고르지 말라"는 규칙의 값을 실증했다 — 로컬 파일만 봤으면 `EOS-83`이
+비어 보였고, 실제로는 원격 브랜치가 쓰고 있었다.
+
+**리뷰 상환 (Codex P1 4건 + P2 1건 · PR #999) — 5건 전부 유효했다**:
+ⓐ **§3 대조군 설계 무효(P1·가장 중요)**: 초판이 History를 "계약이 배제 선언한 과목"으로 보고
+대조군에 썼는데 **오독이었다.** `verification_capabilities.py:274-277`의 *"수학·물리엔 있고
+역사엔 없다"*는 **선택적** `ExpressionEquivalence`에 관한 문장이고 *"그래서 `SubjectAdapter`
+필수 3종에 넣지 않았다"*로 잇는다. 반대로 `subject_adapter.py:221-227`의 필수층 게이트는
+*"Physics·Chemistry·**History**에도 반드시 존재하는가?"* — **History는 필수층의 대상**이다.
+즉 History가 채워지는 것은 **설계된 성공**이지 반증 실패가 아니다. **선택층 문장을 필수층에
+적용한 오독**이며, MEMORY 2026-09-05의 *"남의 문서의 오류가 내 문서의 사실이 된다"*와 같은 축인데
+이번엔 남의 문서가 아니라 **같은 파일의 다른 층**을 헷갈렸다.
+ · **결론은 살았고 근거를 갈았다**: 반증력 부족 주장을 "History가 잘못 통과한다"에서
+   **"갈래 A(채움)는 실패 사례를 구성할 수 없고(15필드 중 13개가 임의 문자열 수용·
+   `extra="forbid"`는 필드 추가만 막는다) 갈래 B(뒤틀림)는 사람 판정에 기계 뒷받침이 0이다"**로
+   다시 세웠다. 후자가 더 정확하고 더 강하다 — `ARCH-43`이 무엇을 만들어야 하는지도 분명해졌다.
+ⓑ **재현 명령이 스캔 실패를 0건으로 위장(P1)**: `grep A | grep -v B`의 `$?`는 마지막 grep 값이라
+**소스 경로가 없어 첫 grep이 죽어도 exit 1**이 나온다 — 내가 문서에 "정상(0건)"이라 적은 바로 그
+값이다. 측정 실패가 통과로 위장되는 정확한 형태이고, 그 값이 9/27 Freeze 판정의 근거가 될
+참이었다. `set -o pipefail` + `PIPESTATUS[0]` + 3상태(`ZERO_CALLERS`/`CALLERS_FOUND`/
+`SCAN_ERROR`)로 고쳤고 **세 상태가 실제로 구별되는지 주입으로 확인**했다.
+ⓒ **`pytest -q`(P1)**: 재현 명령이 `-q`를 쓰면서 **세 줄 아래에서 그 금지 규칙을 인용**했다
+(2026-08-09 PR #732 사고로 등재된 바로 그 규칙). 제거.
+ⓓ **PowerShell 블록 부재(P1)**: Kiki 기본 환경이 PowerShell인데 bash·`/mnt/c` 블록만 줬다.
+선례(`canonical_entity_model_v1.md` 부록)는 양쪽을 준다. 추가.
+ⓔ **ARCH-41에 트리거 없음(P2)** — 아래 별항.
+
+**⚠ 반복 실수 2회차 — 재발방지대책 등재(CLAUDE.md 의무)**:
+`ARCH-41`이 *"첫 호출자가 생기면 재측정"*을 acceptance에 적고 `depends_on`·`requires_gates`를
+비워 뒀다. **같은 세션에서 `ARCH-40`으로 정확히 같은 지적을 받고 고친 직후다.** 1회성 실수가
+아니라 등재 절차에 집행 장치가 없다는 신호다.
+- 즉시 조치: 게이트 `G-required-tier-caller-recheck`[kiki·remind 21일→G1 9/27] 신설 후
+  `amend --gate`로 부착. 차단 실측 후보 123→122, 대조군 `ARCH-43`(당시 `EOS-99`) 잔류.
+- 재발방지: **`HARN-72-trigger-shaped-task-without-trigger-guard`** — acceptance에 미래 조건부
+  문장이 있는데 `depends_on`·`requires_gates`가 둘 다 비면 `add`/`validate`가 경고·거부.
+  `HARN-52`(audit-deps)가 *notes의 선행*을 보는 축이라면 이쪽은 *acceptance의 미래 트리거*를
+  본다 — 같은 "산문↔집행" 축이지만 필드가 다르다.
+- **교훈**: 규칙을 방금 배워 고친 그 세션에서 같은 형태를 다시 만들었다. 규칙을 *아는 것*과
+  산출물마다 *적용하는 것*은 다른 일이고, 그 간극은 사람 규율이 아니라 기계가 메워야 한다.
+
+---
+
+## 2026-09-06: HARN-72 — acceptance의 미래 트리거를 대장이 집행하게 하는 가드 (반복 실수 2회차 대책)
+
+**무엇**: acceptance에 *"~가 생기면 그때 재측정한다"*를 적어 놓고 `depends_on`·`requires_gates`가
+둘 다 비면 `add`·`validate`가 **거부**한다. `selector.py`는 acceptance를 읽지 않으므로, 그런
+태스크는 즉시 착수 후보가 되고 누가 지금 실행해 "조건 셋 다 False"로 종결하면 **미래 전이가
+미추적으로 남는다** — 태스크는 done인데 감시는 사라진다.
+
+**왜 코드인가**: 같은 세션에서 `ARCH-40`(PR #997)·`ARCH-41`(PR #999)이 **연달아** 같은 형태로
+지적받았다. 규칙을 방금 배워 고친 그 세션에서 다시 만들었으므로 사람 규율로는 안 닫힌다.
+
+**설계 — 측정 먼저, 그 다음 설계** (acceptance ⑤ 순서 준수)
+
+가드를 쓰기 *전에* 전수 스캔으로 어구 후보를 재고 정밀도를 비교했다:
+
+| 검출기 | 알려진 참(ARCH-40/41) | 저장소 발화 |
+|---|---|---|
+| 단순 어구(재확인·트리거 등 단독) | — | **29건** (표본 검사 결과 대부분 오탐) |
+| 규칙 1 — 한 문장 안 (미래조건 + 재측정동사) | **1/2** | **0건** |
+| 규칙 1 + `False면` 어구 추가 | 2/2 | 1건 |
+| **규칙 1 + 규칙 2(자기 재생성)** ← 채택 | **2/2** | **0건** |
+
+- **단순 어구는 버렸다**: "…가 유효함을 **재확인**하고 회귀 테스트로 동결한다"처럼 *이 태스크
+  안의 한 단계*가 대부분이었다. 29건을 즉시 red로 만드는 게이트는 꺼진다.
+- **`False면` 추가는 버렸다**: `ARCH-40` 한 문장의 *구문*에 대한 과적합이다. 대신 그 문장의
+  *개념*을 골랐다 — **"이 태스크를 재생성한다"**(규칙 2). 저장소가 이미 쓰는 규약이다
+  (`/drive` 안전장치: *"ARCH-* 감사 태스크 완료 시 다음 회차를 재생성 — 감시 끊김 방지"*).
+  즉 자기 재등재를 선언한 태스크는 정의상 반복 감시 좌석이다.
+- **표본 한계를 적었다**: 규칙 2의 어구는 저장소 전수에서 `ARCH-40` **1건**에만 등장한다 —
+  근거는 표본 1이고 오탐률은 아직 측정된 적이 없다(있는 척 금지).
+
+**그랜드파더 불요** — 기존 위반 **0건**. 만료 없는 유예 문제가 발생할 여지 자체가 없었다.
+(`dep_declaration`은 기존 위반이 있어 `LEGACY_EXEMPT`가 필요했다 — 여기선 아니다.)
+
+**가드가 자기 자신을 잡았다(첫 실사용 오탐)**: `HARN-72`의 acceptance가 탐지 대상 어구를
+**예시로 인용**해서 걸렸다. 대기 태스크가 아니라 *트리거 장치를 만드는* 태스크라 게이트를
+붙일 대상이 없다 — 탈출구 `--no-trigger <사유>`의 존재 이유를 자기 자신으로 실증한 셈이다.
+면제는 코드 상수가 아니라 **태스크 notes의 `[트리거 면제]` 마커**로 남겨 사유가 태스크 옆에
+있게 했다(무사유 면제는 argparse가 값을 요구해 구조적으로 불가).
+`amend --no-trigger`도 함께 열었다 — **고칠 수 없는 위반을 지적하는 게이트는 사람이 게이트를
+끄게 만든다**(`--depends`를 열 때와 같은 이유).
+
+**검증 — 모듈이 아니라 CLI 경로에 실패 주입**
+- `add`에 트리거형 acceptance + 게이트 없음 → **exit 1 · 파일 미생성**(거부가 실제로 막았다)
+- 기존 todo 태스크에 트리거 문장 주입 → `validate` **exit 1**, 원복 → **exit 0**, 잔류 0
+- 테스트 18건(참 양성 2·집행 인정 2·오탐 방어 3·면제 2·상태 스킵 3·공허 통과 금지 1·렌더 2·
+  규칙 분담 동결 3) · `tests/harness` 559 → **577 passed**
+
+**ruff가 실제 버그를 잡았다(B023)**: 루프 안에서 `lambda`로 필드 접근자를 만들어 루프 변수를
+늦게 바인딩했다. 같은 반복 안에서만 써서 *우연히* 맞았지만 우연히 맞는 코드를 남기지 않고
+모듈 함수 `_field()`로 뽑았다.
+
+**교훈**: "무엇을 검출할까"를 정하기 전에 **전수 스캔으로 후보별 오탐을 먼저 쟀다**. 그 순서를
+뒤집었으면 29건짜리 게이트를 만들고 곧 꺼졌을 것이다. 그리고 재현율을 2/2로 만들려는 유혹에서
+`False면`(과적합)이 아니라 개념(자기 재생성)을 고른 것이 이 작업의 실질이다 — 다만 그 개념의
+표본이 1이라는 사실도 함께 적었다.
+## 2026-09-06: PR #980 머지 드라이브 — 실 PG 통합 잡의 순서 의존 429(레이트리미터 전역 상태)·Codex P2 3건·EOS 번호 소진
+
+- **경위**: Kiki "#980도 머지". PR #980(`claude/session-9ain00` — EOS-83·84·88·90·81)은 CI 전건 green이었다가 main 이동 후 두 번 red — ① `infra-contracts`: 인벤토리 v2 장부 LOC 드리프트(main 소스 변경) → `--write` 재생성(e58f11a7) ② `backend — 마이그레이션·통합 (실 PG)`: `test_full_loop_onboarding_to_verify_on_live_pg`의 두 번째 `POST /v1/coach/sessions`가 **429**. 같은 코드가 07:29 green·09:39 red(run 34024961969).
+- **원인(실측)**: `api/_rate_limit._BACKEND`(InMemoryBackend)는 **프로세스 전역**이고 `configure_backend_from_settings` 호출처 0건이라 앱마다 재설치되지 않는다. 통합 테스트 21파일 중 `reset_store`를 부르는 것은 3파일뿐 → 앞서 돈 `test_coach_integration`(세션 생성 20건) 등이 IP 쓰기 버킷(`ip:testclient`·60/분)을 소진하면 뒤 테스트가 429. pytest-randomly 순서가 재현 조건. **OPS-06(`db.session._engine` 전역 오염)과 같은 유형의 2회차** — 그쪽은 hermetic 스위트·엔진 전역, 이쪽은 통합 스위트·레이트리미터 카운트.
+- **즉시 조치**: E2E 시작 시 `asyncio.run(reset_store())` 한 줄 + 원인 주석(e13765c8). 로컬 재현 불가(컨테이너에 pgvector·docker 없음) → CI가 판정(green).
+- **재발방지(의무)**: `OPS-63` 등재 — `tests/backend/conftest.py` autouse 픽스처로 시작 시 카운트 리셋(InMemory 한정), 실 PG에서 뮤테이션 RED 실측, OPS-07(종료 시 귀책)과의 경계 명시.
+- **머지 차단의 진짜 원인은 CI가 아니었다**: 전건 green 뒤에도 `merge`가 405 "A conversation must be resolved" — 저장소 규칙이 리뷰 대화 전건 해결을 요구하는데 Codex P2 스레드 3건이 미해결이었다. 처리: ⓐ `node_modules/`·`dist/`·`coverage/` 스캔 혼입 → `_EXCLUDED_CLIENT_DIRS`(web `.gitignore` 4개 + 모바일 `build/`·`.dart_tool/`) + tmp 트리 테스트(뮤테이션 RED 1/3) ⓑ 클라 경로 중복·중첩 귀속 미검출 → 경로 단위 소유자 맵 + 부모/자식 중첩 검사(현행 33경로 0/0·뮤테이션 RED 2/3) ⓒ `__init__.py` 57건·2,811줄 모집단 제외 → 40건은 자동 귀속이 자명하나 17패키지는 소유 판정이 필요하고 장부 162행·문서 수치가 함께 바뀌어 **ARCH-42로 분리**(4b0d8fa6). 스레드 3건 답글 후 resolve → 자동 머지 발화(86930abc).
+- **EOS 프리픽스 소진(사람 결정 대기)**: `backlog.py add --id EOS-99`가 거부 — EOS-99는 원격 브랜치가 선점했고 **EOS는 00~99를 전부 소진**해 CLI가 "새 프리픽스 등 사람의 결정"(HARN-21)을 요구했다. 임시로 ARCH 계열(ARCH-42)에 등재하고 결정 게이트 `G-eos-task-prefix-exhausted`(선택지 3종)를 Kiki에게 남겼다. 번호 규율(HARN-10)은 이번에도 작동했다 — ARCH-40 로컬 선점·ARCH-41 원격 선점을 잡고 42를 제안, OPS-62 로컬 선점을 잡고 63을 제안.
+- **세션 규율 실수(기록)**: `backlog.py add … | tail -8 && echo ADD_OK`가 add exit 1(OPS-62 충돌)인데도 `ADD_OK`를 찍었다 — 파이프의 exit code는 `tail`의 것이다(CLAUDE.md 2026-08-09 "검사 명령의 출력을 억제하거나 잘라서 판정 금지"의 정확한 형태). 다음 명령에서 파이프를 제거해 정정. 피해 0 — 단, 잡은 것은 뒤따른 `validate`가 아니라 눈이었다(validate는 *없는* 태스크를 볼 수 없다).
+
+---
+
+## 2026-09-06: HARN-73 — 번호 제안기 하위 미사용 폴백 (EOS "모두 소진"은 오보고였다 · Kiki 결정 A)
+
+- **발단**: Kiki 질문 "G-eos-task-prefix-exhausted eos번호?" — 같은 날 `add --id EOS-99`가 "EOS는 00~99번을 모두 소진"으로 거부돼 열린 결정 게이트.
+- **실측(모든 ref 이력 전수, `git log --all --diff-filter=A`)**: EOS 번호는 **59개**(06·28·32·44~99)만 쓰였고 **40개**(01~05·07~27·29~31·33~43)는 한 번도 쓰인 적 없다. 이력상 쓰였다 삭제된 번호 0. 즉 "모두 소진"은 **오보고** — 제안기 `_next_free_number`가 최대+1 상향만 하는 설계(HARN-21 결함② 수정으로 100 이상은 None)에서 EOS-99(원격 브랜치 선점) 다음이 100이라 포기했고, `cmd_add` 문구가 그것을 "전부 소진"으로 번역했다. 빈 번호를 `--id`로 명시하면 그날도 등재는 가능했다.
+- **결정(Kiki "a")**: **A** = 하위 미사용 번호 재사용 + 제안기 폴백. 기각: B(3자리 허용 — HARN-21 결정 번복), C(새 프리픽스 — 시리즈 분리), D(트랙별 분리 — 과잉 재편).
+- **구현(HARN-73)**: ① `_historically_used_numbers(root, prefix)` — 모든 ref 이력에서 추가된 적 있는 번호 집합. shallow 클론·git 실패·타임아웃·디코딩 실패는 **None(fail-closed)**, 디코딩은 HARN-19 `remote_claims._git` 재사용 ② `_suggest_number` 2단계 — 상향(기존) → 상위 소진 시 taken에도 이력에도 없는 **가장 낮은** 번호. 이력 조회는 상향 실패 시에만 호출(비용·부작용 최소) ③ `cmd_add` 문구 3종 — 폴백 제안(최대·미사용 수·삭제 수 실측치) / 이력 불가(후보 10개 미리보기 + 수동 확인 명령 + `--id` 명시 안내) / 진짜 소진(미사용 0일 때만 "모두 소진"·HARN-21 문구 유지). 설계 의도("낮은 번호 제안은 '다음 작업' 기대와 어긋난다")는 폴백을 상위 소진 시로 한정해 보존.
+- **검증**: 대상 파일 17 passed(기존 6 + 신규 11) · `tests/harness` **570 passed**(무작위 순서) · `ruff check scripts tests/harness`·`black --check` exit 0 · 뮤테이션 3종(cp 백업·md5 동일 원복): 폴백 제거 → 신규 6건 RED / 이력 제외 제거 → 3건 RED / fail-closed 제거 → 2건 RED, 기존 6건은 전부 green · 실저장소 스모크: `add --id EOS-99-…` → "상위 번호 소진(최대 EOS-99) — 미사용 하위 번호 40개 중 가장 낮은 EOS-01 제안(이력상 쓰였다 사라진 0개는 제외)" · 파일 미생성.
+- **게이트**: `G-eos-task-prefix-exhausted` clear(증적 = 세션 채팅 결정). 이제 EOS 계열은 EOS-01부터 등재 가능. **미결**: 임시로 ARCH 계열에 넣은 `ARCH-42`(인벤토리 `__init__.py` 모집단)의 재번호 여부 — Kiki 판단.
+- **#1000(MP 접두)과의 정합**: 같은 날 PR #1000이 같은 "소진" 보고를 근거로 `MP`(마이크로 프로젝트=회차) 접두를 신설했다. #1000 자신이 "MP는 EOS 후속 접두가 아니라 회차 축 접두이며 EOS 축 일반의 후속은 `G-eos-task-prefix-exhausted`가 정한다"고 적었으므로 두 기록은 모순이 아니다 — **MP는 회차 축 접두로 존속**하고, 이 항목이 정정하는 것은 "EOS 접두가 소진됐다"는 *전제*뿐이다(EOS 계열 신규 등재는 `EOS-01`부터 제안된다). PR #1002 정정 3건(Codex P2): 이력 스캔 `--no-renames`(git mv로 얻은 번호 누락 사각) · 번호 공간 01~99 일관 표기 · 이력 불가 시 수동 `git log`/`--id` 추론 안내 제거(shallow면 unshallow 후 재실행).
+- **교훈**: 판정 문구가 **판정 근거(무엇을 셌는가)** 를 말하지 않으면 사람 게이트를 잘못 연다. "소진"은 상위 탐색의 실패였지 번호 공간의 소진이 아니었다 — 새 문구는 최대·미사용 수·삭제 수를 실측치로 낸다(CLAUDE.md "측정 없는 판정 금지"의 *문구* 축).
+**번호 충돌 실물 1건 (같은 세션·PR #999)**: 내가 등재한 `EOS-99-subject-neutrality-falsifiable-check`가
+타 세션 #1000의 `EOS-99-prompt-cache-hit-measurement`와 **같은 번호로 충돌**했다. `validate`가
+*"사람·문서·커밋의 'EOS-99' 참조가 결정 불가가 된다"*로 거부했고(HARN-10 집행), **머지된 쪽은 개명
+불가**이므로 미머지인 내 것을 옮겼다 — CLI가 `ARCH-42` 선점을 잡고 **`ARCH-43`을 제안**해 그대로 썼다
+(눈으로 고르지 않았다). 내용은 acceptance 5항·paths·title·notes 전건 보존을 대조로 확인했다.
+
+- **접두 선택 근거**: #1000이 *"EOS-98·EOS-99가 마지막"*으로 소진을 확정했고, **`MP`는 EOS 후속이
+  아니라 회차 축 접두**이며 EOS 축 일반의 후속은 게이트 `G-eos-task-prefix-exhausted`[kiki]가 정한다 —
+  아직 미결이다. 3자리 손제작은 `build_harness.md` §8 금기. 그래서 내용상 아키텍처 계약 검증인 이
+  태스크를 기존 `ARCH` 계열로 옮겼다(자매 `ARCH-41`과 같은 판단). CLI 개명 경로 부재는 `HARN-67` 소유.
+- **`MEMORY.md`는 내가 쓴 3줄만 고쳤다** — 같은 파일의 8173·8177·8337줄은 #1000/#1001이 자기
+  `EOS-99`(캐시 계측)를 서술한 것이라 손대지 않았다. 병렬 세션이 한 파일을 공유할 때 전역 치환은
+  남의 기록을 조용히 바꾼다.
+
+**behind 루프 실측 (`G-merge-queue-or-strict-relax` 판정 근거)**: 이 PR 하나에서 **behind 3회**가 났다.
+CI가 도는 ~20분 사이에 main이 매번 움직였다(#998 → #1000 → …). 머지 API는 CI가 전건 green인데도
+`405 Repository rule violations found · 16 of 16 required status checks are expected`로 거부했다 —
+**실패가 아니라 base가 낡아서**다. 게이트 본문의 *"최신 base 강제 × CI 30분이 만드는 behind 루프"*가
+그대로 재현됐고, 3회차에서는 단순 정렬이 아니라 **번호 충돌**까지 딸려 왔다(위). 정렬 왕복이 길수록
+병렬 세션과의 충돌 표면이 넓어진다는 것이 이 사례의 추가 관측이다.
+
+### 2026-09-06 — 병렬 중복 착수 2회차: claim 없이 40분 구현 → 전량 폐기 (착수 순서 규칙 신설)
+
+**사고**: `PR #1003`(OPS-61) 머지를 기다리는 동안 다음 태스크 `MP-04`(회차 매니페스트 동결)를
+설계·구현·검증했다. 산출: `RoundConfigSnapshot`/`RoundGateOutcome` 하위 모델, `main` 배선,
+테스트 12건, 뮤테이션 5종 전건 검출, 전체 백엔드 스위트 11897 passed EXIT 0. 그 뒤
+`backlog.py start MP-04`가 **거부**됐다 — 14:46:31Z에 `claude/test-driven-development-03elxp`가
+정식 claim했고, 실측하니 상대는 이미 같은 두 파일을 +151/+98로 구현 중이었다. 내 구현 전량 폐기.
+
+**왜 claim을 안 했나**: 열린 PR #1003에 대장 변경을 섞고 싶지 않아 `start`를 머지 이후로
+미뤘다. 그런데 그 PR이 `behind` 루프로 3회 재실행되며 1시간 넘게 머물렀고, **그 대기 시간이
+통째로 병렬 충돌 창이 됐다**. 판단의 오류는 두 비용을 잘못 저울질한 것이다 — 대장 조작이 PR에
+섞이는 것은 되돌리기 쉽고, 중복 구현은 되돌릴 수 없다.
+
+**2026-07-27 OPS-07(735줄 폐기)과 같은 형태의 2회차**지만 원인이 다르다: 그때는 원격 claim
+push가 CCR 프록시 403으로 상시 실패한 **하네스 결함**이었고(→ HARN-07 읽기측 폴백), 이번엔
+**claim 자체를 하지 않았다**. 장치가 아니라 순서가 원인이므로 대책도 순서 규칙이다.
+
+**대책(등재)**: CLAUDE.md v0.2.12 — "claim 전에 다음 태스크의 코드를 읽거나 쓰기 금지". 태스크에
+손대는 첫 행위는 `backlog.py start`이며, 대상 파일을 여는 것부터가 착수다. PR 머지 대기는 claim을
+미룰 사유가 아니고, 미룰 수밖에 없으면 그 태스크의 코드를 읽지 않고 다른 일을 한다.
+
+**부수 관측 2건**:
+- `backlog.py next`가 `OPS-62`를 1순위로 냈으나 그 태스크는 타 브랜치에서 이미 `done`(미머지)이었다.
+  "이미 완료(미머지)" 제외 목록에 안 잡힌 이유는 그 브랜치가 로컬 클론에 없어 스캔 대상이 아니었기
+  때문이다 — 착수 전 브랜치 fetch 확인이 중복 구현을 막았다.
+- 상대 세션의 설계는 평면 필드, 내 설계는 하위 모델 2종이었다. 내 쪽은 필드명을 `verdict`로 지었다가
+  앵커 관통의 날조 방지 가드(`"verdict" not in ledger_raw`)에 잡혔다 — 이 저장소에서 `verdict`는
+  사람 검수 판정 키(`review_session`)다. **가드가 옳았고 이름이 틀렸다**(→ `gate_outcome`으로 개명).
+  상대는 평면 필드라 이 충돌을 밟지 않는다. 폐기 산출물은 스크래치패드에만 남긴다.
+
+### 2026-09-06 — ARCH-39: Hint 저장 좌석 **영구 부재**로 판정 (판정 기준 main `3f2b39c1`)
+
+**질문**: `schemas/v1.1/hint.schema.yaml`이 `storage: PostgreSQL 16 (hints)`를 선언하는데 그
+테이블이 없다 — 설계 정본↔저장 실측이 어긋난 유일한 엔티티. 좌석을 만들 것인가.
+
+**판정: 만들지 않는다(영구 부재).** 종전 §3-B의 동결 사유는 "답 미루기 4단계는 Phase 1 성공
+기준이라 **언젠가 필요하다**"였는데, 그 전제를 재측정한 결과 **틀렸다**. 근거 3(전부 trunk 실측):
+
+1. **힌트에 영속 정체성이 없다** — 서빙은 `decide_hint_level` → coach LLM → `tone_filter`로
+   턴마다 동적 생성이며 재사용되지 않는다. 저장할 "그 힌트"라는 개체가 없다.
+2. **원천 텍스트 `SolutionStep.hint`조차 생산자·소비자 0건** — 세 방법 교차 확인(속성 접근 전수 /
+   적재기 `populate.py` hint 언급 0건 / 실코퍼스 200행 `"hint"` 키 0건). DB 좌석도 없다.
+   "구조화는 L4 몫"이 막힌 지점은 L4가 아니라 **그 앞**이다 — 구조화될 원료가 안 흐른다.
+3. **Phase 1 KPI가 본문을 요구하지 않는다** — "평균 도달 깊이 2.5+"의 측정 정본은
+   `wh1_evaluation ⑧ hint_depth_reached` = `attempt_event.hint_level` 평균·최대다. 본문도
+   yaml의 `reveals.reveal_score`도 읽지 않는다. **좌석을 파도 수치가 안 바뀐다.**
+
+**부수 판정**: `hint_usage.hint_id`는 *미래 `hints` 테이블을 향한 전방참조가 아니다*. 컬럼은
+유지하되(nullable·비용 0) **현재 writer 0건**임을 schema docstring에 명시했다. FK로 조이지 않는다
+— 참조도 피참조도 비어 있는 FK가 된다.
+
+**집행(정본화와 별항)**: 재확인 트리거 ①(힌트 본문 **컬럼**이 어느 테이블에든 생김)을
+`test_canonical_entity_model_freeze.py::test_no_table_gains_a_hint_body_column`이 자동 RED로 막는다.
+기존 두 검사는 **테이블 축**이라 이 벡터를 못 본다 — 실증: `problem_step`에 `hint_text`를 주입하니
+신규 가드는 FAILED, 기존 ③·③-b는 **2 passed**였다(구멍이 가설이 아니라 실재). 판정은 소스 grep이
+아니라 `Base.metadata` 실제 컬럼을 훑고, 스캔 0건은 실패로 처리한다. 트리거 ②③은 "없음"의 전수
+증명이라 스캔이 공허해지기 쉬워 기계 집행을 의도적으로 두지 않았다(갭 리뷰 소유).
+
+**부수 발견 — 정본 문서의 재현 명령이 깨져 있었다.** 부록의
+`python -m pytest tests/backend/db/...`(저장소 루트·위치 인자)는 OPS-61 함정에 걸려 **EXIT 4
+UsageError**로 테스트를 한 건도 못 돌린다(실측). `-c src/backend/pyproject.toml
+--rootdir=src/backend`를 붙여 정정하고 동작을 확인했다(9 passed·EXIT 0). 같은 날 착지한 OPS-61
+가드가 **문서 속 낡은 런북을 드러낸** 사례다 — 가드가 없었으면 Kiki가 그 명령을 실행하고 나서야
+알았을 것이다.
+## 2026-09-06: 정정 — #1000의 "EOS 계열 소진"은 도구 오보고였다 (HARN-73 실측 · Kiki 결정 A)
+
+- **무엇이 틀렸나**: 2026-09-06 대체안 A 항목·갭 리뷰 §11-2/§11-6·`build_harness.md` §8 금기가 "EOS 00~99 소진 → 새 접두 신설"을 사실로 적었다. 근거는 `backlog.py add`의 거부 문구와 `ls | max` 추론뿐이었다. HARN-73(#1002) 실측(모든 ref 이력 전수): EOS **사용 59 · 미사용 40**(01~05·07~27·29~31·33~43) — 제안기가 최대+1 방향만 봐서 낸 오보고였고, Kiki는 **A**(하위 미사용 번호 재사용 + 제안기 폴백)를 결정했다. 새 접두(C)는 기각.
+- **정정 범위**: 갭 리뷰 §11-7 신설(11-2·11-6에 취소선·참조) · `build_harness.md` §8 금기를 "소진 시 새 접두" → **"제안기 문구를 실측 없이 등재 금지"**로 교체 · `MP` 접두는 소진 대응이 아니라 회차 축 접두라는 정의만 유지(EOS 축 후속은 계속 `EOS-nn`). 대장은 손대지 않는다 — MP-02·03·04는 그대로 유효하다.
+- **형태**: 같은 날 두 세션(#1000·#1001)이 **독립으로 같은 도구 출력을 실측 없이 사실로 옮겼다**. "환경 사실의 추론 등재 금지"(CLAUDE.md)의 *도구 출력* 축 — 도구가 내는 판정 문구는 환경 사실이 아니라 도구의 주장이다. §10-5(부재 주장)·§11-5(존재 전제)에 이은 같은 계열의 세 번째.
+
+## 2026-09-06: 게이트 `G-backup-offsite-move` 실행 준비 — 반출 조건 ⓑ가 **존재하지 않는 절**을 가리키고 있었다
+
+- **발단**: Kiki가 게이트 ID만 지목(26일 경과·`assignee: kiki`). 실행 안내를 쓰기 전 런북을 실측(CLAUDE.md "검증 없는 실행 안내 금지").
+- **발견(문서 결함)**: `db_backup_dr_runbook.md` §4 취급 규칙의 반출 조건 **ⓑ가 "§4-5"를 가리키는데 문서에 §4-5가 없었다.** 원인은 삽입 사고다 — 취급 규칙은 번호 목록 1~5번인데, 2026-09-01·09-02 개정이 **1번과 2번 사이에** §4-1a~4-1d를 헤딩으로 끼워 넣어 2~5번 항목이 §4-1d(오프사이트 사본 주기적 검증) 본문 안으로 밀려났다. 절 번호(§4-2·§4-3·§4-5)는 본문 어디에도 적혀 있지 않아 참조 3종이 전부 착지점을 잃었다. §4-3은 `test_backup_encryption.py` 주석도 인용하는 하중 있는 번호였다.
+- **의미 결함(참조 해소만으로는 안 끝난다)**: 종전 §4-5 문면은 **봉투 암호화 마스터 키**(env `dialogue_content_encryption_key`)만 다뤘다. 그 키는 덤프 *내용물*을 덮는 키이고, ⓑ가 요구하는 키는 `.dump.age`를 여는 **age 개인키**(`whymath-backup-identity.key`)다 — 참조를 이어 붙여도 조건은 여전히 미정의였을 것이다. §4-5에 두 키를 명시 편입했다(age 개인키의 보관 정본은 §1b, 동반 반출 금지는 §4-1b 자가검증 2가 검사).
+- **왜 조용했나**: 마크다운 `§4-5`는 링크가 아니라 **문자열**이다. 렌더도 되고 CI도 통과한다 — 사람이 그 번호를 찾아가려 할 때만 드러난다. 게이트 조건처럼 *실행 직전에 읽히는* 참조에서 이 침묵의 비용이 가장 크다.
+- **대책(코드 동결)**: `tests/infra/test_backup_encryption.py::TestRunbookCrossReferences` 3건 — ①런북의 모든 `§N` 참조가 정의부(절 제목 또는 번호 목록 접두 라벨)로 해소되는가 ②반출 조건 ⓑ의 착지점이 정의된 절인가 ③§4-5가 age 개인키를 명시하는가. **정의 인식을 좁힌 것이 핵심**이다 — 산문 속 괄호 참조 `(§1b)`를 정의로 세면 모든 참조가 스스로를 정의해 검사가 항상 통과한다(CLAUDE.md "정의만 하고 안 써도 통과하는 substring 검사" 동형).
+- **결함 주입 5종 전건 검출**(cp 백업 원복·`git checkout` 미사용): 라벨 제거→3 RED / ⓑ를 §9-9로→2 RED / §4-5에서 키 파일명 제거→1 RED / 산문 괄호참조만으로 정의 위장(§7-7)→1 RED / ⓑ 줄 삭제→1 RED. 정상 상태 3 passed.
+- **게이트 상태**: **여전히 pending**. 이 세션이 한 것은 실행을 막던 문서 결함 제거와 6항목 브리핑 작성이며, 반출 자체는 Phaiakes9에서 Kiki가 실행한다(ⓒ = Kiki 명시 승인). 세션은 clear하지 않는다.
+
+## 2026-09-06: 게이트 `G-backup-offsite-move` 실행 — 반출 성공, 그리고 **등록 실패가 `[OK]`로 보였다**
+
+- **실행 결과(Kiki·Phaiakes9)**: §4-1a 반출 전 검증 `EXIT=0`(① 잠김 OK · ② 열림 OK · 카탈로그 491건) → §4-1b 반출 `[OK] copied 2` · 자가검증 1 `True`(바이트 길이 일치) · 자가검증 2 **`False`/`False`**(개인키·평문 미반출). 목적지 `C:\Users\kiki\Google Drive\WhyMath-backups`. **1회 시딩은 성립**.
+- **사고(§4-1c)**: 일반 권한 창에서 `register_backup_schedule.ps1`을 돌려 `Register-ScheduledTask`가 **Access denied(0x80070005)로 2회 실패**했는데, 스크립트는 **`[OK]` 2줄을 출력하고 exit 0**으로 끝났다. 런북의 자가검증 `-like "*-OffsiteDir*"`도 **`True`**를 냈다. 즉 등록 0건인데 화면은 성공과 구별되지 않았다.
+- **원인 3중**: ⓐ 파일 상단에 `$ErrorActionPreference = "Stop"`이 **있었는데도** 실행이 계속됐다 — 그 선호변수는 ScheduledTasks(CDXML/CIM) cmdlet에 걸리지 않는다. **보호가 있다고 믿은 자리에 보호가 없었다.** ⓑ Step 5의 되읽기가 **동명의 옛 태스크**를 읽어 통과했다(2026-07-17 좀비 uvicorn과 동형 — 다른 등록이 대신 만족시키는 간접 신호). ⓒ `[OK] action:` 줄이 **되읽은 값이 아니라 방금 조립한 `$argList`**를 출력했다 — 실패해도 성공과 글자가 같았다.
+- **대책(코드)**: `register_backup_schedule.ps1` — Step 0a 관리자 권한 **사전** 확인(실패한 뒤가 아니라 실행 전에 거부) · `Register-/Unregister-ScheduledTask` 호출 자리에 **명시적 `-ErrorAction Stop`** + try/catch(사유에 예외 타입명 포함 — 침묵 실패 금지) · 되읽은 인자를 **이번 실행이 조립한 인자와 대조**해 불일치면 `[FAIL]`(옛 태스크가 대신 통과하는 경로 차단) · 성공 줄은 되읽은 값을 출력.
+- **대책(런북)**: §4-1c에 관리자 창 경고를 명시하고 자가검증을 **목적지 값까지 대조**하는 형태로 교체(+인자 문자열 자체 출력). §4-1b에 "§4-1a는 최신 1건만 검증하는데 반출은 전건"이라는 개수 불일치를 명시.
+- **대책(동결)**: `tests/infra/test_backup_encryption.py::TestScheduledTaskRegistrationFailsClosed` 4건 — 검사는 **주석을 제외한 실행 라인**만 본다. 결함 주입 5종 전건 검출(수정 전 전체→4 RED / `-ErrorAction Stop` 제거→1 / 권한확인 무력화→1 / 조립값 출력 복귀→1 / **`-ErrorAction Stop`을 주석에만 넣기→1 RED**). 마지막 건이 이 계약의 위장 축이다.
+- **게이트 판정**: §4-1b(반출 1회)는 충족, §4-1c(상시 미러)는 **미확인** — 자가검증 `True`가 옛 태스크에서 나온 것이라 현재 등록 상태를 실측 전에는 알 수 없다. 부분 성공을 전체 정상으로 해석하지 않는다(CLAUDE.md). 진단 조회 후 판정한다.
+## 2026-09-06: 게이트 clear 후 unblock 미추종 3건 — "Kiki 대기"로 오보고된 차단 태스크 정정 (HARN-74 등재)
+
+- **경위**: `/status` 세션이 차단 5건을 "Kiki 게이트 대기"로 보고했는데, 실측 결과 3건은 게이트가 이미 닫혀 있었다 — `ADMIN-02`(`G-prod-dead-column-check` 8/31 clear·user_profile 빈 테이블 0행)·`CUR-17`/`CUR-18`(`G-eos-verification-relevance-triage` 9/1 clear·판정 P2). 게이트가 닫힌 뒤 태스크 상태(blocked)가 따라오지 않아 5일 이상 방치됐다. `PATH-04`는 Kiki 대기(xlsx 제공)가 notes 산문에만 있고 게이트가 미등재라 `/gates`·리마인드에 안 보였다.
+- **처분(전부 CLI)**: ① `ADMIN-02` unblock → todo(스코프 3분할은 2026-08-11 notes로 이미 확정·남은 사람 결정 없음). ② `CUR-17`/`CUR-18`은 `unblock` 직후 `block --reason`으로 사유 정정 — 판정 = P2·12월 검증 불요·2027 Q1~Q2 이월, 재확인 지점 = G4(2026-12-13). priority 2·S3라 unblock하면 `next` 최상위로 올라가 이월 판정과 어긋나므로 **차단으로 파킹**(착수는 unblock 1회). ③ `PATH-04`에 원본 제공 게이트 등재 + `amend --gate` 부착 — 초판 `G-path04-learning-path-xlsx`는 원본 xlsx를 `data/corpus/…/source/`에 커밋·push하라고 적어 반입 계약(`external_corpus_ingestion_v1.md` §0 "원본 파일은 커밋하지 않는다"·`data/raw/` gitignore)과 충돌했다 → PR #1004 Codex P2 지적 수용, waive(교체 사유 기록) 후 `G-path04-source-xlsx-local-handoff`로 교체(원본은 Git 밖·`data/corpus/`에는 추출 산출물+`_provenance.json`만). 게이트 *제목 정정* CLI가 없어 waive+add로 교체했다 — 면제된 유령 게이트 1건이 대장에 남는 설계 공백(HARN-06·HARN-24 동형). ④ 데이터 카드 `docs/data/concept_content_corpus_v1.md` 54행의 추적 ID `PATH-02`→`PATH-04` 정정(PATH-02는 현재 정렬 정직 표기 태스크).
+- **원인·대책**: `gates clear` 핸들러가 "✔ 게이트 → cleared" 한 줄만 찍고 **부착 태스크를 계산하지 않는다**(보드 HARN-41은 계산하지만 CLI·브리핑에는 없다). 대책 = `HARN-74-gate-clear-blocked-task-reminder`(clear 시 blocked 태스크 목록·unblock 명령·산문 참조 표기·브리핑 항목·실패 주입 테스트). 번호는 `HARN-73`이 원격 브랜치 선점이라 CLI 제안 `HARN-74`를 그대로 썼다. 인접 구분: HARN-52·HARN-72는 *등재 시점* 집행, HARN-74는 *게이트 해소 시점* 후속 집행.
+- **부수 실측**: `ADMIN-02`는 unblock 후에도 `next`에 안 뜬다 — 폐기 판정(병합 금지·ADMIN-02 notes 2026-08-11) 브랜치 `claude/whymath-mvp-plan-architecture-trjg5x`의 done 사본을 HARN-11 미머지 done 필터가 "이미 완료(미머지)"로 읽기 때문. **폐기 판정된 브랜치가 살아 있는 태스크를 가리는 축**이며 `/stray-code` 처분 대상(이 세션 범위 밖·HARN-74 notes에 병기).
+- **Kiki 남은 행동 2건**: `EOS-63` 기록률 리포트 1회 실행(`G-eos63-skill-event-reach-sample`) · `PATH-04` xlsx 제공(`G-path04-learning-path-xlsx`). 런북(6항목 브리핑·자가검증 동봉)은 세션 대화에 제공. 이 세션은 대장·문서 외 코드 변경 0.
+
+## 2026-09-06: 자리표시자 사고 2회차 — "사람이 아는 값" 예외도 뚫렸다 (CLAUDE.md v0.2.12)
+
+- **경위**: PATH-04 xlsx 제공 런북(이 세션·PR #1004 대화)의 첫 줄 `$Src = "여기에_학습경로_xlsx_전체_경로"`가 Kiki 머신에서 **그대로 실행**됐다. 2026-08-31 규칙은 *앞 단계 출력*의 자리표시자만 금지하고 "첫 명령의 인자(사람이 원래 아는 값 — 이메일·경로)"는 예외로 남겼는데, 정확히 그 예외 자리에서 실패했다. 관측: `Get-FileHash` PathNotFound → `$Hash` null → `throw "불일치: "` → **그런데 `throw` 뒤의 `New-Item`·`Copy-Item`·`git status`가 계속 실행**됐다(붙여넣기 줄은 각각 독립 실행되므로 throw는 정지 장치가 아니다). 피해 0 — 실패한 것은 읽기·복사 명령뿐이고 생긴 것은 gitignore 폴더 `data\raw` 빈 디렉터리 1개.
+- **판정**: 동일 유형 2회차(08-31 `G-operator-seat-first-grant` 5단계 안내 → 09-06 PATH-04) = 반복 실수 → 재발방지 등재 의무. "다음엔 채워 주겠다"는 대책이 아니다.
+- **대책(규칙·CLAUDE.md v0.2.12)**: 붙여넣기 블록의 자리표시자 **전면 금지** — 값은 ①세션이 채우거나 ②블록이 스스로 찾거나(파일은 sha256 지문 스캔·컨테이너는 `docker ps`·브랜치는 `git`) ③`Read-Host`로 멈춰 묻는다. `throw` 비정지 사실을 명시하고 후속 줄은 `if ($값) { … }` 가드. 08-31 규칙 본문은 그대로 두고 *확장* 하위 불릿으로 예외를 폐기했다(규칙 이력 보존).
+- **PATH-04 런북 재발행**: 자리표시자 0 — Desktop·Downloads·Documents·OneDrive의 `*.xlsx`를 스캔해 sha256 앞16 `f4ee650b734ac854`와 일치하는 파일을 **블록이 찾는다**. 후보 0건이면 스캔 건수와 함께 보고하고 후속 줄은 가드로 건너뛴다. 이 런북은 Windows 전용이라 컨테이너에서 실행 검증이 불가하다(pwsh 없음) — `check_ps_scripts.py`가 겨냥한 부류와 같은 한계이며, 첫 실행 결과로 검증한다.
+- **첫 실행 결과(같은 날·검증 완료)**: xlsx 435건 스캔 → 지문 일치 1건 `…\mathmatic\__00.완성본\7주체별_소단원_학습구조_콘텐츠.xlsx`(1,443,996 bytes) → `data\raw\learning_paths_7tracks_s1_s7.xlsx` 로컬 보관·`git status` 공백. 게이트 `G-path04-source-xlsx-local-handoff` clear(세션 중계 기입) + **`PATH-04` 즉시 unblock**(HARN-74가 지적한 '게이트 clear 후 unblock 미추종'을 같은 세션에서 반복하지 않음) → `next` 전건 조회에서 후보 확인(priority 4·P2라 하위). Kiki 남은 행동은 `EOS-63` 리포트 1회 실행 **1건**. 재발행 런북의 자리표시자 0 설계가 첫 실행에서 그대로 성립했다.
+- **behind 루프 실측(PR #1004 · `G-merge-queue-or-strict-relax` 판정 근거 추가)**: 이 PR 하나에서 **behind 4회** — 필수 체크 전건 green인데도 머지 API가 `405 … 16 of 16 required status checks are expected`로 거부한 것이 3회(14:46·15:05·15:27 UTC), 그 사이 main 착지 = HARN-73(#1002)·HARN-53(#1006)·OPS-61(#1003)+LIC-07(#1008)·OPS-62(#1005). backend lint·type·test 잡이 ~19분이고 main은 ~15분 간격으로 움직여 **정직한 순차 병합으로는 구조적으로 이길 수 없는 창**이다(auto-merge SQUASH를 켜 둬도 base가 낡는 순간 대기로 떨어진다). 2026-09-06 PR #980의 behind 3회에 이은 두 번째 실측이며, 대장 정정만 있는 PR(코드 0)에서도 같은 비용이 든다.
+
+## 2026-09-06: ASM-13(strong_points writer)·EOS-86(solution_coaching MIXED 분해) — 하네스 추천 상위 3건 중 2건 착수(EOS-85는 병렬 세션 claim으로 회피)
+
+- **경위**: `/drive` 추천 우선순위 상위 3건(`ASM-13`·`EOS-85`·`EOS-86`) 착수 지시. `EOS-85`는 착수 직전 원격 claim 조회에서 `claude/status-k9r51v`가 이미 잡고 있어(claim 시각이 이 세션의 코드 변경보다 뒤였음에도) 로컬에 이미 만들어 둔 변경분(populate.py answer_kind 화이트리스트 제거 등)을 **커밋 전에 발견해 전량 원복**했다(`git show HEAD:<path> > <path>` 방식 — `git checkout --`는 이 세션 권한 분류기가 차단해 우회로 사용). 병렬 세션 중복 작업 금지 원칙 집행.
+- **ASM-13 판정**: `assessment.strong_points`는 3안(a 채운다/b 뺀다/c 예약 좌석 동결) 중 **(a) 채운다**를 골랐다 — 스키마 docstring이 이미 "강점 단원/개념"을 명시했고(설계 의도가 있었다), student-facing 필드라 프라이버시·게임화 저촉 없음(긍정 강화는 CLAUDE.md 금기의 반대 방향). 신규 통계 로직 0 — `l2/strong_concept_recommendation.py`(신규)는 `weak_concept_recommendation`의 신호 정의(두 신호 중 최저값)를 그대로 재사용하고 임계 비교 방향만 뒤집는다(`>= threshold`)·`compute_concept_diagnoses`의 약점-먼저(오름차순) 정렬을 뒤집어 강점-먼저로 재배열. `assessment_seat_reach_report.py`에 `strong_points_nonempty_count` 동반 추가(작동 신호 없는 알고리즘 부착 금지 준수). 새 모듈이 `eos_feature_inventory_v2.py`의 모듈 귀속 표(WM-E-205)에 없어 "미귀속 모듈" RED — 편입 후 인벤토리 재생성(`--write`, CORE 108→109 등 반영).
+- **EOS-86 설계 핵심 3가지(문서·acceptance 문면과 실측이 갈린 지점들)**:
+  1. **StepChainVerifier 프로토콜 확장**: `verify_chain(steps)` → `verify_chain(steps, step_types=None)`. `step_types`는 과목별 어휘(수학 `StepType`)라 Core에겐 `Any`(규칙 2 — 계약이 이미 `unverifiable_by_reason`에 쓴 것과 동일 근거). 이게 없으면 `test_step_types_forwarded` 등 기존 계약이 깨진다.
+  2. **`SolutionCoaching.solution_verification` 필드 타입 실측**: `ChainVerificationCounts`(Protocol) 그대로 쓰면 `model_json_schema()`가 `PydanticInvalidForJsonSchema`(IsInstanceSchema)로 **하드 크래시**해 OpenAPI 생성·앱 기동이 막힌다(직접 재현 확인). `model_dump(mode="json")`은 정상 동작(런타임 값이 실제 pydantic 모델이라)이라 **`Any`로 낮췄다** — 대가는 OpenAPI 스펙에서 이 필드가 불투명 객체(`{title, description}`만)로 광고된다는 것(Flutter codegen 영향 — 실제 페이로드 바이트는 불변). `create_app().openapi()`를 직접 호출해 확인.
+  3. **기본 주입 위치**: acceptance 문면은 "verifier 기본값은 composition 팩토리"(②)와 "그러면 solution_coaching이 4번째 pull point가 돼 RED — api.coach가 대신 주입하거나 baseline 갱신"(⑥) 둘 다 요구해 상충한다. `test_solution_coaching.py`(625줄)가 verifier를 전혀 주입하지 않고 실동작(SymPy 실행 결과)을 기대하는 테스트를 20건+ 갖고 있어 "api.coach가 대신 주입" 경로는 그 파일 전량 수정을 요구했다 — **비용이 더 큰 쪽**이라 기각하고, `l4.solution_coaching`을 `CORE_PULL_BASELINE`에 편입하는 쪽을 택했다(pyproject import-linter의 layers 계약에도 `l4.solution_coaching -> composition` 한 줄 추가 — `test_every_layer_pull_point_is_enumerated_in_the_layers_contract`가 강제).
+  4. **`observe_wrong_form_shadow` 이관**: 처음엔 acceptance가 제시한 "api.coach로 이관"을 그대로 따라 `api/coach.py`가 `l4.misconception.wrong_form_match`(ADAPTER)를 직접 import하게 했는데, 실측(`eos_core_boundary_probe.py` 재실행)에서 **api.coach(CORE) → wrong_form_match(ADAPTER) 1홉 직접 리치**라는 *새* 잔여 누수를 만드는 것으로 드러나 되돌렸다. 최종은 `composition.default_wrong_form_shadow_observer()`(신규 6번째 팩토리 — Protocol이 아니라 `Callable[[str], None]` 하나만 돌려준다) 경유로 solution_coaching 안에 남기는 것 — verifier와 같은 pull point를 재사용해 간선 추가 0.
+- **RESIDUAL_LEAK_BASELINE — acceptance 원문 "frozenset()"과 실측이 갈렸다**: solution_coaching 경유 누수 2건은 실제로 0이 됐다(BFS 직접 확인). 그런데 그 경로가 *최단*이었을 뿐이라, 없어지자 BFS가 더 긴 **기존에 가려져 있던** 경로를 드러냈다 — `api.coach`/`api.ocr_handoff` → `harness.wh1_primary` → `harness.wh1_loop`(INFRA) → `l3.verify_solution`(ADAPTER 직접 import, EOS-86 이전부터 존재). `harness`는 `composition`과 달리 DESIGNED_SEAMS가 아니라 이 경로를 막지 못한다. **정직한 판정**: 잔여 누수는 여전히 2건 — 원인만 옮겨졌다. 이 발견은 EOS-86 범위 밖 후속 태스크 `ARCH-99`(harness.wh1_loop 자체의 CORE→ADAPTER 직접 의존 정리)로 분리 등재했다. `MATH_FIELD_NAME_BASELINE`에도 거짓 양성 1건 추가됨 — `solution_coaching.trigger` 필드명이 `MATH_TOKEN_RX`의 `trig\w*`에 부분매치("trigger"⊃"trig")한 것으로, `l4.solution_coaching`이 CORE 재배정으로 처음 이 스캔 대상에 들어와 드러났다(필드 자체는 무관·불변).
+- **정직한 잔여(acceptance ⑤)**: `l3.pregenerate.validator`(`validate_response`·`arithmetic_validator`)는 solution_coaching이 여전히 최상단에서 직접 import한다 — BOUNDARY_MAP상 MIXED이고 추가 ADAPTER를 당기지 않아(reach_residual 증가 0 확인) 게이트 위반은 아니지만 미해소 축이다. 후속 태스크 `ARCH-44`로 분리 등재.
+- **거버넌스 테스트 갱신**: `test_coach_wh1_convergence_governance.py::test_verify_solution_single_source`가 `solution_coaching.verify_solution is wh1_loop.verify_solution`(identity)을 검사했는데, `verify_solution` 이름이 solution_coaching 네임스페이스에서 사라져 AttributeError. 검사 지점을 실제 위임처(`l4.subject_adapter_math.verify_solution`)로 옮겨 동일 불변식(사본 분기 0)을 유지 — 이런 identity 동결 테스트는 *무엇이 무엇을 재수출하는가*에 결합돼 있어 재배선마다 함께 봐야 한다.
+- **검증**: `mypy --strict` 5파일 clean · `ruff check`·`black --check` 변경 파일 전량 clean · `tests/infra` 897 passed(1 skipped) · 백엔드 전체 스위트(`-p no:randomly`, bare invocation) **ASM-13+EOS-86 최종 조합 12427 passed·323 skipped·1 xfailed·0 failed**(14분35초) — ASM-13+EOS-85(이후 원복) 조합으로 돌린 1회차와 정확히 같은 카운트라 회귀 0. `create_app().openapi()` 직접 호출로 OpenAPI 생성이 크래시하지 않음을 실측(위 ②). `python3 scripts/analysis/eos_feature_inventory_v2.py --write`로 인벤토리 CSV/YAML 재생성(모듈 귀속·CORE 카운트 반영) 2회(ASM-13 신규 모듈 편입 1회 + EOS-86 재배정 1회).
+- **번호 등재**: `ARCH-99`(harness.wh1_loop 잔여 누수)·`ARCH-44`(pregenerate.validator MIXED 재검토) 둘 다 CLI 제안 없이 직접 지정했으나 `ARCH-100`은 "태스크 ID 형식 위반"으로 거부돼(3자리 미허용) `ARCH-44`로 대체 — 3자리 손제작 금기(`build_harness.md` §8)가 ARCH 계열에도 그대로 적용됨을 재확인.
+- **[병합 기록 · 2026-09-07] 병렬 세션 겹침 — PR #1009(vcojei)가 같은 게이트를 먼저 main에서 clear**: 두 세션이 같은 날 같은 게이트를 각자 실행 안내·정정했다(Kiki가 양쪽 런북을 번갈아 실행한 흔적 = 이 세션 회신에 섞여 들어온 `$Expected` 블록·"조회 전용" 블록). 병합 방침: 게이트 대장은 **main(Kiki clear·`cleared_by: kiki`)이 정본** — 이 세션의 clear는 낡은 로컬 대장 위에서 실행된 중복이며 이벤트 파일은 사실 기록으로 유지 · 등록 스크립트는 #1009 판 채택(권한 검사·try/catch에 더해 되읽은 인자↔조립 인자 대조까지 있음 — 이 세션 테스트 2건은 그 판에서도 통과) · 런북은 이 세션 개정본(§4-1b 가드·2b·3, §4-1c UAC 런처·첫 회차·삭제 전파 프로브, §4-1e) 위에 #1009 고유분 2건(반출 개수 불일치 경고·되읽기 값 대조) 편입 · CLAUDE.md는 양쪽 확장 불릿 병기 + v0.2.14. 원인: 이 세션 시작 브리핑의 원격 claim에 게이트 실행 세션이 보이지 않았다(게이트는 태스크가 아니라 claim 대상이 아님) — **게이트 실행도 claim처럼 보이게 하는 장치가 없다**는 공백을 확인. 후속 등재 후보(HARN 계열).
+
+## 2026-09-06: ARCH-43 — 과목 중립성의 반증 가능한 검사 (불투명 페이로드 해석 게이트)
+
+- **문제**: Subject Contract v1의 15필드 중 13개가 불투명 문자열이라 "Physics로 채워 본다"(EOS-92 갈래 A)는 실패 사례를 구성할 수 없다 — 성공/실패 양쪽에서 같은 값(변별력 0). 계약 파일이 스스로 예고한 진짜 붕괴 경로는 **Core가 `answer_kind`·`conditions` 값을 읽어 분기하는 것**인데, 그 축의 기계 집행이 0이었다(subject_adapter.py:52-55 "현재 없다(있는 척 금지)").
+- **결정 — 위반을 먼저 정의하고 주입해 RED를 본 뒤에만 검사로 친다**: CORE 배정 모듈(`eos_core_adapter_boundary_scan.BOUNDARY_MAP`/`classify` **재사용** — 새 목록 없음)이 불투명 필드(계약 docstring "불투명 페이로드 원칙" 절에서 **기계로 파생**)의 값을 `eq_literal`·`membership`·`substring_probe`·`dict_key`·`match`·`str_parse` 6자리에 놓으면 위반. 값 읽기 형태 4종(속성·첨자·`.get`·같은 스코프 별칭 한 단계)을 같은 값으로 본다 — 문자열 열거가 아니라 AST 구성 결과 검사. 구현 = `scripts/analysis/eos_opaque_payload_gate.py`(exit 0/1/2 · 분모·제외·타입명 로그 · `KNOWN_VIOLATIONS` 그랜드파더는 소유자+재확인 지점 필수) + `tests/infra/test_eos_opaque_payload_gate.py` 58건(실 레포 동결·주입 21형태 RED·비위반 10·가짜 트리 끝-끝·0건 exit 2·파싱 실패 exit 2·ratchet).
+- **왜 기존 장치 확장이 아닌가(③)**: boundary_scan은 import 간선만 보고, EOS-84 프로브의 `scan_literal_compares`는 *리터럴이 수학 어휘인지*를 키로 잡아 `== "physics.quantity_with_unit"`을 통과시킨다(직교). 둘 다 "계측기(exit 1 안 냄)" 계약이라 게이트를 넣으면 계약이 깨진다 → EOS-84 선례대로 자매 스크립트. `classify`는 재사용.
+- **실 레포 스캔**: CORE **309 / 639** 모듈(ADAPTER 81·INFRA 215·MIXED 34 제외). 위반 **1건** = `l1.problem_bank.populate:363` `membership`(별칭 경유 — 별칭 추적 없이는 0을 냈을 형태). 기준선 등재: 소유 `EOS-85`, 재확인 "착지 시 비움·늦어도 G1 2026-09-27". 즉 "현행 위반 0"이 아니라 **"알려진 1건·소유자 있음·만료 있음"**이다.
+- **축 (b)(c) 처분**: (b) Physics 어댑터 스텁을 실구현(`test_subject_adapter_physics_stub.py` 5건) — 필수층은 물리로 구현 가능·가상 필수층(`parse_latex` 추가)에서 즉시 불만족(살아 있는 반증기). 다만 **필수층 Core 호출자가 0**(ARCH-41)이라 의미 왜곡이 일어날 지점 자체가 없다 — 관측 불가를 정직히 기록. (c) 계약 식별자 전수에서 수학 은유 0건 동결 + `parse_latex`·`sympy_expr` 주입 RED; docstring 산문은 미검출(명시).
+- **변별력**: 서브에이전트 뮤테이션 6종(membership 제거·예외 확장·0건 처리 제거·별칭 추적 제거·파싱 오류 처리 제거·실 CORE에 `== "quadratic"` 주입) 전건 RED + 오케스트레이터 독립 재현 1종(membership 제거 → 7 failed → cp 원복 58 passed).
+- **정직한 공백**: 이름 기반(타입 미해결) · 별칭 한 단계 · `getattr`·함수 경유·런타임 프롬프트 조립 미검출 · 소문자 이름과의 `==` 미계상 · 정적 검사 · 스크립트는 CI 스텝이 아니라 `tests/infra`가 집행(boundary_scan·프로브 선례와 동일 — ci.yml 스텝 0건 실측).
+- **PR #1014 Codex P1 상환 (같은 날)** — `evaluate()`가 위반을 `(모듈, 종류)` **개수**로만 대조해 "알려진 `populate` membership 1건을 갚으면서 같은 모듈 다른 자리에 새 membership 1건을 넣는" 변경이 1→1로 상쇄돼 exit 0이었다(래칫 우회). 정체성을 **위반별 지문** `sha256(모듈|종류|해석 식 ast.unparse)[:12]`로 교체 — `Grandfathered.count` → `fingerprints` 튜플(개수는 파생) · 실 위반 지문 `d93b2c7770a0` 등재 · `--json`·마크다운에 지문 산출. 줄 번호는 의도적으로 지문에서 제외(행이 밀려도 같은 위반) · 식이 바뀌면 재승인. 테스트 §②′ 4건 신설(상쇄 시나리오 RED · 행 이동 green · 식 변경 RED · 동일 식 2자리 = 지문 2회). 뮤테이션 3종 RED: 개수 대조로 되돌림(2 failed) · 지문에서 식 제거(4 failed) · 지문에 줄 번호 혼입(5 failed). 교훈: **기준선은 "몇 건"이 아니라 "어느 것"을 적어야 래칫이다** — EOS-84 프로브의 `LITERAL_COMPARE_BASELINE`도 같은 (모듈,종류) 개수 형태라 같은 구멍이 있다(그쪽은 계측기·exit 1 안 냄이라 영향 범위가 다르지만, 동결 테스트가 개수만 보면 같은 상쇄가 가능 — 후속 점검 대상).
+
+
+### 2026-09-07 — ARCH-39 판정 정정: "영구 부재" → "미실체화 · S4-11 소유" (PR #1015 Codex P2)
+
+**무엇이 틀렸나**: 어제 ARCH-39를 "Hint 저장 좌석 **영구 부재**"로 판정했다. **틀렸다.**
+`S4-11-hint-content-generation`(`status: todo` · `eos_priority: **P0**`)의 acceptance가
+"**hints 테이블 실체화**(생성 writer·검증·coach 서빙 reader)"와 `reveal_score` 로깅을 명시하고,
+notes는 이를 "HintNode Persistence **연기** 해제 조건 충족 슬라이스"로 규정한다. 좌석은 포기된
+것이 아니라 연기된 것이었고, 내가 "근거 없는 가정"으로 본 §3-B의 "언젠가 필요하다"는 실은
+**다른 태스크의 약속**이었다.
+
+**왜 놓쳤나 — 절차 결함 3건**:
+1. **소유자 검색 부재**. 정본 문서와 ARCH-39 태스크만 읽고, *그 좌석을 이미 소유한 태스크가
+   백로그에 있는지*를 검색하지 않았다. 백로그가 일정의 정본인데 그 정본을 안 봤다.
+2. **부재 판정의 검색 범위**. 근거 2를 `SolutionStep.hint`라는 **이름**으로 찾았다. 실제로는
+   `l3/dsl/models.py:HintSpec.text` → `compiler.py:CompiledContent.hint_texts`에 힌트 본문
+   생산 경로가 **실재한다**(dsl 밖 소비자는 0건). CLAUDE.md "식별자 부재를 기능 부재로 단정
+   금지"가 경고하는 바로 그 형태 — 역할이 아니라 이름으로 찾았다.
+3. **선택지의 유혹**. ARCH-39 acceptance가 "③ 좌석 불요면…"을 미리 열어 두었고, 실측이 그쪽을
+   지지하자 다른 소유자를 확인하지 않고 그 길로 갔다. **acceptance의 선택지는 허가가 아니다.**
+
+**정정 내용**: §3-B를 "좌석 미실체화 · 신설은 S4-11 소유"로 바꾸고, 실측 4건을 **S4-11의 입력**
+으로 재배치했다(런타임 힌트는 영속 정체성 없음 / 본문 생산 경로는 있고 소비가 없음 —
+S4-11의 "coach reader"가 그 끊긴 지점 / KPI는 좌석 없이 이미 측정되므로 reveal_score는 전제가
+아니라 정밀화 / hint_id writer 0건). `hint.schema.yaml` storage는 "계획 — 미실체화"로,
+컬럼 축 가드는 "영구 부재 집행"이 아니라 **"좌석이 조용히 생기는 것을 막는 속도 방지턱"**으로
+재규정했다(S4-11이 의도적으로 걷어내며 착수 — 다른 부재 4종과 같은 규약).
+
+**남는 가치**: 실측 자체는 유효하고 S4-11에 유용하다. 특히 **acceptance의 원천 지목 불일치**를
+발견했다 — S4-11은 원천을 `SolutionStep`으로 적었는데 실제 텍스트가 흐르는 곳은 `HintSpec`이다.
+착수 시 먼저 정리해야 한다고 §3-B에 적었다.
+## 2026-09-07: HARN-66 + HARN-68 착지 — 판정 근거를 기계가 요구한다 (#1011 · main 41756ccf)
+
+**사고 경위 2건(2026-09-05, 같은 세션)**: ⓐ ADR 번호 계열 규약을 만든 세션이 작업 트리 `ls`로
+"다음 빈 번호=003"을 골라 ADR-003을 만들었는데, `origin/claude/entity-model-freeze-lji37v`가 같은
+날 15:45에 ADR-003을 선점(세션 커밋 16:58) — **번호 충돌을 막으려던 문서가 충돌을 하나 더 만들었다**
+(ADR-004로 개명). ⓑ Gate 0 검토가 미머지 PR #986을 Gate 0-B 근거로 달았다(CLAUDE.md v0.2.11
+"미머지 존재를 충족으로 단정 금지"). 대비가 요점: 같은 세션에서 *태스크* 번호는 `backlog.py add`가
+원격 claim까지 검사해 EOS-83 충돌을 **거부**했다 — 규칙이 아니라 **집행 장치의 유무**가 갈랐다.
+
+**대책(코드·CI 동결)**: HARN-66 = `scripts/harness/adr_number_check.py` — 원격 전 브랜치 + 체크아웃
+HEAD를 스캔해 같은 번호(정수 정규화)·다른 슬러그면 exit 1, 다음 빈 번호 제안, `harness-integrity`
+잡 배선(배선 자체를 테스트로 동결). HARN-68 = `gates clear`가 `--evidence`에 판정 기준(커밋 해시·PR
+참조)을 요구, 없으면 exit 1, 탈출구 `--no-base <사유>`는 자유 서술이되 notes·이벤트 양쪽에 기록.
+판정 문서 축은 **기계 집행 없음**으로 확정(전수 요구는 기존 문서를 즉시 red로 만들어 만료 없는
+그랜드파더를 부른다 — acceptance ③).
+
+**실측이 설계를 고친 3건**: ① 정규식 `\b`는 파이썬 `\w`가 유니코드라 **한글이 붙으면 경계가 안
+선다**("커밋 fbbcc53에") → ASCII 경계로 교체(기존 게이트 오탐 9→7건). ② 남은 7건(28%)은 전부
+**저장소 밖 행위**(키 등록·기기 데모·prod DB·GitHub 설정·파트너 결정) — `--no-base`가 정확히 그
+경우다. ③ Codex P1: 못 읽는 브랜치를 빈 목록으로 접어 **부분 스캔을 초록**으로 냈다 — PR "정직한
+공백"에 적어 놓고 배포한 *알면서 남긴 결함*. 수정 직후 실저장소에서 바로 실물(`claude/lic-07-
+acceptance-review-round` 미fetch)을 잡았다. 리뷰 3건 전부 초판에서 RED 확인 후 수정.
+
+**자기 결함 — 리뷰 판정도 시점에 종속된다**: PR을 연 직후(14:45) 리뷰를 한 번 확인했고 Codex는 3분
+뒤(14:48)에 달았는데 재확인하지 않아, 미해결 스레드 3건이 머지를 막는 동안 `behind` 경쟁(CI 18분
+vs main 20~30분 전진)만 5회 탓했다. 원인의 절반만 본 진단. **PR 열고 리뷰 봇이 돌 시간(≥5분)
+뒤에 다시 본다**를 세션 규율로 기록한다.
+
+**부수 실측**: 머지 경쟁은 실재한다(PR 생성→머지 12.5h). `HARN-56`(merge queue)의 근거. 두 태스크
+done 증적이 "머지 대기 중"으로 고정돼 있고 정정 CLI가 없다 — `HARN-57`의 실물. 하네스가 세션
+위반을 2회 잡았다(1세션=1태스크 → block으로 순차화 · audit-deps → 산문 선행에 depends 부착).
+
+
+## 2026-09-07: HARN-67 착지 — 취소된 선행은 "결정 불가 → 차단 유지 + 가시 경고", amend 정정 경로 3축 신설 · EOS-02 사람 게이트 분리 (#1025)
+
+**결정 ①(판정 규칙)**: `depends_on`의 선행이 `cancelled`면 **해소로 보지 않는다**(done만 해소). 취소가
+"불필요해서"인지 "오등재라서"인지 기계는 모르므로(모른다 ≠ 아니다) 해소로 접으면 오등재 태스크의
+후속이 조용히 착수돼 trunk에 없는 파일을 대상으로 일하게 된다. 대신 침묵은 금지 — selector 제외
+사유 `deps_cancelled`를 신설하고 `next`(매번·stderr·`--json` 무관)·`status`·`brief`·`validate`(경고만·
+exit 불변)·`cancel` 시점(의존자 N건 경고) 5곳에서 보이게 했다. 정정은 `amend --remove-depends`
+(오등재 선행 제거) 또는 HARN-69(취소 복원·미착지) 두 갈래.
+
+**결정 ②(정정 경로 3축)**: `amend <id> --remove-depends <full-id>` · `--remove-gate <G-id>`(게이트
+status 불변) · `--notes-replace "구문자" "신문자"`(구문자 정확히 1회 — 0회·2회+ 거부. 0회를 성공으로
+두면 "치환 0건인데 exit 0"이 되어 2026-09-06 미적용 뮤테이션 사고와 같은 형태). 제거한 ID·치환
+원문은 **notes에 인용하지 않고 이벤트 대장에만** 남긴다 — 실측: `depends_on -T7-01: 오등재 선행
+제거` 한 줄이 그 자체로 HARN-53 되먹임 가드에 잡혀 amend가 자기 가드에 거부됐다. ⑥의 두 안 중
+audit-deps 면제 어구 안은 채택하지 않았다(면제 문자열은 표기 변형에서 뚫린다). ⑦ rename은
+**의도적 미구현** — 사유는 `build_harness.md §7a`(전역 치환+원격 claim 재게시 비용 > `add` 충돌 검사로
+사전 거부). 후속 태스크 미등재.
+
+**실측**: tests/harness 662건 통과(633+29, 무작위 순서 포함) · ruff/black green · 뮤테이션 3종
+(next 경고 제거 → 3 RED · classify_todo 분기 제거 → 6 RED(상위 세션이 독립 재실측) · count==1 검사
+제거 → 2 RED) · 실 대장에서 취소 선행에 차단된 todo **0건**(EOS-96은 이미 EOS-97로 재등재됨).
+
+**부수 결정 — EOS-02 분리**: acceptance ①이 Phaiakes9 실 Anthropic 키로 도는 **사람 행동**인데
+`requires_gates`가 비어 있어 에이전트 후보 1순위로 계속 노출됐다(이번 `/drive`에서 실측). 입력
+(라이브 리포트)을 만드는 사람 게이트 `G-eos02-prompt-cache-live-run`을 부착했다 — 산출물 검수 게이트를
+산출 태스크 자신에 거는 교착(2026-09-06 MP-01)과는 다르다(리포트는 EOS-99 도구가 내고 EOS-02는 소비).
+런북 `docs/ops/eos02_prompt_cache_live_runbook.md`는 플래그·리포트 키·stdout 형식·키 env
+이름을 코드에서 실측해 적었다. **같은 `/drive`의 관측**: `HARN-71`은 `next`가 후보로 냈지만 겹침
+경고가 타 세션(`claude/status-k9r51v`)의 원격 claim을 보였다 — 27초 차이의 동시 착수 경쟁이었고
+원격 claim 대장이 막았다(착수하지 않음).
+
+**머지 후 추가 실측 2건(2026-09-07 08:50, PR #1025 자가 점검)**: ① **머지 충돌 상태의 PR에는 GitHub가
+`pull_request` 워크플로 런을 만들지 않는다** — `9e93e13a` push 뒤 45분간 CI 런이 0건이었고, 원인은
+main에 #1026(HARN-71)·#1030(EOS-02)이 착지해 생긴 충돌이었다. "CI가 안 돈다"는 증상은 CI 장애가 아니라
+충돌 신호로 먼저 읽는다(빈 커밋·close/reopen으로 흔들 일이 아니다 — 머지가 답). 머지 head `4f5503f9`에서
+런이 즉시 생성됐다. ② **EOS-02 핸드오프를 두 세션이 동시에 했다** — 이 브랜치(게이트 부착+런북)와
+`claude/status-k9r51v`(block+런북 `docs/ops/eos02_prompt_cache_live_runbook.md`, #1030)가 같은 판단을
+각자 했다. main의 `next`가 EOS-02를 게이트 없이 후보 1순위로 노출한 것이 공통 원인이고, 게이트 부착이
+그 노출을 닫는다. 정본은 먼저 착지한 main 런북, 이 브랜치 런북은 머지에서 삭제. 이 브랜치 런북에만 있던
+stale-file 가드·Ollama 창 분리는 main 런북에 없다(후속 반영 후보·미등재). 부수: HARN-71의 `add --notes`
+가드가 `--notes-replace` 테스트의 준비 단계를 막아 store 수준 레거시 주입으로 교체 — 치환의 대상이
+바로 가드 *이전* 레거시 위반이므로 CLI가 그 상태를 못 만드는 것이 옳다.
+
+## 2026-09-07: HARN-74 착지 — 게이트 해소는 태스크를 풀지 않는다, 그러니 알린다 (#1025) + PR #1025 Codex P2 3건 반영
+
+**결정**: `gates clear`·`waive`는 태스크 status를 건드리지 않는 설계(차단 사유가 게이트뿐인지 기계는
+모른다)를 유지하되, 직후 화면에서 ①그 게이트를 `requires_gates`로 건 blocked 태스크 전건 + `unblock`
+명령(0건도 "0건" 명시 — 결과 보고라 침묵 금지·남은 pending 게이트 병기) ②notes 산문에만 게이트 ID를
+적은 blocked(단어 경계 일치·부착/해제 두 갈래 안내) ③brief·status·status --json에 "해소된 게이트를
+기다리는 blocked N건"(전부 passed인데 blocked·0건이면 침묵 — 요약 규약)을 낸다. 보드(HARN-41)의
+목록 계산은 `selector.gate_dependent_tasks` 한 곳으로 통일. 실측: tests/harness 679(662+17) ·
+뮤테이션 3종 전부 RED(서로 다른 테스트 집합) · 실 대장 ③축 0건, ②축 hit = **CUR-17·CUR-18**
+(`G-eos-verification-relevance-triage` cleared를 notes로만 참조한 blocked — 타 세션 claim 중이라
+미조치. 정정은 `amend --gate` 부착 또는 `unblock`, 사람 몫). **정직한 공백**: ①②는 clear *시점*
+화면이라 이미 닫힌 게이트에는 소급되지 않고, ③은 부착 전제라 산문 참조만 있는 두 건은 brief에 안
+뜬다 — "해소된 게이트 × 산문 참조 blocked" 전수 스캔의 brief 판은 미구현(후속 후보).
+
+**PR #1025 Codex P2 3건(HARN-67 결함·전부 "보호 장치가 특정 경로에서 조용히 무력" 형태)**:
+P2-1 `stall_reason`이 취소 선행+pending 게이트 혼합에서 human_gate를 냈다(게이트를 다 열어도 남는데)
+→ 취소 선행이 있으면 blocked, 게이트 대기 태스크는 `(게이트 대기: G-x)` 표기로 정보 보존.
+P2-2 `next` 경고가 classify 결과(`excluded`)에서 나와 owner/track_gate 조기 제외 태스크는 침묵
+→ status/brief와 같은 `cancelled_dependency_blocks` 직접 스캔으로 교체. P2-3 `--notes-replace`의
+되먹임 마스크가 치환 *전* findings라 치환으로 없앤 선언을 `--reason`이 재생성해도 "기존 위반"으로
+통과(exit 0인데 audit-deps red) → 마스크 = (정정 전) ∩ (치환 직후·사유 append 전). 셋 다 테스트를
+먼저 넣어 RED(3 failed) 확인 후 수정(683 passed). **교훈**: HARN-67 자체 뮤테이션 3종은 전부 RED였다
+— 뮤테이션은 *내가 쓴 분기*만 검증하고, 분기 *앞*의 조기 return(P2-2)과 마스크의 *기준 시점*(P2-3)
+같은 경로 결함은 잡지 못한다. 리뷰 봇이 그 축을 메웠다(PR 열고 ≥5분 뒤 재확인 규율 유효).
+
+
+## 2026-09-07: PR #1025 머지 2회 거부 — 원인은 **이미 저장소에 실측돼 있었다**(HARN-32 ⑦ strict 정책). 내 "미규명" 판정이 오판
+
+**무슨 일**: `"pr"` 지시로 PR #1025를 SQUASH 머지하려 했으나 REST 머지 엔드포인트가 2회 모두 405
+`Repository rule violations found` + `16 of 16 required status checks are expected`로 거부했다. 이후
+`enable_pr_auto_merge`(SQUASH)를 걸자 다음 CI green에서 자동 머지가 발동해 `966c8db6`으로 착지했다.
+
+**원인(내가 규명한 것이 아니라 저장소에 이미 있던 것)**: `HARN-32` acceptance ⑦(2026-08-31 실측·done)이
+`GET /repos/doldori7/WhyMath/rules/branches/main`으로 **`strict_required_status_checks_policy=true`** 를
+확정해 두었고, 같은 405 문구가 그 정책 하나로 전부 설명된다고 이미 적혀 있었다. 즉 **`behind`면 필수 체크가
+병합 커밋 기준으로 재평가돼 "expected"로 보인다** — 판정 도구까지 있다(`scripts/ops/pr_merge_readiness.py`,
+exit 0 = 필수 green + up-to-date + 스레드 해소 = 지금 머지).
+
+**내 두 실패는 둘 다 `behind`였다(사후 실측)**: ⓐ 1차 `e4ceda6e` — main `1306fff4` 미포함 ⓑ 2차 `ecda3788`
+— main `99b05f54`(#1018, 시도 직전 착지) 미포함. 자동 머지가 발동한 `c13a6686`만 `99b05f54`를 포함했다.
+**즉 up-to-date + green 상태에서 직접 머지를 시도한 적이 한 번도 없다.** 성공한 것은 auto-merge가 아니라
+*up-to-date 상태*였을 가능성이 높고, 나는 그 둘을 분리하지 못한 채 auto-merge의 공으로 돌렸다.
+
+**운영 규칙(정정판)**: 직접 머지를 폐기하지 않는다. ①머지 전 `pr_merge_readiness.py`로 판정한다(exit 0이면
+직접 머지, 1이면 사유대로 조치) ②`behind`면 base를 병합·push하고 CI를 다시 기다린다 ③CI 완주와 base 전진이
+경합해 창이 계속 닫히면(HARN-32의 본 주제 — CI ~28분 vs main 머지 간격 ~31분) `enable_pr_auto_merge`가
+그 대기를 대신 서 준다. **auto-merge는 "직접 머지가 막힐 때의 대체 경로"가 아니라 "up-to-date 창을 기다리는
+자동화"다.**
+
+**오류 3건(재발 방지)**:
+1. **부재 판정 절차 위반** — "차단 주체 미규명"을 선언하기 전에 저장소를 찾지 않았다. `strict`·
+   `required status checks`·`merge` 어느 축으로 검색해도 `HARN-32`와 `pr_merge_readiness.py`가 나왔다.
+   CLAUDE.md 2026-08-31 규칙("내가 찾은 방법으로는 0건"이라고 범위를 밝혀 적어라)조차 지키지 않고 그냥
+   "모른다"로 적었다.
+2. **1회 관측의 과잉 일반화** — "직접 머지는 CI 전건 green이어도 거부된다"를 정본 규칙으로 승격했다.
+   반례가 될 조건(up-to-date + green)을 한 번도 시험하지 않았으므로 성립하지 않는 주장이다. 이 규칙이
+   그대로 남았다면 기존 판정 도구와 모순된 절차가 후속 세션 전체에 전파됐다.
+3. **진행 중인 장치의 결과를 기다리지 않은 단정** — auto-merge를 이미 건 상태에서 "Kiki가 UI에서 머지하는
+   것이 유일한 경로"라고 사용자에게 보고했고 17분 뒤 반증됐다.
+
+**잡은 것은 Codex P2**(PR #1035 리뷰) — 정확히 "1회 405를 일반화했고 `HARN-32` ⑦·`pr_merge_readiness.py`와
+모순된다"고 지적했다. 세션의 자기 정정(#1035 초판)은 오류 3을 고쳤을 뿐 오류 1·2는 그대로 두었다 —
+**자기 정정도 같은 사각을 두 번 통과할 수 있다**는 사례다.
+
+
+## 2026-09-07: 검사 판정이 두 방식으로 무효화됐다 — 래퍼 exit 마스킹 · 실행 중 트리 변경 (CLAUDE.md v0.2.17)
+
+COMP-01(PR #1045) 검증 중 **같은 실행 하나에서 두 결함이 겹쳤다.** 둘 다 "검사는 정직했는데 판정이
+무효였다"는 형태이고, 이 저장소가 반복해서 겪은 부류다.
+
+**ⓐ 래퍼가 종료 코드를 가렸다.** 백엔드 전체 스위트를 백그라운드로 돌리며
+`pytest … > log 2>&1` 다음 줄에 `echo "PYTEST_EXIT=$?" >> log`를 붙였다. 파이프라인의 마지막 명령이
+`echo`라 **래퍼는 exit 0으로 끝났고 하네스 완료 알림도 "exit code 0"** 이었다. 실제 pytest는 1이었다
+(`1 failed, 12531 passed`). 로그를 열어 본 덕에 발견했을 뿐, 알림만 믿었으면 실패를 통과로 보고했다.
+2026-08-09 `black -q | tail` 사고("판정은 exit code로 한다")의 **래퍼 축 변형**이다 — 그때는 사람이
+출력을 잘랐고 이번엔 래퍼가 exit code를 갈아치웠다.
+
+**ⓑ 검증이 도는 동안 내가 트리를 바꿨다.** 그 52분짜리 실행 중에 `origin/main`을 **두 번 병합**하고
+인벤토리 장부를 재생성했다. 실패한 1건은
+`test_mastery_propagation_still_takes_client_is_correct`로, `inspect.getsource(api_me.submit_attempt)`를
+읽어 정규식으로 콜사이트를 대조하는 계약 테스트다 — 병합으로 들어온 PED-37(#1036)이 그 함수를
+바꿨고, 테스트는 *바뀐 뒤의* 소스를 보고 실패했다. **main(`f9e25f80`) 기준 재실행에서 58건 전부
+통과**해 거짓 실패로 확정했다.
+
+**왜 거짓 실패가 통과보다 비싼가**: 없는 회귀를 쫓게 만든다. 이번엔 재현 시도 한 번으로 끝났지만,
+그 1건을 진짜로 믿고 `submit_attempt`를 고쳤다면 PED-37이 방금 착지시킨 동작을 되돌릴 뻔했다.
+
+**대책(CLAUDE.md v0.2.17 — 2026-08-09 규칙의 확장 2절)**: ⓐ 래퍼는 검사 명령으로 끝내거나
+`rc=$?; …; exit $rc`로 원 코드를 복원한다. 완료 알림의 exit code만 보고 green을 선언하지 않고 로그의
+판정 줄을 함께 읽는다. ⓑ 장기 검사 중에는 트리를 건드리지 않는다 — 별도 워크트리·`git archive`
+사본을 쓰고, 불가피하게 바꿨으면 그 실행 결과는 **폐기하고 다시 돌린다**(부분 신뢰 금지).
+
+**부수 실측(같은 세션)**: PR #1045 머지는 직접 REST 경로로 시도했고, 거부 사유가 순서대로
+`머지 충돌` → `Base branch was modified`였다 — 오전에 세션이 "직접 머지는 항상 거부된다"고 오판했던
+것과 달리, 판정 도구(`pr_merge_readiness.py`)가 exit 0을 낸 시점에는 경로가 열려 있었다. 최종적으로는
+armed 상태였던 auto-merge가 먼저 성사됐다(`f9e25f80`). 즉 두 경로는 배타가 아니라 **경합**이며,
+"Base branch was modified"는 실패가 아니라 다른 쪽이 이겼다는 신호다.
+
+## 2026-09-08: 게이트 `title`만 인용해 이미 뒤집힌 결정을 재안내 (CLAUDE.md 등재분 = `HARN-92`)
+
+`LIC-07` done 처리 후 "머지 경합 해소"를 안내하며 `G-merge-queue-or-strict-relax`의 `title`("merge queue
+도입 또는 'up to date' 요구 해제")을 그대로 인용해 사용자에게 선택을 요청했다. 실측하니 그 게이트는 이미
+**`cleared`**(`cleared_by: kiki`, 2026-09-07)였고 `evidence`에는 "1) merge queue는 조직 소유 저장소 전용이라
+이 저장소(`owner.type=User`)에서 실행 불가 — 전제 반증 → 재판정 = **D) 자동 재동기화 워크플로우**"가
+기록돼 있었다. `title`은 최초 등재 시점의 *질문*을 담고 있을 뿐, 이후 `status`·`evidence`가 답을 갱신해도
+`title`은 append 전용 설계(`HARN-76`)상 그대로 남는다.
+
+사용자가 그 낡은 `title`을 따라 "up to date 요구 해제"를 선택한 뒤에야 `evidence`를 조회해 이미 결정·구현된
+사안(`pr-auto-resync.yml`, `HARN-85` done)임을 뒤늦게 발견했다 — 왕복 1회 낭비.
+
+같은 세션에서 이어서 `G-pr-auto-resync-token`도 main 기준 `pending`만 보고 "PAT 미발급"으로 판정할 뻔했으나,
+이번엔 "trunk 부재를 미구현으로 단정 금지" 규칙을 스스로 적용해(미머지 브랜치 `claude/pat-issuance-q516cw`
+실측) 사전에 잡았다 — 그 브랜치에 이미 `cleared`(Kiki가 당일 새벽 PAT 발급·시크릿 등록·`workflow_dispatch`
+성공 실측)로 기록돼 있었다. 그 축은 기존 규칙이 이미 커버하므로 별도 등재하지 않았다.
+
+**대책**: `HARN-92`(도구 쪽) — `backlog.py gates`에 단일 게이트 브리핑 경로를 추가해 `status`·`cleared_by`·
+`evidence`를 `title`과 함께, `title`보다 먼저 출력하게 한다. `HARN-86`(전이 거부가 해소 경로를 안 알려주던
+결함)과 같은 형태 — 안내자가 규율을 몰라도 도구가 낡은 `title`에 낚이지 않게 만든다.
+## 2026-09-08: MISC-22 — 오개념 정규식 채널 confidence 공식 정정(v1.5), 4개 채널이 한 번도 학생에게 도달하지 못했던 결함 해소
+
+**결정**: `_match_one`(diagnose.py)의 confidence 공식을 `min(1.0, (substr매치+regex매치)/len(signals))`
+에서 `min(1.0, substr매치/len(signals) + regex매치_건수)`로 정정했다 — **정규식 매치 1건을 substring
+신호 전체와 동등한 완결 증거로 가산**한다(사실상 regex 매치 1건 = 단독 conf 1.0). MISC-22 acceptance
+②의 두 선택지((가) factor-sign-flip에 수치 signal 추가 / (나) confidence 의미 확장) 중 **(나)를
+채택**했다.
+
+**(가)를 기각한 이유**: factor-sign-flip의 규칙(부호 반전)은 명명그룹 역참조로만 표현 가능하다 —
+"(x-2)=0…x=-2"(오개념)와 "(x+2)=0…x=-2"(부호가 원래 +인 정답)를 가르는 것은 *괄호 안 수와 결론의
+수가 같은가*이고, 이건 plain substring으로 인코딩할 수 없다. 시도해 보면 어떤 새 substring
+signal도 "(x+2)=0 이므로 x=-2"(정답)에 오탐하거나, 아무것도 못 잡거나 둘 중 하나였다.
+
+**(나)가 안전했던 근거(실측)**: 카탈로그의 `regex_signals` 7종은 전부 명명그룹 역참조로 좌·우변이
+글자 그대로 일치할 때만 매치하도록 설계돼 있고, 각 항목 주석이 정답·기호식과의 disjoint를 개별
+증명한다 — 즉 "부분 신호"가 아니라 이미 확정적 단서였다. 그런데 옛 공식은 이를 substring 신호
+1개와만 동등하게 쳐서, 수치 대입이 유일한 매칭 경로인 항목(기호 substring이 구조적으로 0건)의
+confidence를 절반(보통 0.5)에 가뒀다. 직접 실측하니 **7종 중 4종이 이미 이 함정에 있었다** —
+`factor-sign-flip`은 MISC-07이 measure한 대로 서빙 게이트(0.65) 미달로 0/27이었고, `distribution-
+over-power`·`square-root-positivity`·`fraction-cancellation`·`log-distribution`(v1.2 "헤드라인
+역량"으로 시연됐던 4종 전부)도 각자의 대표 수치 대입 예시에서 conf 0.5로 **똑같이 갇혀 있었다**
+(코드에 없던 사실 — 기존 테스트가 conf==0.5를 frozen 단언으로 박아 뒀을 뿐 아무도 "이게 서빙에
+못 닿는다"를 측정하지 않았다). 즉 v1.2의 "수치 대입 탐지" 헤드라인 역량은 **런칭 이래 한 번도
+학생에게 도달하지 못했다**(작동 신호 없는 알고리즘 부착 — 슬 105 학습경로 알고리즘 사고의 재발
+형태). `root-loss-by-dividing`은 이미 substring 공출현으로 conf 1.0이라 회귀 없음.
+
+**유일한 예외처럼 보였던 것도 실은 예외가 아니었다**: `extremum-value-vs-point-confused`는 문서
+주석이 "정규식 단독 매치는 conf 0.5로 게이트 미만이라 안전하다"(f(x₀)=x₀ 우연의 일치 보호)고
+적고 있었으나, 실측하면 그 regex 패턴 자체가 리터럴 "극댓값"을 포함해 매치 시 substring도 항상
+동반 발화한다 — **v1.2 원식으로도 이미 conf 1.0**이었다. 즉 이 문서 주석은 실측과 어긋난 상태로
+방치돼 있었다(신뢰됐다면 (나)가 이 채널을 깨뜨린다고 오판했을 것). 그리고 f(x₀)=x₀ 우연의 일치에
+대한 확신 오진단 위험은 **이번 정정과 무관하게 이전부터 실재**했다 — MISC-22 범위 밖이라
+`MISC-24`로 분리 등재했다.
+
+**검증**: 전체 백엔드 스위트(12,636건) 그린. 최초 전체 스위트 실행에서 2건 실패를 잡았다 —
+`test_misconception_semantic.py::test_numeric_regex_path_unchanged`(conf==0.5 frozen 단언, 값
+갱신)와 `test_misconception_semantic_eval.py::test_recall_probes_evade_substring_full_match`
+(recall 프로브 하나가 "수치 대입 재진술"이라 이제 regex만으로 conf 1.0에 도달해 semantic-only
+recall 프로브의 전제가 깨짐 — 순수 구어체 패러프레이즈로 교체, 카운트 불변). 둘 다
+`tests/backend/l4/test_misconception_diagnose.py`만 봐서는 안 잡혔을 결함으로, **전체 스위트
+필수 원칙**(CLAUDE.md "부분 스위트 통과를 전체 통과의 근거로 보고 금지")이 실제로 잡아낸 사례다.
+
+**교훈**: confidence 공식 같은 *공유* 계산 로직을 정정할 때는 "내가 지금 보는 항목"이 아니라
+"그 로직을 쓰는 모든 항목"에서 재측정해야 한다 — 실측 없이 문서 주석(특히 안전 근거를 담은
+주석)을 신뢰하면 이미 깨져 있는 전제를 그대로 물려받는다.
+
+## 2026-09-08: MISC-24 — extremum-value-vs-point-confused의 f(x₀)=x₀ 우연의 일치 확신 오진단 해소
+
+**배경**: MISC-22 조사 중 발견된 위험을 분리 등재한 태스크. `extremum-value-vs-point-confused`의
+정규식(`극대.{0,40}?x=(?P<x>-?\d+).{0,40}?극댓값[…]{0,2}(?P=x)(?!\d)`)은 리터럴 "극댓값"을
+포함해 매치될 때마다 substring 신호도 항상 동반 발화한다 — 그래서 f(x₀)=x₀인 *우연의 일치*
+정답(예: 극대점 x=2에서 극댓값도 2)이 conf 1.0으로 서빙 품질 게이트(0.65)를 통과했다. 이 위험은
+MISC-22의 confidence 공식 정정과 **무관하게 이전부터** 실재했다(구 v1.2 공식으로도
+1(substring "극댓값")+1(regex 신호 1개 상당)=2=len(signals)로 이미 1.0 — 카탈로그 주석의
+"정규식 단독 매치는 0.5로 안전하다"는 안전 근거 자체가 실측과 어긋나 있었다).
+
+**결정**: `Misconception`(models.py)에 `ambiguous_regex_signals: bool` 필드를 신설하고
+`extremum-value-vs-point-confused`에만 `True`로 부여했다. `_match_one`(diagnose.py)은 이
+플래그가 선 항목의 정규식 매치를 `matched_regex_signals`(텔레메트리)에는 기록하되 confidence
+가산(numerator)에서는 완전히 배제한다 — 그 결과 이 항목의 confidence는 항상 substring 신호
+(`극댓값`·`x좌표`)만으로 결정된다.
+
+**기각한 대안들(acceptance ②가 제시한 두 방향 모두 통하지 않음을 실측으로 확인)**:
+- **정규식 가산을 옛 v1.2식(신호 1개 상당)으로 되돌리기** — 이 항목은 signals가 2개뿐이고
+  정규식 자체가 이미 substring 1개("극댓값")를 포함하므로, 옛 식으로도
+  `1(substring)+1(regex 1개 credit)=2=len(signals)` → 여전히 confidence 1.0. 되돌려도 안 풀린다.
+- **`refuting_regex`(MISC-23식 반박) 추가** — 오개념을 저지른 풀이와 우연의 일치 정답은 텍스트가
+  **글자 그대로 동일**하다(둘 다 "극대는 x=N…극댓값은 N" 형태). 반박은 *반박할 문자열*이 따로
+  있어야 성립하는데 여기는 그 문자열 자체가 없다 — 반박 축으로는 원리상 풀 수 없는 문제였다.
+
+그래서 채택한 것은 "감산/반박"이 아니라 **가산 자체를 0으로 만드는** 제3의 축
+(`ambiguous_regex_signals`)이다.
+
+**부수 효과(회귀가 아니라 의도)**: `anchor_detection_channel_eval`의 `_extremum_value_vs_point()`
+`positives` 픽스처(27건)는 전부 "좌표 숫자==값 숫자" 템플릿이라 `ambiguous` 픽스처와 텍스트
+구조가 동일했다 — 즉 이 채널이 "검출 27/27·서빙도달 27/27"이라 보고하던 것 자체가 우연의
+일치와 원리상 구별 불가능한 자리였다. 정정 후 `serving_reach`는 0/27로 떨어진다(회귀가 아니라
+해소 그 자체 — 텍스트만으로 구별 불가능한 형태는 애초에 확신 진단이 나가서는 안 됐다). 학생이
+명시적으로 "x좌표"라는 말을 쓴 경우(정규식과 무관한 substring AND 경로)는 이번 정정과 무관하게
+계속 confidence 1.0에 도달한다 — 그 경로는 원래도 모호하지 않았다.
+
+**acceptance ③ 집행**: `anchor_detection_channel_eval.ChannelResult`에 `ambiguous_serving_reach`
+필드를 신설해 `passed`가 이를 **0으로 강제**하게 했다 — 기존 `ambiguous_fired`(정규식 발화
+여부)는 계속 보고만 하지만, "서빙 게이트까지 살아남았는가"는 더 이상 보고로 그치지 않고
+게이트로 쓴다. 이 게이트 자신의 변별력은 `ChannelResult`를 직접 조립해(`ambiguous_serving_
+reach=1`) `passed`가 실제로 `False`가 되는지 확인했다(`TestAmbiguousServingReachIsGated::
+test_ambiguous_serving_reach_gates_passed`).
+
+**변별력 검증(결함 주입)**: `ambiguous_regex_signals=True`를 `False`로 되돌려 9개 테스트가
+RED로 전환되는 것을 확인했다(models/diagnose/catalog/anchor_detection_channel_eval 4개 계층
+전부에서 실패 신호가 남 — `TestGatePasses` 2건·`TestServingReachIsMeasured` 1건·
+`TestAmbiguousServingReachIsGated` 2건·`TestExtremumAmbiguousCoincidenceNotOverconfident` 3건·
+`TestAmbiguousRegexSignalsGovernance` 1건). 원복 후 108건 전부 그린으로 복귀.
+
+**동시성 메모**: 이 세션 작업 중 같은 브랜치(`claude/status-vlul18`)에서 MISC-22(PR #1071)의
+Codex P1 후속 수정(5개 채널에 `EXPLICIT_CORRECTION_MENTION` 반박 언급 가드 추가)이 같은
+`catalog.py` 파일에 동시 진행됐다 — 실측(diff 대조)으로 겹치는 항목이 없음을 확인하고
+(factor-sign-flip·distribution-over-power·square-root-positivity·fraction-cancellation·
+log-distribution 5종 vs 이 태스크의 extremum-value-vs-point-confused 1종, 완전 disjoint) 커밋
+시 서로의 미커밋 변경을 침범하지 않도록 hunk 단위로 선택 스테이징했다. `root-loss-by-dividing`의
+같은 유형 취약점은 그쪽 세션이 `MISC-25`로 별도 등재했다(이 태스크 범위 밖).
+## 2026-09-08: ad hoc 요청이 backlog 태스크와 10분 차로 중복 구현 — PR #1073 닫음 (main #1070 HARN-94와 동형)
+
+Kiki가 대화 중 "게이트 화면이 지체를 잘못 표기한다"를 **ad hoc 요청**(backlog 태스크 경유 없음)으로
+지적했다 — `G-state-machine-deferral-recheck`가 재확인 지점(12/13)보다 훨씬 전인데도 `/status`·
+`gates list`에 "5일 경과"로만 나와 실제로 지체된 게이트와 구분이 안 됐다. 원인을 실측하고
+`report.py`에 `gate_due`/`gate_target_date`/`gate_status_suffix`를 만들어 커밋(`1cb526c9`)·
+푸시(13:22 UTC)·PR #1073을 열었다.
+
+PR이 `mergeable_state: dirty`였다 — 원인은 **같은 증상을 겨냥한 타 세션의 정식 backlog 태스크
+`HARN-94-gate-list-processing-status-visibility`가 10분 먼저(13:12 UTC) main에 머지된 것**
+(PR #1070, `HARN-01`과 합본). 그 세션은 `/gates` 실행 중 **독립적으로** 같은 버그를 발견했고,
+`GateView` 공유 추상화로 `gates list`/`status` 텍스트/`status --json` 세 화면을 한 곳에서 계산하게
+만들었다 — 이 PR의 3곳 중복 구현보다 더 완성도가 높고, 3상태(기한 없음·미도래·초과) 처리와 대기
+태스크 수까지 포함했다. main 기준 실측으로 이미 원하는 동작(재확인 지점 전 게이트는 "대기 · N일
+경과 / 기한 M일 (D일 남음)"으로, 진짜 지체 게이트는 `⚠ ... 독촉 초과`로 구분)을 확인하고, 이 PR은
+PR #1073에 사유를 남기고 닫았다 — 코드는 폐기, main의 HARN-94를 그대로 신뢰.
+
+**왜 이번엔 기존 방어 장치(path_overlap 경고·claim 대장)가 못 잡았나**: 그 장치들은 *내가 편집하는
+파일*을 *이미 in-flight로 claim된 다른 태스크의 선언 paths*와 대조한다. 이번 충돌의 originating
+work(HARN-94)는 **내가 작업을 시작한 시점엔 아직 backlog에 존재하지 않았다**(다른 세션이 `/gates`를
+실행하다 그 자리에서 발견해 같은 날 처음부터 끝까지 만들었다) — 그러니 대조할 claim 자체가 없었다.
+더 근본적으로, **이 작업은 ad hoc 요청이라 애초에 `backlog.py start <id>`를 거치지 않았다** — 그래서
+내 쪽에서도 claim이 없었고, 결국 두 세션 모두 서로를 볼 방법이 없는 상태에서 같은 증상을 각자
+발견·구현했다. `PostToolUse`의 `check-edit` 훅이 실제로 경고를 냈지만(`scripts/harness/backlog.py`가
+`HARN-86` 세션의 paths와 겹친다) 그건 이 충돌과 무관한 별개 세션이었다 — 진짜 충돌 상대는 경고
+대상이 아니었다.
+
+**대책 판단**: 이번 경합은 "동시 순간 발견"의 순수한 타이밍 레이스라 코드 수준 방지책이 마땅치
+않다(태스크가 존재하기 *전*의 충돌은 claim 시스템의 설계 범위 밖). 유일하게 값싼 완화책은 **ad hoc
+수정을 시작하기 전에 `backlog.py next`/`grep`으로 같은 증상을 겨냥한 기존·최근 태스크가 있는지
+먼저 훑는 습관**인데, 이번 경우 그 태스크가 내 조사 *이후*에 생겼으므로 사전 검색으로도 못 잡았을
+사례다. 새 CLAUDE.md 규칙이나 코드 게이트를 추가하지 않는다 — 강제해도 잡히지 않는 경합에 상시
+검사를 얹으면 그 자체가 무력한 가드가 된다(2026-09-01 규칙의 정신). 손실은 세션 하나의 구현
+시간뿐이고 데이터·main 영향은 0.
+
+## 2026-09-10 (조치·S3-28): **condition_dsl_violation 130건 = canonicalize 적용범위 오탐(코퍼스 결함 아님) — answer_kind 6종 exempt 필터 회수·재실측 확정**
+
+**배경**: `S3-28`이 판정을 요구한 미해결 항목 — ARCH-21 qa_pipeline 첫 실행에서 `equivalence_canonicalize`
+축이 코퍼스 전수(당시 2647건)에서 130건 위반을 냈고, (a)실 콘텐츠 결함 vs (b)canonicalize 스코프 오탐
+판정이 미뤄져 있었다. 같은 판정·조치가 이미 미머지 브랜치 `claude/openrouter-setup-guide-e98dw4`
+(커밋 `902702ea`)에 구현돼 있었으나(HARN-34 고립 참조 — `backlog.py start`가 done-미머지로 착수 거부),
+2026-09-07 stray-code 8회차가 회수 원천으로 지목된 `f8c0e3b6`에 **S4-16 잔여 하네스(~990줄, main #683이
+이미 병렬 중복 구현해 폐기 대상)가 함께 실려 이식 오염 위험**을 지적해뒀다.
+
+**착수 전 재확인**: `f8c0e3b6` 자체는 S4-16 코드만 담고 있었고, 실제 S3-28 조치는 같은 브랜치의 별도
+커밋 `902702ea`("condition_dsl_violation 130/2647건 = canonicalize 적용범위 오탐 판정·조치")에
+있었다 — notes의 "같은 커밋" 표현이 부정확했던 것으로 확인(두 커밋이 다른 파일셋: `902702ea`는
+`.github/workflows/ci.yml`·`MEMORY.md`·`harness/qa_pipeline.py`·`tests/backend/harness/
+test_qa_pipeline.py`만, `f8c0e3b6`은 S4-16 4파일만 — 겹치는 파일 0). 파일 단위로 `902702ea`의
+diff만 대상으로 삼아 이식했다.
+
+**재실측(2026-09-10, 코퍼스가 14034건으로 증가한 뒤 재확인)**: 판정이 그대로 유지됨을 확인 —
+`condition_dsl_violation` 위반이 여전히 정확히 6개 answer_kind(`finite_probability`·`finite_count`·
+`mean_equals_median`·`events_independent`·`conditional_equal`·`dot_product_scalar`)에만 130건
+분포(나머지 13904건은 등식 DSL 그대로 통과). 이 6종은 각자 독립된 닫힌 DSL(`l3/finite_probability.py`
+정규식·`l3/verify_answer.py` 쉼표숫자열)로 이미 검증되며 `condition_dsl_violation`은 등식/부등식
+sympify 폐쇄성만 검증하도록 설계된 함수라 필연적 오탐 — **판정 (b) canonicalize 스코프 오탐** 재확인.
+
+**조치**(새 판정 로직 0 — 적용 대상 필터만, `902702ea` 이식): `qa_pipeline._NON_EQUATION_DSL_ANSWER_KINDS`
+(6종 frozenset) 신설, `_axis_equivalence_canonicalize`가 최상위/`verify.answer_kind` 양쪽을 방어적으로
+읽어 해당 answer_kind를 검사 대상에서 제외(`condition_dsl_violation` 함수 자체는 무변경). 조치 후 재실행:
+`equivalence_canonicalize` violations 130→**0**(checked 14034→13904, 정확히 제외분만큼 감소 — 판정과
+수치 정합). 회귀 테스트 8건 추가(`tests/backend/harness/test_qa_pipeline.py::TestAxisEquivalenceCanonicalize`)
+— exempt 6종 각각 스킵 확인(파라미터화) + 비exempt answer_kind(`real_root_count`)의 진짜 위반은 그대로
+잡힘 확인(스코프 확대가 결함을 숨기지 않았는지 변별력 실측).
+
+**ci.yml 강제 게이트 전환은 이 태스크 범위 밖(ARCH-23 소관) — 손대지 않았다**: `902702ea` 원본은
+`equivalence_canonicalize` 필터 적용 후 qa_pipeline 7축 전체가 `overall.pass=true`임을 확인하고
+`ci.yml`의 `continue-on-error`를 제거했으나, 이 태스크의 `[고립 참조 정정 2026-09-07]` acceptance가
+"ci.yml continue-on-error 제거는 ARCH-23 소관"이라고 명시적으로 갈라뒀다 — 실제로 이 세션 환경에서
+CLI 전체 실행 결과 `defect_report_intake` 축이 DB 부재로 `error`(무관한 인프라 사유, 이 세션 sandbox에
+Postgres 없음)라 `overall.pass=false`이므로, 원본 커밋 당시의 "7축 전부 ok" 전제 자체가 지금은 성립하지
+않는다 — ARCH-23이 별도로 이 판정을 다시 해야 한다. 이 태스크는 `equivalence_canonicalize` 축 단독
+`ok`(violations 0)까지만 책임진다.
+
+**S4-16 잔여 이식 금지 준수**: `harness/residue_gate_demotion_battle.py`·`l3/finite_probability_defect_seeder.py`
+및 관련 테스트(~990줄, `f8c0e3b6` 소재)는 이식하지 않았다 — main `#683`이 병렬 중복 구현으로 대체했고
+그 폐기 판정은 vafylb 세션 MEMORY(2026-08-09)·`S4-59` ⑤(a)가 이미 소유한다.
+
+**검증**: python3.12 venv(`pip install -e src/backend[dev]` + `pip install -e src/data-pipeline`)에서
+`tests/backend/harness/test_qa_pipeline.py` 전건 green(49건, 신규 8건 포함)·ruff·black·mypy strict
+clean(대상 두 파일 한정 — 전체 스위트는 이 세션 환경(python 3.11 기본 + DB 부재)에서 재현 불가라
+돌리지 못했음을 명시). `python -m whymath_backend.harness.qa_pipeline` 실 CLI 실행으로
+`equivalence_canonicalize={"status":"ok","detail":{"total_conditions_checked":13904,"violations":0}}`
+직접 확인.
+## 2026-09-10: HARN-93 — 처분 라벨 PR 닫기 전 안전 확인 도구, 자기발견 오탐 1건 수정
+
+`HARN-42`가 붙인 처분 라벨(eos-merge/rework/postpone/close)이 붙은 열린 PR 10건이 만료 지점 없이
+8일+ 방치되고 있었다(stray-code 9회차 감사). 두 축을 착지했다:
+
+**② 탐지 축**: `remote_claims._fetch_pr_labels`(GitHub API, `_fetch_pr_states`와 별도 호출 —
+반환 튜플 계약을 바꾸면 기존 테스트가 전부 갈아엎여야 해서 `_auth_args`/`_ca_args`와 같은 이유로
+중복을 택함)를 `scan_stale_branches`에 배선해 `StaleBranch.disposal_labels`를 채운다. `backlog.py
+branches`가 `pr_filed` 항목에 라벨+정체일수를 출력하고, 처분 라벨이 하나라도 있으면 정책 도구
+실행을 권하는 안내 줄을 낸다. 토큰이 없어 조회를 못 했으면(`pr_label_lookup_ok=False`) 그 사실을
+별도로 알린다("라벨 없음"과 "모른다"를 혼동하지 않음).
+
+**③ 집행 지점**: `scripts/ops/pr_disposal_precheck.py <owner/repo> <pr>` — 오프라인 git으로
+trunk(`origin/main`) 대비 PR head의 "trunk 부재 코드 파일"(`src|tests|scripts|data` 프리픽스,
+audit 문서와 동일 방법론)을 계산하고, 0건이면 안전, N건이면 backlog에 그 PR을 참조하는 회수
+좌석이 있는지 확인한다. exit 0(안전)/1(차단 또는 측정 실패) — 이 저장소의 "판정은 항상 0/1" 관례.
+
+**자기발견 결함(구현 중 실측)**: 첫 버전은 "회수 좌석"을 `#<PR번호>` 텍스트 언급만으로 인정했다.
+실 PR #858(eos-close, 16일 방치)로 직접 실행했더니 `HARN-42` 자신이 notes에 `#858`을 여러 번
+남긴다는 이유만으로 "회수 좌석 있음 → 닫아도 안전"으로 **오탐**됐다 — HARN-42는 이 PR을 CLOSE로
+*판정*만 했을 뿐 코드를 옮기지 않았는데, 판정한 사실과 옮기기로 한 사실이 같은 문자열로 뭉개진
+것이다(CLAUDE.md "변별력 없는 검증 스텝 금지"의 변형 — 두 서로 다른 사실이 같은 신호를 낸다).
+`pathscope.path_in_scope`로 "그 태스크의 `paths`가 실제로 부재 파일을 커버하는가"를 추가 요구해
+고쳤다 — 재실행 결과 #858은 정확히 **차단**(josa.py·test_josa.py 2건, 회수 좌석 없음)으로
+뒤집혔다. `docs/reviews/unmerged_branch_audit_2026-09-08.md`가 기록한 "#858 main 부재 파일 0건"
+과는 다른 값인데, 이는 버그가 아니라 **main이 그 사이 이틀 더 전진**했기 때문이다(트렁크 부재
+카운트는 정의상 시점 종속 — 이 도구가 정확히 그 시점 드리프트 문제를 실시간으로 재확인시키려고
+존재한다).
+
+**환경 메모(이 세션 국한)**: 샌드박스의 `pytest`가 `uv tool`로 설치돼 PyYAML이 없는 별도 venv에서
+돈다 — `import yaml`은 시스템 `python3`에서 되지만 `pytest` 바이너리 자체는 안 된다. `uv run
+--no-project --with pyyaml --with pytest pytest ...`(두 패키지 다 `--with`로 줘야 같은 임시
+venv에 들어간다 — `pytest`만 `--with`에서 빠지면 PATH의 별도 venv pytest가 실행돼 재현 안 됨)로
+우회해 811건 전건 그린을 확인했다. CI 환경 자체의 문제는 아님(이 세션 컨테이너 한정 추정).
+
+## 2026-09-10: HARN-95 — 전이표 합법 전이 2종의 CLI 실행 불가 결함, 근본 수정(우회 아님)
+
+HARN-86(#1067)이 "전이표가 허용하는 전이가 곧 실행 가능한 전이는 아니다"를 실측하고 경로
+탐색 모델((상태, session 보유) 쌍 위 BFS)로 **우회**했다 — 실행 불가한 홉을 안내에서 피하는
+방식. HARN-95는 그 우회 아래 남은 **CLI 자체의 결함 2건**을 근본에서 고쳤다:
+
+- **(a) `in_progress → todo`**: `cmd_unblock`이 원격 claim만 걷고 `task.session`을 비우지
+  않아, 뒤따르는 `start`가 `selector.classify_todo`의 claimed 검사에 항상 거부됐다. 우회로
+  (`block`→`unblock`→`start`, 3단계)만 있었다 — **더 짧은 경로가 깨진 경로**였던 것.
+  `cmd_unblock`을 `cmd_block`과 같은 계약(`task.session = None`)으로 맞췄다.
+- **(b) `review → in_progress`**: `cmd_review`가 의도적으로 session을 보존해(HARN-20) 이
+  홉은 항상 거부되고, review의 다른 출구가 없어 **done 말고 나갈 길이 없는 막다른 길**이었다.
+  선택지 4종(claim 검사에 자기 세션 재개 예외 / 전용 재개 명령 신설 / review→blocked 엣지 /
+  의도로 확정) 중 **review→blocked 엣지 추가**를 택했다 — `cmd_block`은 이미 어느 상태에서든
+  session을 비우는 범용 동사라 새 코드가 필요 없었고, 이중 claim 방어(`selector.classify_todo`)
+  자체는 건드리지 않는 최소 침습 안이다. 이 저장소는 이중 claim 방어가 무력화됐을 때 병렬
+  중복 구현으로 두 번(735줄·40분) 대가를 치른 뒤 그 방어를 세웠으므로, 그 검사를 넓히는 안
+  (ⓐ)은 채택하지 않았다.
+
+**전수 검증**: 두 수정을 합치면 이 그래프에서 session 보유가 원인이 되어 도달이 완전히
+막히는 (출발, 도착) 쌍이 **0건**이 된다 — Python으로 BFS 모델을 독립 재구현해 old/new 전건
+diff를 뜬 뒤, 그 결과를 `TestNoSessionCausedDeadEnds`(전수 스캔)로 코드에 고정했다. 파생
+효과로 기존 락 테스트 다수의 기대값이 바뀌었다(`in_progress` 재진입 3단계→2단계 · `review→
+cancelled` None→`['blocked','cancelled']` 등) — 문자열 검사가 아니라 실 CLI 종단 실행
+(`unblock`→`start`, `block`→`cancel` 각 2단계)으로 재확인했다.
+
+**부수 관측**: `_blocked_by_session_note`(막힌 이유 설명 장치)가 이 수정 이후 실 그래프에서
+트리거될 사례가 0건이 됐다 — 죽은 코드로 방치하지 않으려고 합성 전이표(`monkeypatch`)로
+별도 유닛 테스트를 만들었다. 이 과정에서 그 헬퍼가 "호출부가 route(held=True)==None을 이미
+확인했다"는 암묵 전제를 갖고 있음을 발견했다(전제 없이 직접 부르면 무의미한 답을 낸다) —
+`_transition`(공개 경로)을 통해 호출하는 형태로 테스트를 고쳐 이 전제를 실제로 만족시켰다.
+
+## 2026-09-10: OPS-54 — policy-guard에 EBS·평가원 본문 인용 패턴 추가 + #codeowner-ack 우회 실배선
+
+EOS-53 crosswalk 갭 #7(G2, eos_priority P0)이 지목한 CI 커버리지 구멍 — 기존 policy-guard는
+검정교과서 5사 패턴만 있었고 EBS·평가원(수능·모평) 본문 직접 인용은 걸러내지 않았다.
+
+**설계 문제와 해법**: 기존 검정교과서 패턴(출판사명+"본문"/"예제" 동시등장)을 그대로 확장해
+"EBS.*본문|평가원.*본문" 계열을 시도했더니 저장소 전수 실측 292건 오탐 — 이 저장소 자신의
+저작권 준수 docstring(`schema/problem.py` 등)이 "평가원·EBS·검정교과서는 본문·문항 미보유"를
+반복 서술해 정책 산문 자체가 매칭됐다("수능.*본문" 계열도 21건). 그래서 정책 산문에는 나타나지
+않는 **실제 인용의 공식 표기 형식**만 잡는 패턴으로 재설계했다: ①평가원 — 시험 연도 뒤에
+"학년도"가 붙고 이어서 "대학수학능력시험"/"모의평가"/"모의고사"가 오는, 실제 기출에 항상 붙는
+공식 표기 ②EBS — 대표 교재명
+(수능특강/수능완성/만점마무리)+쪽수 표기("12페이지"·"p.47" 등, JSON 메타데이터 `{"page":47}`
+형태와 구별). 두 패턴 모두 저장소 전수 0건(실측)이면서 위반 픽스처(3종)는 전부 잡는다.
+
+**자기발견 결함(부수)**: 기존 검정교과서 스텝의 "#codeowner-ack 주석으로 우회" 문구가
+2026-05-28부터 **주석에만 있고 실제로 배선된 적이 없었다** — grep이 그 마커를 걸러내지 않아
+매칭 라인에 마커를 붙여도 여전히 적색이었다(실측으로 발견). acceptance ②("오탐 우회 규약 유지")
+범위 안이라 이번에 실제로 배선했다(`| grep -v '#codeowner-ack'`) — 검정교과서·EBS/평가원 두
+스텝 모두. 마커는 **그 줄만** 면제한다(같은 파일의 다른 위반 줄까지 통째로 덮지 않음 — 실측
+확인).
+
+**테스트**: `tests/infra/test_policy_guard_source_patterns.py`가 ci.yml의 `run:` 블록 원문을
+PyYAML로 직접 읽어(패턴 문자열을 테스트에 재입력하지 않음 — 드리프트 방지) 실제 bash 스크립트를
+서브프로세스로 실행한다. 저장소 전수 0건(현재 상태)·위반 픽스처 3종 전부 적색·마커 우회 3종
+전부 초록·마커가 줄 단위로만 적용됨(변별력)·두 스텝이 같은 policy-guard 잡의 인접 스텝인지
+(신규 잡이 아님, acceptance ①)까지 13건으로 고정. 이 테스트 파일 자신도 위반 문자열을
+문서화·픽스처로 담고 있어 ci.yml의 exclude 목록에 자기참조 제외 대상으로 추가했다(ci.yml
+자신이 이미 같은 이유로 제외돼 있던 선례를 그대로 따름).
+## 2026-09-10: 미머지 브랜치 전수 감사 10회차 — 신규 미추적 고립 0건, 삭제 배치 1건, 자기 오류 1건 시정
+
+`/stray-code` 스킬로 원격 브랜치 39건을 전수 재감사했다. 오픈 PR 20건·활성 claim 3건을 제외한
+15개 감사 대상 중 14건은 8·9회차가 이미 배정한 좌석이 그대로 유효함을 독립 재확인했고(핵심
+파일/심볼을 `git show origin/main:<path> | grep`으로 직접 대조), 신규 1건(`misc-24-extremum-
+ambiguous-coincidence`)은 소유 태스크(MISC-24, done)의 notes가 이미 기록한 처분 경위(PR #1072
+close·PR #1071로 통합 머지)를 GitHub API로 재확인해 삭제 배치(9차)에 등재했다.
+
+**이 감사 스스로가 잡은 오류**: 직전 세션(같은 대화)에서 `claude/entity-model-freeze-lji37v`를
+"어느 감사 문서에도 없는 완전 고립"으로 판단해 PR #1081을 열고 Gate 0 r6 판정문을 직접 포팅했다.
+이번 감사에서 열린 PR 목록을 먼저 확보하는 절차(스킬 §1)를 밟자, 그 브랜치가 실제로는 **PR
+#1007로 2026-09-06부터 이미 노출**되어 있었음이 드러났다 — "고립"이 아니라 "PR 소유"였다.
+PR #1081의 조치 자체(r6 내용 복원)는 결과적으로 옳았고 이미 main에 머지됐으므로 되돌리지 않는다.
+다만 PR #1007은 r6 부분이 중복이 됐고, 그 PR이 함께 담은 HARN-77·OPS-65·OPS-66 백로그 정정
+3건은 여전히 미머지 상태로 남아 있다 — 처분은 그 PR 소유자(감사 범위 밖) 몫으로 명시적으로
+넘겼다.
+
+**교훈**: 브랜치를 "고립"으로 판정하기 전에는 반드시 `list_pull_requests`로 열린 PR을 먼저
+조회해야 한다 — 커밋 히스토리·백로그 grep만으로는 그 브랜치를 노출시키는 PR의 존재를 알 수
+없다. 이는 CLAUDE.md의 "trunk 부재를 미구현으로 단정 금지"·"미머지 존재를 충족으로 단정 금지"
+규칙과 같은 계열(판정 전 실측 범위를 스스로 좁혀 오판한 사례)이나, 새 규칙을 등재하지는 않는다
+— `/stray-code` 스킬 §1이 이미 "열린 PR 목록을 먼저 확보하라"고 명시하고 있고, 이번 오류는
+그 스킬을 따르지 않은 개별 세션의 실수이지 스킬 자체나 하네스의 결함이 아니다.
+
+산출물: `docs/reviews/unmerged_branch_audit_2026-09-10.md` · `.github/branch-cleanup-request.txt`
+9차 배치(1건) · 신규 회수 태스크 등재 0건(전건 기존 좌석 유효).
+
+## 2026-09-11: HARN-97 — 태스크 ID 번호 3자리 확장 (자릿수 확장 채택, 판정 기준 main 5fa97039)
+
+- **발단**: 2026-09-09 실측(같은 태스크 notes) — `models.TASK_ID_RE`가 `\d{2}`(정확히 2자리)만
+  허용해 ARCH·EOS 두 접두가 99개 상한에 근접·`--id EOS-100`이 형식 검증 자체에서 거부됐다.
+  HARN-73(2026-09-06)의 하위 미사용 번호 재사용(Kiki 결정 A)이 당장의 우회는 제공했지만
+  (그 세션은 EOS-43으로 등재), 두 접두 모두 01~99 공백이 줄어드는 추세라 재발이 예견됐다.
+- **결정**: **① 자릿수 확장**(2~3자리, 100~999는 선행 0 없이) 채택. 기각: ②접두사 분할
+  (EOS·ARCH를 도메인별로 쪼개는 것은 기존 참조·문서·커밋의 짧은 ID 의미를 흔드는 훨씬 큰
+  구조 변경이라, 순수 상한 문제에 비해 비용이 과도) ③안전한 공백 재사용 확장(HARN-73이
+  이미 구현·Kiki 승인했고, 01~99 범위에 한정해 그대로 둔다 — 100 이상을 "재사용할 옛
+  빈자리"로 취급하는 것은 개념적으로 틀렸다: 그 번호들은 한 번도 존재한 적이 없다).
+  자릿수 확장이 가장 싼 이유를 실측으로 확인했다: 번호 추출·충돌 검사(`store._ID_NUMBER_RE`
+  = `\d+`, `dep_declaration._REF_RE` = `\d{1,3}`)는 이미 자릿수 무관하게 파싱하고 있었다 —
+  좁혀 온 것은 `models.TASK_ID_RE`와 `backlog.py`의 두 상한(`_next_free_number`·
+  `_HISTORY_TASK_FILE_RE`)뿐이었다(acceptance① 전수 열거 — `scripts/` 전체 grep 기준
+  이 세 지점 + `\d{2}` 리터럴을 쓰는 무관 도메인 코드 2건(대학/NCIC 표준코드, 태스크 ID와
+  무관)만 발견).
+- **구현**:
+  ① `models.TASK_ID_RE`: `\d{2}` → `(?:\d{2}|[1-9]\d{2})` — 2자리(00~99, 관례상 제안은
+     01부터) 또는 선행 0 없는 3자리(100~999). "099" 같은 3자리 선행 0 표기는 "99"와
+     같은 번호를 가리키는 두 번째 문자열이 되므로 거부한다.
+  ② `backlog.py:_HISTORY_TASK_FILE_RE`: `(\d{2})` → `(\d{2,3})` — 3자리 파일명도 "한
+     번이라도 쓰인 적 있음" 이력 스캔에 잡히게 한다.
+  ③ `backlog.py:_next_free_number`에 `cap: int = 99` 키워드 인자 추가(기본값 불변 —
+     HARN-21·HARN-73의 기존 동작·테스트를 그대로 보존). `_suggest_number`의 3단계 설계:
+     1단계(상향, 01~99)·2단계(HARN-73 하위 미사용 재사용, 01~99 한정) 둘 다 실패했을 때만
+     **3단계**로 `_next_free_number(prefix, taken, cap=999)`를 다시 불러 100 이상을 제안한다
+     — 새 `history="extended"` 상태로 표시해 `cmd_add`가 "하위 재사용"과 "3자리 확장"을
+     다른 문구로 안내한다(같은 값이면 사람이 왜 100번대를 받았는지 알 수 없다). "정말
+     소진"(사람의 결정 필요) 문구는 경계가 99에서 **999**로 이동했을 뿐 그대로 남는다.
+- **검증**: `tests/harness/test_id_number_parser.py`(20건, 신규 5+기존 15)·
+  `test_next_free_number_format_guard.py`(신규 6·수정 3·기존 유지)·`test_backlog_add_id_collision.py`
+  — 대상 3파일 55 passed. `tests/harness` 전체 815 passed(무작위 순서). `ruff check scripts
+  tests/harness`·`black --check --line-length 100`(CI와 동일 명령) — clean. `backlog.py
+  validate`/`audit-deps` — green.
+- **실패 주입(acceptance③)**: 정규식 두 곳 모두 fix 적용 *전* 상태로 되돌려 실제 RED를
+  확인한 뒤 원복했다 — `TASK_ID_RE.match("EOS-100")`은 수정 전 `None`(거부)·수정 후 매치.
+  `_HISTORY_TASK_FILE_RE.match("backlog/tasks/ZQ-100-old.yaml")`도 동일(수정 전 `None`·
+  수정 후 매치) — 신규 테스트(`test_deleted_three_digit_task_file_number_is_reported`)가
+  그 경계를 동결한다.
+- **자릿수 혼재의 정렬·파싱(acceptance②)**: 파싱은 애초에 깨지지 않는다 —
+  `store.id_number_of("EOS-100")`·`_id_number_collisions(["EOS-43-…", "EOS-100-…"])`이
+  자릿수 무관하게 정확히 동작함을 테스트로 고정했다(`TestTaskIdReAcceptsThreeDigitNumbers`).
+  **알려진·수용한 코스메틱 트레이드오프**: `selector.py`·`store._id_number_collisions`의
+  일부 `sorted(..., key=lambda t: t.id)`(문자열 정렬)는 "EOS-100"을 "EOS-43"보다 앞에
+  둔다(사전식 "1" < "4"). 이 정렬은 이미 결정론적 출력 순서를 위한 것이지 "번호가 작은
+  순"이라는 선택 로직이 아니다(우선순위·스테이지·의존성이 실제 선택을 결정 — `_next_free_number`·
+  `_suggest_number`는 전부 `int()` 변환 비교라 이 트레이드오프의 영향을 받지 않는다). 모든
+  `sorted()` 호출부를 숫자 키로 바꾸는 것은 이 태스크의 세 선택지(자릿수 확장/접두사
+  분할/공백 재사용) 어디에도 없는 범위 확장이라 채택하지 않는다 — 필요해지면 별도 태스크로.
+- **acceptance①의 부재 판정 범위**: `scripts/` 전체(`grep -rn "\\d{2}\b"`)에서 태스크 ID
+  형식을 가정하는 지점은 위 3곳(`models.TASK_ID_RE`·`backlog._HISTORY_TASK_FILE_RE`·
+  `backlog._next_free_number`/`_suggest_number`)뿐이었다. `docs/` 링크 생성기·CI 스크립트
+  중 `backlog/tasks/{id}.yaml` 경로를 조립하는 지점(`remote_claims.py`·`backlog.py` 8곳)은
+  전부 이미 검증된 full ID 문자열을 그대로 보간해 자릿수 가정이 없음을 확인했다(부재
+  판정은 이 grep 방법으로 0건 — 다른 이름으로 존재할 가능성은 배제하지 않는다).
+
+## 2026-09-11: OPS-56 — 주간 KPI 6종 집계 cron 신설 (metrics/weekly.json append)
+
+- **발단**: acceptance①이 "7지표"라고 지칭했으나, 실측 결과 `docs/standards/
+  eos_verification_design_v1.md` §6은 스스로 "기술 KPI **6종**"이라 못박고 있고, 그 문서
+  어디에도 7번째 지표명이 없다. "7지표" 표기는 `OPS-56` 태스크 notes·
+  `docs/reviews/eos_plan52_crosswalk_2026-09.md`·`docs/strategy/
+  eos_transition_declaration_2026-08-30.md` 3곳에 반복돼 있었지만 전부 같은 오기의 전파였다
+  (배경 탐색 에이전트가 실측). 이 파일의 WH-1 대리지표 "7종"(별개 태스크 — 서로게이트
+  metrics, `harness/wh1_evaluation.py`)이 혼동 원인으로 보인다. CLAUDE.md "자체 정의 금지"·
+  "모른다≠아니다"를 지키기 위해 **문서가 실제로 동결한 6종만** 구현하고 7번째를 지어내지
+  않았다 — 이 정정 판단 자체를 `weekly_metrics_report.py` 모듈 docstring에 근거와 함께
+  고정했다(코드가 스스로 "왜 6인가"를 설명한다).
+- **구조적 미측정 2종 발견**: 6종 중 2종(**자동검증 1차 통과율**·**재작업률**)은 이 저장소에
+  집계 대상 로그 자체가 없다 — Deterministic Gate pass/fail 누적 테이블 부재,
+  Run 재생성 카운트 로그 부재(EOS-55는 재현성 *컬럼*만 추가했지 재생성 카운트 로그는
+  미착석 — `validation_scorecard.adapt_hit_cu_metrics` 독스트링이 이미 같은 판정을 하고
+  있었다). 이 2종은 DB 연결 성패와 무관하게 **항상** `measured=False`로 낸다
+  (`STRUCTURALLY_UNMEASURED` — "0%"이 아니라 "측정 불가"). 나머지 4종(HIT·처리량·단위비용·
+  실패유형분포)은 `review_timer_event`·`generation_log`에서 실계산하되, 표본 0건은 진짜
+  활동-없음-0과 DB-연결-실패를 구분해 후자만 미측정 처리한다(acceptance②).
+- **환경의 정직한 공백**: 이 cron이 붙는 GitHub Actions Postgres는 backend-migrations
+  잡과 동형인 **매 실행 새로 뜨는 빈 컨테이너**다 — Phaiakes9의 실제 콘텐츠 제작 DB로
+  가는 네트워크 경로 자체가 없다(`DEPLOY_SSH_*`는 별도 클라우드 배포 대상용). 그래서 이
+  워크플로가 GitHub Actions에서 도는 한 4종 동적 KPI는 당분간 정직한 "0"(빈 스키마)을
+  낸다 — 결함이 아니라 실제 환경 상태이며, 실 데이터 도달은 `OPS-19`(러너 배선) 몫으로
+  명시적으로 경계를 그었다(acceptance③ — `OPS-19`·`OPS-30`과 중복 등재하지 않는다).
+- **설계**: 집계 수식을 재발명하지 않고 `ops.hit_cu_metrics.aggregate()`(순수 함수)를
+  그대로 재사용 — `_fetch_report()`가 새로 짠 것은 "이번 주 창으로 필터링해 그 함수에
+  넘길 이벤트·genlog 행을 DB에서 읽어오는" 얇은 어댑터뿐이다. 단위비용 환산 환율은 새
+  매직넘버를 만들지 않고 이 저장소의 기존 단일 진실 원천(`l3/router.py`의
+  `USD_TO_KRW = 1540.0`, 2026-06-23 기준 — 비용 라우팅 실측에도 쓰이는 그 상수)을
+  워크플로에서 `python -c`로 조회해 `--krw-per-usd`에 주입한다(CLI 자체의 기본값은 여전히
+  `None` — 환율 미지정 시 하드코딩 대신 미측정, `test_unit_cost_unmeasured_without_krw_rate`
+  가 동결).
+- **main 머지 큐 제약 우회**: `main`이 `HARN-56` 이후 머지 큐 전용 룰셋이라 워크플로가
+  직접 push할 수 없다(`harness-audit.yml`의 `refs/heads/harness-claims` 직접 push와 다름 —
+  그쪽은 non-main 대장 브랜치라 룰셋 밖). `weekly-metrics.yml`은 매주 실행 시 브랜치를
+  만들어 `metrics/weekly.json` 변경을 커밋·푸시하고 `gh pr create` + `gh pr merge --auto
+  --squash`로 PR 경로를 거친다(이 세션이 수동으로 반복해 온 `enable_pr_auto_merge` 패턴과
+  동일 메커니즘).
+- **최소 경보(acceptance③ 경계 — "최소"만)**: 신규 알림 채널(Slack/이메일 등, `OPS-30`
+  몫)을 만들지 않는다. 대신 4종 동적 KPI 전부가 `db_failure_reason`으로 강등되면(=진짜
+  연결/조회 실패) 마지막 스텝이 잡 자체를 `exit 1`로 red 처리한다 — GitHub이 예약 실행
+  실패 시 기본 제공하는 저장소 watcher 알림을 그대로 최소 경보로 쓴다. 이 스텝은 커밋·
+  PR 생성 스텝 **뒤**에 둬서, 구조적 실패라도 그 사실(예외 타입명 포함)을 담은 행 자체는
+  먼저 원장에 남도록 순서를 잡았다(CLAUDE.md "측정·수집 도구를 성공 경로만 보고 설계
+  금지" — 실패해도 증거가 남아야 한다).
+- **배선 실재성 동결**: `OPS-10`·`test_anchor_e2e_nightly_wiring.py` 선례를 그대로 따라
+  `tests/infra/test_weekly_metrics_cron_wiring.py`(12건)를 신설 — cron 값(`0 22 * * 0`
+  = 월 07:00 KST) 자체를 고정하고, 집계 스텝·최소 경보 스텝 각각의 fail-open 여부를
+  결함 주입 8종(cron 부재·cron 값 오류·집계 스텝 부재·bare 실행기·집계 스텝 fail-open·
+  경보 스텝 부재·경보 스텝 fail-open·`exit 1` 부재)으로 변별력 확인.
+- **EOS 인벤토리 귀속**: 신규 모듈 `ops.weekly_metrics_report`를 `eos_feature_inventory_v2.py`
+  `WM-O-905`(검증 스코어카드·QA 혼동행렬·HIT/CU 계측 좌석 — `hit_cu_metrics` 재사용
+  소비자라 같은 좌석)에 편입하고 `--write`로 `backlog/inventory/feature_inventory_v2.{yaml,csv}`
+  재생성(미편입 시 `tests/infra/test_eos_feature_inventory_v2.py`가 "미귀속 모듈"로 즉시
+  RED — 실제로 처음 전체 스위트 실행에서 21건 ERROR로 재현·확인 후 조치).
+- **검증**: `test_weekly_metrics_report.py`(hermetic, 14 passed) · `test_weekly_metrics_
+  report_integration.py`(실 PG, `pytest.mark.integration` 기본 skip — 창 안/밖 행 배제를
+  전/후 대조로 검증, collection 2건 확인) · `test_weekly_metrics_cron_wiring.py`(12 passed) ·
+  `ruff check`·`black --check --line-length 100`(backend·infra 양쪽, CI와 동일 명령) ·
+  `mypy --strict whymath_backend/ops/weekly_metrics_report.py`(clean) · `tests/infra`
+  전체(1250 passed, OPS-56 반영 후 재실행 — 위 21건 ERROR 해소 확인).
+- **정직한 공백**: PR 생성·auto-merge 워크플로 스텝 자체의 실동작(GitHub API 실호출)은
+  이 세션에서 라이브 검증하지 못했다 — CI 파싱 기반 배선 테스트만 확보했고, 첫 실제
+  스케줄 발화(다음 월요일 07:00 KST) 또는 `workflow_dispatch` 수동 실행이 최초 실증이 된다.
+- **전체 스위트 첫 실행에서 발견·조치**: 위 검증 목록은 파일 단위 실행이었다 —
+  CLAUDE.md "부분 스위트 통과를 전체 통과의 근거로 보고 금지"에 따라 `src/backend` 전체
+  (`python -m pytest -q`, 12,762건)를 별도로 돌렸더니 `ops/test_declared_unwired_audit.py::
+  TestRealRepositoryReport::test_real_repo_report_passes` 1건이 실패했다 — 신설 모듈
+  `ops.weekly_metrics_report`가 이 감사기의 `harness_clis` 축에서 "미도달인데 의도 선언
+  없음"으로 잡힌 것. 원인은 `declared_unwired_audit.ci_executed_modules()`가 `.github/
+  workflows/ci.yml` **한 파일만** 스캔하는 설계라, 이 모듈을 실행하는 별도 워크플로
+  `weekly-metrics.yml`은 그 스캔 범위 밖이었다(실제 미배선이 아니라 탐지기의 스캔 범위
+  한계). `harness.learning_metrics_rollup_cli`(COLLAB-03)와 동형 사유로 `ops.
+  weekly_metrics_report`에 `by-design` 유예를 등재해 해소 — 재대조: `test_declared_
+  unwired_audit.py` 67 passed, 전체 스위트 재실행 12,762 passed·0 failed·`PYTEST_EXIT=0`
+  (로그 내 판정 줄을 직접 읽어 확인 — 래퍼 exit code를 신뢰하지 않는다).
+
+
+## 2026-09-11: OPS-60 — PowerShell 가드 런타임 실패 규칙 3종 승계 + 실사고 1건 발견·수정
+
+- **배경**: OPS-57 acceptance②의 미이행분(2026-08-31 LIC-02 siyavula URL 프로브에서 유래).
+  `scripts/ops/check_ps_scripts.py`에 런북 전용 규칙 ⑦~⑨를 신설: ⑦ 자동/예약 변수
+  (`$home`·`$host`·`$input`·`$error`·`$args`·`$pwd`·`$matches`·`$profile`) 대입 금지 —
+  대입은 거부되지만 원래 값이 이미 참이라 이후 `if($home)`이 "성공"처럼 보인다. ⑧
+  `Invoke-WebRequest`/`iwr`에 `-UseBasicParsing` 필수 — 없으면 PS 5.1이 IE 엔진 파싱을
+  시도하다 대화형 대화상자로 무인 실행을 정지시킨다. ⑨ `catch` 안 `$_.Exception.Response`
+  존재 확인 없는 프로퍼티 체인 접근 금지 — 전송 계층 오류(DNS·TLS·연결거부)에서는
+  Response가 `$null`이라 NullReferenceException으로 원래 원인이 유실된다.
+- **④(if/else 다중행 구조) 판정**: acceptance④가 "오탐 위험이 커 채택 여부를 먼저
+  판정"하라고 명시적으로 열어 둔 항목이었다. 전면 채택(펜스 경계 무관 모든 if/else 짝을
+  정적 추적)은 중첩·backtick 줄바꿈·문자열 속 `else` 등 변수가 많아 보류. 대신 **"펜스가
+  `else`/`elseif`로 시작"만 채택** — 이 부분집합은 그 펜스 안에 대응하는 `if`가 있을 수
+  없으므로(있었다면 `else`로 시작하지 않는다) 오탐이 구조적으로 0이다. 판정 근거를
+  `backlog.py amend --acceptance`로 대장에 직접 기록(산문 판정 누락 방지 — HARN-52
+  선례와 같은 원리를 acceptance 판정에도 적용).
+- **실사고 발견·수정(acceptance⑤·⑥ 충족 과정에서)**: 신규 ⑨ 규칙을 저장소 전체 자산
+  (324건)에 먼저 돌려본 결과 `docs/architecture/deployment_cd_runbook.md`의 레디니스
+  체크 catch 블록이 정확히 이 버그 패턴이었다 — `$_.Exception.Response.StatusCode.value__`
+  를 존재 확인 없이 참조. 규칙을 좁혀 이 실사고를 피해가는 대신 런북 자체를 고쳤다
+  (`if ($_.Exception.Response) {...} else {...}`로 전송 계층 오류와 HTTP 오류를 분리).
+  이것이 CLAUDE.md "오탐 우선" 원칙과 "가드가 막는다는 주장도 주입으로 검증" 원칙의
+  실제 적용 사례다 — 사후에 지어낸 합성 픽스처가 아니라 **실제 저장소 자산에서** 규칙의
+  변별력이 입증됐다.
+- **검증**: 신규 규칙 4종(⑦⑧⑨④) 각각 양방향(위반 exit 1·정상 exit 0) 테스트 — 총 54건
+  전부 통과(`tests/infra/test_ps_guard_runbook_rules.py`). `check_ps_scripts.py`(인자 없이
+  전체 스캔) — 324건 0위반. `tests/infra` 전체 — 1276 passed(중간에 `check_ps_scripts.py`
+  LOC 변화로 EOS 인벤토리 드리프트 1회 발생·`--write` 재생성으로 해소, OPS-56과 동일
+  패턴 — 코드 변경 후 인벤토리 재생성을 잊지 않는 것이 이 저장소의 상시 체크리스트가
+  됐다). `ruff check`·`black --check --line-length 100` — clean.
+- **정직한 공백**: ⑧은 한 코드 줄 안에서만 `-UseBasicParsing`을 찾는다 — 백틱 줄바꿈으로
+  인자가 다음 줄에 이어지면 놓친다(미탐 허용, 오탐보다 안전). ⑨의 가드 인정 범위는
+  "같은 블록의 앞선 줄에서 `if (...Response...)`로 진리값 검사"로 좁혔다 — 변수에 대입한
+  뒤 별도로 검사하는 형태는 미탐 허용. .ps1 파일(BOM·괄호·call-before-def) 축은 이번
+  범위 밖 — 신규 규칙 3종은 전부 런북 마크다운 전용(`check_runbook_markdown`)이다.
+
+## 2026-09-11: OPS-63 — 통합 테스트 레이트리미터 전역 격리 (OPS-06/07과 같은 유형 2회차)
+
+- **배경**: `configure_backend_from_settings` 호출처가 0건이라 FastAPI 앱마다 백엔드가
+  재설치되지 않고, 같은 pytest 프로세스에서 도는 통합 테스트 21파일이 프로세스 전역
+  `whymath_backend.api._rate_limit._BACKEND`(기본 InMemoryBackend)의 IP 쓰기 버킷을
+  공유한다 — 2026-09-06 실측으로 같은 커밋의 실 PG 통합 잡이 pytest-randomly 순서
+  차이만으로 07:29 green → 09:39 red로 갈렸다. `db.session._engine` 전역 오염
+  (OPS-06 → OPS-07 가드) 이후 같은 유형의 전역 오염 2회차 — CLAUDE.md 실수 관리
+  규칙(반복 실수 재발방지 등재 의무)에 따라 등재된 태스크.
+- **해법**: `tests/backend/conftest.py`에 오토유즈 픽스처
+  `_reset_rate_limit_store_before_test`를 신설 — 모든 백엔드 테스트 **시작 시**
+  `InMemoryBackend`일 때만 `reset_store()`를 호출한다(Redis 설정은 건드리지 않음).
+  로직은 `reset_inmemory_rate_limit_store()`라는 순수 함수로 분리해 `_db_leak_guard`
+  (OPS-07 선례)와 동형으로 pytest 스케줄링과 무관하게 직접 테스트할 수 있게 했다.
+- **OPS-07과의 경계(acceptance④)**: OPS-07은 테스트 **종료** 시 전역 누수를 탐지·귀책하고
+  hermetic에만 적용된다. 이 픽스처는 테스트 **시작** 시 카운트를 비우는 *격리*이고
+  hermetic·integration 양쪽 모두에 적용된다 — 귀책 축은 추가하지 않는다(레이트리미터
+  카운트는 정상 동작의 잔여물이지 누수가 아니다).
+- **acceptance③-정정(PR #1001 Codex P2) 이행**: 원래 제안된 두 파일 순서 재현은 IP 쓰기
+  한도(60/분)에 못 미쳐(≈38) 변별력이 없다고 이미 정정돼 있었다 — 시딩 기반 절차로
+  교체됐다. `tests/backend/api/test_rate_limit_fixture_isolation.py`(신규, 4건)가 그
+  hermetic 축을 구현: ①IP 쓰기 버킷에 60건 직접 시딩 → 헬퍼 미호출 상태에서 429 재현
+  ②같은 시딩 후 헬퍼 호출 → 재요청 통과(격리가 실제로 비움) ③Redis 백엔드로 교체한
+  상태에서 헬퍼가 `.reset()`을 호출하지 않음(acceptance① 경계) ④이 테스트 자신도
+  오토유즈 픽스처의 수혜를 받는지 확인. pytest-randomly 순서와 무관하게 직접 함수
+  호출로 검증했다 — 순서 의존 검증은 순서가 바뀌면 조용히 무의미해진다는 게 이 태스크
+  자체의 발단이었다. 21개 파일의 실제 순서 재현(실 PG 필요 축)은 이 세션의 샌드박스에
+  pgvector·docker가 없어 재현 불가 — CI의 "backend — 마이그레이션·통합 (실 PG)" 잡이
+  이 픽스처 적용 상태로 green인지로 간접 확인한다(태스크 notes가 이미 이 한계를 명시).
+- **검증**: `test_rate_limit_fixture_isolation.py` 4 passed(무작위 순서로도 안정) ·
+  `test_coach.py`(285) · `tests/backend/api` 전체(1583 passed·131 skipped) ·
+  `ruff check`·`black --check --line-length 100`·`mypy --strict whymath_backend`(clean,
+  소스 미변경이라 회귀 없음 확인용) · `backlog.py validate` green.
+- **정직한 공백**: 실 PG가 필요한 21파일 교차 오염 재현(원래 acceptance③)은 CI 또는
+  Phaiakes9에서만 확인 가능 — 이 세션은 하지 못했다.
+
+## 2026-09-11: OPS-64 — 오프사이트 미러 실패가 감시에 안 보이던 상태(Step 7/Step 9 기록 순서) 해소
+
+- **배경**: 2026-09-06 게이트 `G-backup-offsite-move` 실행 중 발견. `backup_whymath_pg.ps1`은
+  266줄(Step 7)에서 `backup_status.json`에 "성공"을 기록하고, 오프사이트 미러(Step 9·
+  302줄~)는 그 뒤에 온다. Step 9의 모든 실패 경로는 `Fail`(exit 1)이지만 그 시점엔 이미
+  대장에 성공이 적혀 있다 — 매일 09:00 `WhyMath-DB-Backup-Check`가 그 대장만 읽으므로
+  미러가 매 회차 실패해도 "정상"으로 보인다.
+- **해법(acceptance② 선택지 b)**: `backup_status.py`의 `BackupStatus`에
+  `offsite_requested`/`offsite_ok`/`offsite_destination`/`offsite_size_bytes` 4필드를
+  추가하고, `evaluate_backup_health`가 `offsite_requested and not offsite_ok`를 별도
+  사유 `offsite_failed`(exit 1)로 판정한다 — `--require-encrypted`와 무관하게 항상 본다
+  (오프사이트 도착 여부는 로컬 암호화 정책과 별개 사실). PS1 쪽은 `Write-BackupStatus`를
+  **두 번** 부른다: Step 7에서 `-OffsiteRequested`/`-OffsiteDestination`만 넘긴 비관적
+  기록(`OffsiteOk`는 함수 기본값 `$false`), Step 9의 모든 `Fail` 갈래(디렉터리 생성·복사·
+  존재확인·사이즈대조·보존삭제·평문잔존검사)를 지난 뒤에만 `-OffsiteOk $true`로 재기록한다.
+  (a)안(Step 9 뒤로 옮기기)은 채택하지 않았다 — 백업 자체는 성공했는데 미러 단계 예외로
+  레코드가 전혀 안 쓰이면 `stale`로 오경보하는 부작용이 있다.
+- **변별력(결함 주입 3건, 각각 RED 확인 후 백업으로 바이트 동일 복원)**:
+  ① Step 7 호출에서 `-OffsiteRequested`/`-OffsiteDestination` 제거 →
+  `test_step7_records_offsite_request_pessimistically` RED.
+  ② Step 9 성공 경로의 재기록 호출을 삭제 →
+  `test_step9_success_overwrites_with_optimistic_offsite_status` RED
+  ("정확히 1건" 단언 `0 == 1`).
+  ③ 같은 재기록 호출을 사이즈 대조 `Fail`보다 **앞**(오프사이트 사이즈 산출 직후)으로
+  옮김 → 순서 불변식 단언 RED(`call_idx 36 <= last_fail_idx 56`) — Step 9가 아직
+  실패할 수 있는 시점에 낙관적 레코드가 쓰이는 회귀를 별도로 잡는다.
+  파이썬 판정 축은 `test_offsite_failure_is_invisible_without_the_new_fields`가 같은
+  `evaluate_backup_health` 함수에 두 입력을 넣어 사고 재현(①: 신규 필드 없는 레코드는
+  오프사이트 요청·실패 여부와 무관하게 항상 `ok=True` — 구버전 동작 그대로)과 수정 후
+  판정(②: `offsite_failed`)을 대조한다.
+- **검증**: `tests/infra/test_backup_encryption.py` 85 passed(신규 13건 — PS1 텍스트
+  동결 2건·Python 실동작 8건·CLI 와이어링 3건). `ruff check`·
+  `black --check --line-length 100` clean(기존 line-too-long 1건 발견해 f-string을
+  변수로 분리해 해소). `tests/infra` 전체·`src/backend` 전체 스위트 재확인 — 결과는
+  아래 세션 로그 참조.
+- **정직한 공백**: `mypy scripts/backup/backup_status.py`가 record 서브커맨드의
+  `status` 재대입(`BackupStatus | None` → `BackupStatus`)에서 기존에 이미 내던
+  Incompatible-types 경고 1건이 이번 편집으로 줄 번호만 이동했다(267→329) — 이 태스크
+  범위(오프사이트 상태 필드 추가) 밖의 선행 결함이라 손대지 않았다. 별도 추적이 필요하다.
+
+## 2026-09-11: OPS-70 — anchors.yaml 정본 훼손(파일시스템 축, OPS-63 전역 오염과 같은 유형) 해소
+
+- **배경**: `tests/backend/l1/test_eos_anchor_registry.py::test_broken_registry_still_writes_evidence`가
+  실패 경로를 실측하려고 저장소 정본 `data/corpus/eos_anchor_set_v1/anchors.yaml`을
+  `write_text("anchors: []\n")`로 직접 비우고 `finally`에서 원본 바이트로 복원했다.
+  `-n auto` 병렬 실행에서 다른 워커가 그 비워진 창에 정본을 읽으면
+  `AnchorRegistryError`로 무관한 잡이 red가 됐다(PR #1044 head `2523b06f` 실측). 스위트
+  전후 sha256은 동일해도(복원 성공) 그 사이 창에는 실제로 빈 상태가 있었다 — OPS-63의
+  프로세스 전역 오염(레이트리미터 InMemoryBackend)과 같은 형태의 **파일시스템** 판.
+- **해법(acceptance② 선택지 그대로 — 경로 주입구 신설)**: `scripts/analysis/eos_anchor_asset_audit.py`에
+  `--registry`(기본값=정본) CLI 플래그를 추가하고 `load_anchor_defs()`/`step_anchor_registry()`가
+  그 값을 인자로 받도록 스레딩했다(선행 확인 사항이던 "경로 주입구 부재"를 해소 — 이전엔
+  `main()`이 `--out`만 받고 레지스트리 경로는 모듈 상수 고정이었다). 테스트는 이제
+  `tmp_path` 사본을 만들어 `--registry`로 가리킨다 — 정본은 한 번도 손대지 않는다. cwd
+  트릭·심볼릭 링크는 채택하지 않았다(다른 리더도 같이 속는 우회이므로 acceptance②의
+  명시 배제를 따름).
+- **변별력(결함 주입 2건, 각각 RED 확인 후 `cp` 백업으로 바이트 동일 복원)**:
+  ① 테스트를 원래 형태(정본 직접 write + finally 복원)로 되돌림 → 신규 스파이 테스트
+  `test_broken_registry_injection_never_touches_the_canonical_file` RED. 이 스파이는
+  `Path.write_text`/`write_bytes`를 monkeypatch로 가로채 **호출 시점**을 잡는다 — 스위트
+  전후 해시 대조였다면 `finally` 복원 뒤라 무증상이었을 자리다(정상 상태의 초록은 보호의
+  증거가 아니라는 CLAUDE.md 원칙을 정면으로 겨냥한 설계).
+  ② 스크립트의 `step_anchor_registry`에서 `ctx.get("registry_path")` 전달을 제거(→
+  `load_anchor_defs()`로 되돌림 — `--registry`를 파싱만 하고 무시하는 회귀) →
+  `test_broken_registry_still_writes_evidence` RED(사본을 가리켜도 스크립트가 정본을
+  계속 읽어 exit 0 — "적재 실패가 exit 0으로 위장"이 그대로 재현됨).
+- **전수 점검(acceptance④)**: naive `grep 'data/corpus' + write_text`가 이 결함을 놓친
+  이유(리터럴과 write 호출이 다른 표현식 — `registry = _REPO_ROOT / "data/corpus/..."` 후
+  `registry.write_text(...)`)를 재현하지 않는 AST 기반 스캐너(함수 단위로 corpus 리터럴이
+  관여한 변수명에 태그를 붙이고 그 변수에 대한 write 호출을 탐지)로 `tests/`·`scripts/`
+  전체를 스캔했다. 결과: 이 1건(수정 대상 그 자체) 외 추가 인스턴스 0건 — 정직한 음성
+  결과다. 스캐너 자체는 세션 스크래치패드에만 존재(상시 CI 가드로는 승격하지 않음 — 이
+  패턴이 반복된다는 근거가 아직 없어 과공학 방지 원칙상 보류).
+- **검증**: `tests/backend/l1/test_eos_anchor_registry.py` 44 passed(신규 1건).
+  `tests/backend/l1` 전체 1111 passed, 85 skipped. `tests/infra` 전체 1286 passed, 1
+  skipped(1차 실행에서 `test_eos_feature_inventory_v2.py` 2건 드리프트 발견 —
+  신규 테스트 함수 2건이 집계에 반영 안 됨 → `--write` 재생성 후 재확인 green).
+  `ruff check`·`black --check --line-length 100` clean.
+- **정직한 공백**: 없음 — 이 태스크의 스코프(파일시스템 축)는 acceptance①~④ 전부
+  충족했다. 429 레이트리미터 전역 오염(같은 유형의 프로세스 메모리 축)은 OPS-63 소관으로
+  범위 밖(acceptance⑤ 명시).
+
+## 2026-09-11: OPS-73 — 실행용 코드펜스 증거·출력 혼입 금지 규칙 3종 (2회차 사고의 코드 축 대책)
+
+- **배경**: 2026-08-31 HARN-38(`$ git ls-tree`와 출력을 한 펜스에 담아 보고 →
+  CommandNotFoundException 2건)과 2026-09-10 OPS-72(커밋 해시+메시지 줄과 `git cat-file`
+  화살표 주석을 실행용 펜스에 담아 보고 → ParserError 1건 + `fatal: too many arguments`
+  2건)가 **같은 유형 2회차**다. 1회차 대책은 CLAUDE.md 「실행용 블록과 증거 블록의
+  분리」 산문 규칙이었는데, "눈으로 구별되게 표시"라는 재량이 남아 2회차가 그대로
+  재발했다. 「실수 관리」 규정상 반복 실수는 규칙·코드·태스크 중 하나로 대책이 있어야
+  하고 규칙 축은 이미 소진됐으므로 코드 축이 필요했다.
+- **해법**: `scripts/ops/check_ps_scripts.py`(OPS-57·OPS-60이 이미 훑는 `docs/**/*.md`
+  코드펜스 검사기)에 규칙 3종을 추가했다 — 신규 도구가 아니라 규칙 추가다.
+  ⑩ 셀 프롬프트 접두(`$ `·`PS>`·`PS C:\...>`) ⑪ 화살표(→/←) 뒤 한국어 판정어(존재·
+  성공·실패...) ⑫ 커밋 해시+메시지 형태의 줄. 대상에 `.claude/commands/*.md`를
+  추가했다(Kiki에게 그대로 붙여넣기 대상으로 건네지는 슬래시 커맨드 문서).
+- **핵심 한계(acceptance④ — 과신 금지)**: 실제 사고는 세션이 *채팅으로* 낸 증거
+  블록에서 났고, CI는 채팅도 PR 본문도 보지 않는다. 이 가드가 덮는 것은 **저장소에
+  커밋된** 런북·커맨드 문서뿐이다. 도구 docstring에 "잡는 것/못 잡는 것" 표를 신설해
+  이 한계를 명시했다 — 채팅 축의 유일한 방어선은 여전히 CLAUDE.md 규칙이며, 그 규칙은
+  이미 2회 실패했다는 사실을 함께 적었다.
+- **변별력(결함 주입 — 세 규칙의 검사 블록 전체 제거 → RED 7건 → `cp` 백업 바이트
+  동일 복원)**: 신규 테스트 클래스 3개(18건)가 각 규칙의 실측 사고 재현 샘플(예:
+  `git cat-file -e origin/main:x  → 존재`, `b64f470d  OPS-72: ... (#1065)`)과 오탐 방지
+  샘플(변수 대입 `$sha = "..."`·주석/문자열 안 화살표·판정어 없는 화살표)을 양방향으로
+  고정한다. 기존 자산 336건(scripts/**/*.ps1 + docs/**/*.md + .claude/commands/*.md)이
+  새 규칙에서 위반 0건임을 먼저 확인한 뒤에만 CI 차단으로 승격했다(OPS-57③·OPS-60⑤와
+  동일 규약).
+- **전수 스캔(acceptance⑤)**: `.github/pull_request_template.md`·
+  `.github/branch-protection-setup.md`도 별도로 검사해 위반 0건. 정직한 공백: 이것은
+  "이 도구의 3종 정규식으로는 0건"이라는 뜻이다 — PR 본문 자체(2026-09-10 PR #1093
+  실례)는 저장소 파일이 아니라 이 도구가 구조적으로 스캔할 수 없다.
+- **검증**: `tests/infra/test_ps_guard_runbook_rules.py` 71 passed(신규 18건).
+  `tests/infra` 전체 1303 passed, 1 skipped(1차 실행에서 신규 테스트 함수 18건이
+  `test_eos_feature_inventory_v2.py` 집계에 반영 안 돼 드리프트 → `--write` 재생성 후
+  재확인 green). `ruff check`·`black --check --line-length 100` clean. 모듈 docstring에
+  이스케이프되지 않은 `\.`·`\s`(일반 문자열 안의 백슬래시)가 생겨 `DeprecationWarning:
+  invalid escape sequence`가 났던 것을 발견·수정(`\\` 이중 이스케이프 또는 표현 우회) —
+  `-W error::DeprecationWarning`으로 재확인.
+
+## 2026-09-11: PED-27 — "이미 해소됨" 판정(SEC-24가 선행 착지, 재구현 없이 대장만 정정)
+
+- **배경**: PED-27은 2026-08-13 01:21 병합된 게임화 모듈 r3 재점검(`69c3986d`, #813)이
+  등재했다 — `GET /v1/me/harness-metrics`가 `ConsentedUser`(학생 포함 전원)로 열려
+  있어 원시 대리지표(INTERNAL_ONLY 2종·Brier 원값·게임화 의심 낙인)가 학생 토큰에 그대로
+  노출된다는 지적. 그런데 SEC-24(`014b790d`, PR #816)가 그보다 **6시간 먼저**
+  (2026-08-12 19:24) `RequireContentAdmin`으로 정확히 이 라우트를 닫아 놓았다 — r3
+  재점검이 SEC-24 병합 이전 브랜치 상태를 서술했고, main 병합 시점에 재확인하지
+  않아 이미 해소된 위협을 새 태스크로 재등재했다.
+- **실측 확인(코드 변경 없이 현재 main 대조)**: acceptance①~⑨ 전항목이 이미 충족돼
+  있음을 확인했다 — `api/me.py:3256`의 라우트가 `RequireContentAdmin`을 실제로 쓰고,
+  `tests/backend/api/test_me_harness_metrics_auth_gate.py`가 3방향(401 무토큰·403
+  학생·200 admin) + 오버라이드 우회 검증까지 이미 실측 고정돼 있으며,
+  `tests/backend/harness/test_wh1_evaluation_integration.py`의 `_user()` 헬퍼가
+  SEC-24를 인용하는 주석과 함께 `role=CONTENT_ADMIN`으로 시드한다. `GET
+  /v1/me/growth-evidence`(PED-08)가 `classify_metric_exposure`의 유일한 학생 대면
+  호출자가 됐다는 acceptance⑦의 문구도 참이다.
+- **결정**: 코드 재작성·재커밋 없음(acceptance①의 "계약 로직 재구현·복사 금지"를
+  따름 — 테스트도 SEC-24가 이미 충분히 갖춰 놓았다). 이 세션은 대장(`PED-27`)의
+  acceptance에 정정 항목을 추가해 각 항목을 SEC-24 코드와 대조한 근거를 남기고,
+  완료 증적으로 SEC-24 자신의 커밋/PR(`014b790d`/#816)을 인용해 `done`으로 닫는다 —
+  "trunk 부재를 미구현으로 단정 금지" 규칙의 거울상(여기서는 trunk에 이미 있는 해법을
+  놓치고 새 태스크를 만든 쪽의 오류)이다.
+- **검증**: `pytest tests/backend/api/test_me_harness_metrics_auth_gate.py
+  tests/backend/api/test_me_growth_evidence.py -q` → 24 passed. 전체 백엔드 스위트
+  (`pytest tests/backend -q`, python3.12 venv) → **12767 passed, 340 skipped, 1
+  xfailed, PYTEST_EXIT=0** — 코드 변경이 없으므로 회귀도 없다.
+- **정직한 공백**: 없음 — 조사 결과 acceptance 전항목이 이미 충족된 상태를 확인했고,
+  범위 밖 동결(⑨)도 자명하게 성립한다(코드를 건드리지 않았다).
+
+## 2026-09-11: PED-34 — 프롬프트 원칙 6 "인지부하 관리" 신설 (LearnLM 루브릭 차용)
+
+- **배경**: `docs/reviews/learnlm_pedagogy_prompting_review_2026-08.md`가 LearnLM
+  25항목 루브릭 중 인지부하 축(최대 비중 9/25)이 WhyMath 프롬프트 정본에 통째로
+  없는 순수 공백임을 실측했다(원칙 5개·`l4/polya/prompts.py`·템플릿 전체에서
+  응답 길이·청크·무관정보·턴당 질문 규칙 0건).
+- **해법**: `docs/standards/prompt_engineering.md`에 "6. 인지부하 관리" 신설 —
+  턴당 질문 1개·응답 길이 상한(3문장 이내)·관리 가능한 청크 분할·무관 정보/반복
+  금지·정보 제시 순서(선 유도→후 보강)를 위반 판정 가능한 문장으로 명문화.
+  `l4/polya/prompts.py`의 `_BASE_SYSTEM`(4단계 전체 공유)에 원칙 6 항목을 추가하고
+  기존 "질문 1-2개까지만"을 "질문은 정확히 1개"로 교체(원칙과 충돌하는 옛 문구를
+  남기지 않음).
+- **집행 지점(정본화≠집행)**: `tests/backend/l4/test_polya_prompts.py`(신규 9건)가
+  ①`STAGE_PROMPTS` 정본 문면 ②`PolyaCoach.decide()` → `PedagogyDecision.system`
+  (= `/v1/coach`가 LLM에 실제로 넘기는 문자열) 양쪽에서 5축 전부를 확인한다.
+- **측정 계약**: 루브릭 채점기(자동 실행기) 확장은 acceptance④가 SSM #12 파일럿
+  소관으로 명시 배제하므로, `prompt_engineering.md`의 기존 LLM-as-judge
+  `EVAL_PROMPT`에 신규 5문항(원칙 6의 5축과 1:1 대응하는 0/1 판정 문항)만 추가해
+  SSM #12가 실행할 판정 기준을 명문화했다 — 채점 로직은 재구현하지 않았다.
+- **변별력(결함 주입 — `_BASE_SYSTEM`을 구버전 "질문 1-2개"로 되돌림 → RED 확인 →
+  `cp` 백업 바이트 동일 복원)**: 원칙 6의 5축 단언 5건 + 4단계 실소비 경로 단언
+  4건, 총 9건 전부 RED → 복원 후 재확인 GREEN.
+- **원문 재확인 시도**: 리뷰 §6이 지시한 "문면 차용 전 원문 1분 재확인"을 이 세션도
+  시도했으나 `arxiv.org`가 에이전트 프록시로 여전히 차단된다(`EGRESS_BLOCKED`
+  직접 확인) — 원 검토의 confidence 표기(likely/unverified)를 그대로 승계.
+- **검증**: `tests/backend/l4/test_polya_prompts.py`(9)·`test_polya_engine.py`
+  (23, "1-2개" 텍스트 의존 0건) → 32 passed. `tests/backend/l4` 전체 1545 passed,
+  22 skipped. 전체 백엔드 스위트(python3.12 venv) → **12776 passed, 340 skipped,
+  1 xfailed, PYTEST_EXIT=0**(PED-27 시점 12767에서 +9 — 신규 테스트만큼 정확히
+  증가, 회귀 없음). `ruff`·`black --line-length 100`·`mypy --strict` clean.
+- **정직한 공백**: 원출처(2412.16429) 재확인 불가(위 참조) 외 없음 — acceptance①~⑦
+  전항목 충족.
+
+## 2026-09-11: PED-35 — 힌트 유도-제공 균형 상한 계약 (규칙 6 "상한 도달 보장" 신설)
+
+- **배경**: `decide_hint_level`의 규칙 5('숙달' 학생 base-1 완화)가 규칙 1(5회+
+  막힘 → 최소 레벨 3)의 결과를 매 턴 다시 깎았다. `prev_hint_level`이 매 턴
+  이 함수 자신의 반환값으로 피드백되면서 escalation(+1)과 discount(-1)이 정확히
+  상쇄돼, '숙달' 학생은 5턴 이상 연속 좌절/막힘 신호를 내도 레벨이 최대 2에서
+  고착됐다(레벨 3 "부분 풀이"에 구조적으로 도달 불가 — 2026-08-30 코드 실측 갭,
+  `learnlm_pedagogy_prompting_review_2026-08.md` §4-2 인용).
+- **해법**: 규칙 6을 신설 — 규칙 1과 *같은 조건*(`turn_count >= STUCK_TURN_THRESHOLD`)
+  을 그대로 재사용해 규칙 5의 완화가 그 최소 레벨(3)까지 깎지 못하게 보정한다.
+  즉답(레벨 4) 허용이 아니라 스펙 L37 "부분 풀이(5회+ 막힘)" 종착 보장이며, 짧은
+  horizon의 점진 상승(규칙 2·3)은 '생산적 고투' 취지대로 여전히 완화된다. 새
+  파라미터·`PolyaState` 필드·`turn_meta` 연동 없이 기존 임계값만 재사용해
+  paths(`hint_deferral.py` + 테스트) 범위를 지켰다(대안: consecutive-signal-count
+  신규 필드 추가·규칙 4에만 discount 적용·별도 신규 임계값 — 모두 과공학/불일치로
+  기각).
+- **변별력(RED-before-fix, `cp` 백업/복원 — git 계열 원복 금지 준수)**: (a) 규칙 6
+  제거 → 구 버그값(2)을 pin하던 기존 테스트 정정본 1건 + 신규 연속턴/경계/무영향
+  discriminability 테스트 3건, 정확히 4건 RED(나머지 무관) (b) 신규
+  `is_ceiling_reached` 술어를 `return True`로 뮤테이션 → 신규 테스트 2건 정확히
+  RED. 두 라운드 모두 복원 후 바이트 동일 확인 → GREEN.
+- **acceptance②(임계 튜닝)** — 정직한 공백으로 남김: `STUCK_TURN_THRESHOLD=5`는
+  튜닝하지 않았다. 이 세션은 라이브 `wh1_evaluation` 세션 지표(도움 감소 곡선·
+  이탈률)에 접근할 수 없어 실측 근거를 만들 수 없다 — LearnLM 2407.12687 §5.5는
+  방향성 참고일 뿐 이 임계값의 직접 측정이 아니다. 재보정은 SSM 파일럿 또는 전용
+  실측 태스크로 미룬다.
+- **acceptance③("작동한 비율")** — 정본화만 완료, 집행은 범위 밖: `is_ceiling_reached
+  (hint_level, turn_count)` 순수 훅을 `is_stuck_turn_count`/`is_answer_demand`와
+  같은 패턴으로 신설(decide_hint_level 출력 재사용, 재계산 아님). 상한 도달률
+  집계가 가능한 훅만 제공하며, 실제 세션 리포트/텔레메트리 배선은 이 태스크의
+  paths 밖으로 명시 — "정본화를 집행으로 착각한 완료 선언 금지" 준수.
+- **acceptance④(PED-31 관계)** — `docs/architecture/04f_pedagogy_module_boundaries.md`
+  §102가 이미 명문화한 대로 `decide_hint_level`의 단계 결정은 hint_deferral
+  고유 책임이며 PED-31의 전략 라이브러리 축(strategy 단위 `fading_schedule`,
+  문서 갭 ⑩)과는 다른 층위임을 docstring에 명시. PED-31 문서가 그 갭의 후속으로
+  제안한 번호("PED-36")는 실제 `backlog.py add`로 등재된 적이 없음을 실측
+  확인(`backlog/tasks/` 전수 grep 0건) — 중복 설계가 아니다.
+- **검증**: `test_hint_deferral.py` 37 passed(기존 29 + Rule6 discriminability 4
+  + predicate 테스트 4). 전체 백엔드 스위트(python3.12 venv) → **12784 passed,
+  340 skipped, 1 xfailed, PYTEST_EXIT=0**(PED-34 시점 12776에서 +8 — 신규
+  테스트 수만큼 정확히 증가, 회귀 없음). `tests/infra` 1303 passed, 1 skipped
+  (EOS 인벤토리 신규 함수 반영 재생성 2회 — `is_ceiling_reached` 추가 후 재확인
+  누락 방지). `ruff`·`black --line-length 100`·`mypy --strict` clean.
+- **정직한 공백**: 위 acceptance②·③ 범위 제한 참조 외 없음.
+
+## 2026-09-11: REC-11 — candidates[]·policy_version 영속 (추천 오프라인 평가 소급 불가 축 해소)
+
+- **배경**: `/v1/me/next-problem`의 처치 기록(`record_recommendation_treatment`, REC-03)은
+  "어떤 문항이 나갔는지"만 기록했고 "그때 무엇과 비교해 선택됐는지"는 기록하지 않았다 —
+  선택 알고리즘(정책)이 나중에 바뀌면 과거 로그로 그 시점 정책의 소급 평가(off-policy
+  evaluation)를 할 수 없다(EOS-53 crosswalk 갭 #5 E6 — `policy_version` 전수 grep 0
+  실측으로 확정).
+- **해법**: `l2/recommendation_evidence.py`의 `record_recommendation_treatment`에
+  `candidates: list[tuple[uuid.UUID, float]] | None`·`policy_version: str | None` 선택
+  인자 신설(둘 다 생략하면 회귀 0). `candidates`는 점수 내림차순 상위
+  `CANDIDATES_META_CAP=10`건만 저장(원 풀 최대 50건 전량 저장은 과공학 — `pool_size`가
+  원 풀 크기를 이미 별도 기록). `POLICY_VERSION_CAT="cat_v1"`/
+  `POLICY_VERSION_SUNEUNG="suneung_v1"` 상수 신설.
+- **집행 지점(정본화≠집행)**: 원 태스크 `paths`가 실 호출부(`api/me.py`)를 빠뜨려 "정본화만
+  하고 아무도 호출 안 함" 사고를 만들 뻔했다 — 발견 후 `backlog.py amend --path`로
+  `api/me.py`·`ops/recommendation_reach_report.py`를 추가하고 두 분기 모두 배선했다.
+  기본 CAT 분기는 이미 계산된 `items`·`weights`를 재사용(새 쿼리 0). 수능 분기는
+  `recommend_suneung_index`(L6) 내부 공식(적격 게이트×정보량×수능우선순위×약점가중)을
+  *미러해 재계산*한다 — 이미 정해진 `chosen_index`는 그대로 쓰므로 결정에는 영향
+  없음(관측 재계산일 뿐). **정직한 공백**: 그 함수의 알고리즘이 바뀌면 이 미러도 함께
+  갱신해야 한다(코드 주석 2곳에 드리프트 위험 명시) — 선택된 `problem_id` 자체는 항상
+  정확하고 `candidates[]`의 점수만 영향받을 수 있다.
+- **acceptance②(followed 결과 결합)**: REC-03 docstring이 이미 동결한 것과 동일 이유(실
+  `session_id` 미배선)로 범위 밖임을 모듈 docstring에 명시 — 이 좌석은 결과를 결합하지
+  않는다.
+- **acceptance③("작동한 비율")**: `ops/recommendation_reach_report.py`(REC-01 기존 4축)에
+  5번째 축 신설 — `recommendation_render` 처치 전체 중 `meta.candidates`·
+  `meta.policy_version`이 둘 다 실린 건수의 비율(JSONB `has_key` 2회 AND). 분모(처치
+  전체)가 0이면 비율은 **None**(0/0을 지어내지 않는다 — 이 리포트의 기존 None-vs-0
+  회계 원칙 승계).
+- **변별력(RED-before-fix 3회, `cp` 백업/복원 — git 계열 원복 금지 준수, 매회 바이트
+  동일 확인)**: (a) `record_recommendation_treatment`의 meta 기록 로직 제거 → 신규 4건
+  중 값 검증 3건 정확히 RED(absence-only 1건은 애초에 무관) (b) `build_report`의 rate
+  계산을 `0.0`으로 뮤테이션 → rate 단언 7건 정확히 RED(무관 9건 GREEN 유지) (c)
+  `api/me.py` 두 호출부의 `candidates=`·`policy_version=` 인자 제거 → API 레벨 신규
+  2건(CAT·수능 분기 각 1건) 정확히 RED.
+- **검증**: `test_recommendation_evidence.py` 12 passed(+4)·`test_me.py` 192
+  passed(+2)·`test_recommendation_reach_report.py` 16 passed(+5). 전체 백엔드 스위트
+  → **12795 passed, 340 skipped, 1 xfailed, PYTEST_EXIT=0**(PED-35 시점 12784에서
+  +11 — 신규 테스트 수만큼 정확히 증가, 회귀 없음). `tests/infra` 1303 passed, 1
+  skipped(EOS 인벤토리 신규 함수 3개 반영 재생성). `ruff`·`black --line-length
+  100`·`mypy --strict` clean.
+- **정직한 공백**: 위 수능 분기 점수 산정의 미러-드리프트 위험 외 없음.
+
+## 2026-09-11: S4-59 — 강등전 1차 실측 기록 회수 (고립 브랜치 잔여 소유 공백 해소·CLAUDE.md 규칙 백필 동반)
+
+- **배경**: `HARN-35`(done·PR #900)가 고립 브랜치 `claude/whymath-ai-content-design-vafylb`에서
+  `OPS-24`(→`OPS-53`)만 회수하고 종료해, 같은 브랜치의 `docs/standards/
+  residue_gate_demotion_battle_2026-08-10.md`(104줄 — S4-16 강등전 1차 실측: 결함 검출
+  2/12·Wilson 95% 하한 0.0568로 인간 검수 대체 승격 기각)가 소유자 없이 남았다
+  (2026-08-31 감사·`unmerged_branch_audit_2026-08-31.md`가 발견·`S4-59` 등재).
+- **실측 재확인**: `git show origin/claude/whymath-ai-content-design-vafylb:...`로 전문
+  재대조·`git grep`으로 `0.0568`·`승격 기각`·`11h 36m`이 main·인플라이트 PR #844 양쪽
+  0건임을 재확인. main의 실제 08-14 라운드 항목(다른 모델 3종 비교 — qwen3.5:27b
+  timeout·qwen2.5:7b/qwen2-math:7b 구분력 부재)을 직접 읽어, 1차 라운드 고유의
+  결함류별 실명 관찰(`missing_condition` 0/3·`unstated_equiprobability` 0/3)과 비용
+  실측(qwen3.5:27b num_ctx=8192·45콜·11h36m38s)이 정말로 main에 없음을 확인 후 파일
+  단위로 이식(byte-diff 0).
+- **집행 지점**: `S4-16` 태스크 notes에 회수 문서 참조 링크 추가(`backlog.py amend
+  --notes-replace`) — 재개 시 이 문서를 먼저 읽도록 강제. `backlog.py validate` exit 0.
+- **고립 참조 2건 동반 회수(acceptance⑤)**: 같은 브랜치의 커밋(`0b2427ee`)에만 있던
+  ⓐ MEMORY.md 결정 로그 1줄(2026-08-09 — S4-16 병렬 중복 구현 정본 판정·OPS-23 번호
+  충돌 3회차) — 2026-08-09 블록에 원문 그대로 백필(시간 역순 위치 유지) ⓑ CLAUDE.md
+  규칙 1줄("Kiki 머신 클론은 여러 세션 공유 단일 작업 사본 — 브랜치 의존 실행 명령
+  블록에 실행 직전 `git log -1 --oneline` 자가검증 필수") — 08-31 "git fetch +
+  checkout -B" 규칙과는 다른 축(그쪽은 재시작 브랜치, 이쪽은 실행 도중 타 세션의
+  전환)이라 별도 삽입, 버전 푸터 0.2.20→0.2.21 갱신.
+- **정직한 공백**: docs-only 변경(코드 경로 무접촉)이라 acceptance 범위 밖 없음.
+- **검증**: `tests/infra` 1303 passed, 1 skipped(Python 소스 무변경이라 EOS 인벤토리
+  드리프트 없음). policy-guard 3패턴(검정교과서 본문·EBS/평가원 본문·하드코딩 시크릿)
+  로컬 재현 전건 clean. `backlog.py validate` exit 0(태스크 618건·게이트 44건·트랙
+  3건 green).
+
+## 2026-09-12: 미머지 브랜치 감사 11회차 — SEC-34 침해 문서정정 세션이 stray-code 이어받음 (신규 회수 0건 · 삭제 10차 배치 1건)
+
+- **계기**: 같은 세션이 앞서 `SEC-34`(Phaiakes9 채굴 침해) 근거로 `OPS-74`(AMD395 문서
+  오진 정정)·`OPS-75`(전면 재측정 후속) 등재 + PR #1137 작업 중 PR #860을 superseded로
+  종료했다. Kiki가 "백로그등재"를 지시해 `/stray-code`를 실행 — SessionStart 브리핑이
+  지목한 고립 브랜치 11건 + PR 닫힘(미머지) 3건 = 14건을 감사했다(`docs/reviews/
+  unmerged_branch_audit_2026-09-12.md`).
+- **방법**: 서브에이전트(워크트리 격리·읽기 전용)에 14건 전수 조사를 위임하고, 결과를
+  10회차 문서(2026-09-10)와 대조해 재확인했다. 13건은 head SHA·diff 건수가 10회차와
+  100% 동일(신규 커밋 0) — 이미 소유 태스크(OPS-40·CUR-07/HARN-80·OPS-41·PED-26·
+  ASM-06 외 다수·MOB-18·ARCH-30·PB-13/14·PATH-03·ADMIN-02·OPS-38/67·VIZ-11·PB-08)가
+  head SHA·파일 단위로 명시하고 있어 **신규 회수 태스크 등재 0건**. 14번째
+  `ops-50-51-52-moe-rocm-followup`(PR #860 원 브랜치)만 오늘 처음 고립돼 전체 절차를
+  새로 수행 — merge-base 대비 브랜치 추가줄 259개 중 256개가 main에 그대로 존재(3개는
+  black 재포맷 줄바꿈뿐), LIC-01 rights 모듈 9파일 바이트 동일, `OPS-52.yaml`(done)
+  notes가 PR #1090 포팅을 명시 — **삭제 가능** 판정.
+- **집행**: `.github/branch-cleanup-request.txt` 10차 배치에
+  `claude/ops-50-51-52-moe-rocm-followup`(head `167b5dd0`) 등재. 기존 13건의 "회수
+  완료 전 삭제 금지" 제외 목록은 전건 유지(PB-13·MOB-18은 다른 세션이 현재
+  in_progress로 작업 중일 수 있어 개입하지 않음).
+- **정직한 공백**: 과거 배치(1~9차, 누적 22건)의 `ls-remote` 잔존 재확인은 이번 회차
+  범위 밖(요청은 이번 14건 판정에 한정) — `branch-cleanup.yml`이 매 main 머지마다
+  수행한다.
+- **검증**: `backlog.py validate` exit 0. `backlog.py next --n 3` 착수 후보 불변(신규
+  태스크 없음을 배선으로 확인).

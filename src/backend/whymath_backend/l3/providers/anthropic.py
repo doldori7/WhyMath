@@ -162,12 +162,37 @@ def _coerce_token_count(value: Any) -> int | None:
     return value if value >= 0 else None
 
 
+def _read_usage_token(raw_usage: Any, field: str) -> int | None:
+    """usage 객체/dict에서 토큰 필드 1개를 방어적으로 읽는다(pydantic·dict 양쪽 흡수).
+
+    필드가 없으면 None이다 — 필드 부재와 값 0을 **구분한다**. 캐시 축(EOS-99)에서 이 구분이
+    판정을 가른다: 부재는 "캐시 개념이 없는 provider이거나 못 읽었다"(미측정)이고, 0은
+    "읽었는데 적중이 없었다"(실측)다. 둘을 같은 칸으로 접으면 '켰지만 작동 안 함'이
+    '해당 없음'으로 위장된다.
+    """
+    if raw_usage is None:
+        return None
+    if hasattr(raw_usage, field):
+        return _coerce_token_count(getattr(raw_usage, field))
+    if isinstance(raw_usage, dict):
+        # dict에 키가 아예 없으면 .get이 None을 주고, _coerce_token_count가 None을 돌려준다.
+        return _coerce_token_count(raw_usage.get(field))
+    return None
+
+
 def _extract_usage(message: Any, latency_ms: float) -> Usage:
     """anthropic messages.create 응답에서 실측 usage를 방어적으로 추출 (S1 게이트 ②).
 
-    응답의 `usage`(pydantic 객체 또는 dict)에서 `input_tokens`/`output_tokens`를 포착한다.
-    형태가 예상과 다르면 토큰은 None — *값을 지어내지 않는다*(_extract_text와 동일한
-    보수적 정규화). 지연(latency_ms)은 호출부가 monotonic으로 잰 실측값을 그대로 싣는다.
+    응답의 `usage`(pydantic 객체 또는 dict)에서 `input_tokens`/`output_tokens`와
+    **프롬프트 캐시 2종**(`cache_read_input_tokens`·`cache_creation_input_tokens` — EOS-99)을
+    포착한다. 형태가 예상과 다르면 토큰은 None — *값을 지어내지 않는다*(_extract_text와
+    동일한 보수적 정규화). 지연(latency_ms)은 호출부가 monotonic으로 잰 실측값을 그대로 싣는다.
+
+    캐시 2종을 읽는 이유(CLAUDE.md "작동 신호 없는 알고리즘 부착 금지"): `settings.
+    anthropic_prompt_caching`을 켜면 요청에 `cache_control`이 실리지만, **적중했는지는
+    응답 usage에만 있다.** 이 두 필드를 안 읽으면 플래그를 켠 상태와 캐시가 실제로 작동하는
+    상태를 구분할 수단이 없다(짧은 프리픽스는 최소 토큰 미만이라 조용히 무효가 된다).
+    SDK가 이 필드를 노출하지 않는 구버전이면 부재 → None(미측정)이 정직한 값이다.
     """
     raw_usage: Any = None
     if hasattr(message, "usage"):
@@ -175,19 +200,13 @@ def _extract_usage(message: Any, latency_ms: float) -> Usage:
     elif isinstance(message, dict):
         raw_usage = message.get("usage")
 
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    if raw_usage is not None:
-        if hasattr(raw_usage, "input_tokens"):
-            input_tokens = _coerce_token_count(raw_usage.input_tokens)
-        elif isinstance(raw_usage, dict):
-            input_tokens = _coerce_token_count(raw_usage.get("input_tokens"))
-        if hasattr(raw_usage, "output_tokens"):
-            output_tokens = _coerce_token_count(raw_usage.output_tokens)
-        elif isinstance(raw_usage, dict):
-            output_tokens = _coerce_token_count(raw_usage.get("output_tokens"))
-
-    return Usage(input_tokens=input_tokens, output_tokens=output_tokens, latency_ms=latency_ms)
+    return Usage(
+        input_tokens=_read_usage_token(raw_usage, "input_tokens"),
+        output_tokens=_read_usage_token(raw_usage, "output_tokens"),
+        latency_ms=latency_ms,
+        cache_read_input_tokens=_read_usage_token(raw_usage, "cache_read_input_tokens"),
+        cache_creation_input_tokens=_read_usage_token(raw_usage, "cache_creation_input_tokens"),
+    )
 
 
 def _build_default_client(settings: Settings) -> _AnthropicClient:
@@ -290,6 +309,7 @@ class AnthropicProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         """라우터 결정에 따라 Anthropic Claude로 생성 (LLMProvider 구현).
 
@@ -307,6 +327,13 @@ class AnthropicProvider:
           messages.create에는 문법 제약 디코딩이 없어 스키마를 보장할 수 없다(조용한 무시 금지).
           호출부 계약: 클라우드 결정 경로에서는 json_schema를 지정하지 말고 프롬프트+관대 파서로
           동작해야 한다(동등문제 저작은 LOCAL 결정일 때만 스키마를 싣는다 — llm_generator._invoke).
+        - `seed`(EOS-73 생성 재현)가 주어지면 *명확한 오류*를 던진다 — Anthropic Messages API에는
+          **seed 파라미터 자체가 없다**(`messages.create(model, max_tokens, system, messages)` +
+          temperature/thinking 등). 즉 이 경로의 seed는 정책 선택이 아니라 **구조적 불가**이며,
+          조용히 무시하면 `GenerationLog.seed`에 "모델에 전달된 적 없는 숫자"가 남아 *재현
+          가능하다고 거짓말하는 행*이 된다(날조 금지·EOS-55 정직 원칙 승계). 따라서 클라우드
+          경로의 seed는 **NULL(미기록)로 유지**되고, 호출부는 `l3/generation_seed.seed_supported`
+          가 True(=LOCAL)일 때만 seed를 싣는다(json_schema와 동일한 계약 형태).
 
         반환은 `GenerationResult(text, usage)` — text는 *검증 전 원시 출력*(모듈 docstring
         경계 메모), usage는 응답 usage(input/output_tokens) + monotonic 실측 지연(S1 게이트 ②).
@@ -315,6 +342,13 @@ class AnthropicProvider:
             raise RuntimeError(
                 "AnthropicProvider는 멀티모달(images) 입력을 지원하지 않습니다 — 비전 인식은 "
                 "로컬 Qwen3-VL(VISION 패밀리) 경유입니다(클라우드 비전 미배선·미성년자 프라이버시)."
+            )
+        if seed is not None:
+            raise RuntimeError(
+                "AnthropicProvider는 seed(생성 재현 시드)를 지원하지 않습니다 — Anthropic Messages "
+                "API에 seed 파라미터가 없어 구조적으로 전달 불가입니다. 클라우드 경로의 "
+                "GenerationLog.seed는 NULL(미기록)이 정직한 값입니다(EOS-73·날조 금지). "
+                "호출부는 generation_seed.seed_supported(decision)가 True일 때만 seed를 싣습니다."
             )
         if json_schema is not None:
             raise RuntimeError(

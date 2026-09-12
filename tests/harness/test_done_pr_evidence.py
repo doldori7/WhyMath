@@ -26,6 +26,11 @@ def seeded_repo(git_repo: Path, monkeypatch) -> Path:
     return git_repo
 
 
+def _all_events_text(repo: Path) -> str:
+    """이벤트 대장 전문 — 레거시 + 세션 샤드 합집합(HARN-46 샤딩 이후의 정본 읽기)."""
+    return "".join(path.read_text(encoding="utf-8") for path in store.event_paths(repo))
+
+
 def _claimed_task(capsys) -> str:
     """게이트 없는 착수 가능 태스크 하나를 claim하고 id를 돌려준다."""
     assert cli.main(["next", "--n", "1", "--json"]) == 0
@@ -111,7 +116,7 @@ class TestNoPrEscapeHatch:
         if original_notes.strip():
             assert original_notes in notes
 
-        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        events = _all_events_text(seeded_repo)
         records = [json.loads(line) for line in events.splitlines() if line.strip()]
         done_events = [r for r in records if r.get("id") == task_id and r.get("action") == "done"]
         assert done_events and done_events[-1].get("no_pr_reason") == "ci-red"

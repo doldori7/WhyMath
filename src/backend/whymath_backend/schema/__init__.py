@@ -108,6 +108,10 @@ from whymath_backend.schema.problem import (
 from whymath_backend.schema.provenance import (
     ContentProvenance,
     GenerationLog,
+    canonical_input_json,
+    input_snapshot_sha256,
+    restore_input_snapshot,
+    text_sha256,
 )
 from whymath_backend.schema.standard import (
     AchievementStandard,
@@ -183,6 +187,10 @@ __all__ = [
     # provenance
     "ContentProvenance",
     "GenerationLog",
+    "canonical_input_json",
+    "input_snapshot_sha256",
+    "restore_input_snapshot",
+    "text_sha256",
     # concept
     "Concept",
     "ConceptEdge",

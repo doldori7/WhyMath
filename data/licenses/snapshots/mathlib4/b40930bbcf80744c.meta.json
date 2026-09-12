@@ -1,0 +1,12 @@
+{
+  "bytes": 11357,
+  "content_type": "text/plain; charset=utf-8",
+  "first_fetched_at": "2026-08-30T16:42:47Z",
+  "first_run_id": "20260830T164229Z-c98e84",
+  "http_status": 200,
+  "license_label": "Apache 2.0",
+  "name_ko": "Mathlib4",
+  "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
+  "source_id": "mathlib4",
+  "url": "https://raw.githubusercontent.com/leanprover-community/mathlib4/HEAD/LICENSE"
+}

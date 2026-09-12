@@ -28,6 +28,7 @@ from whymath_backend.schema.enums import (
     VisualizationStyle,
     VisualType,
     is_review_status_cleared,
+    is_review_status_quarantined,
 )
 
 _ALL_ENUMS: list[type[Enum]] = [
@@ -359,8 +360,28 @@ class TestGenerationType:
 # ──────────────────────────────────────────────────────────────────────
 class TestReviewStatus:
     def test_values_match_ddl_comment(self) -> None:
-        """§3.1 review_status_enum 주석(pending/approved/rejected)."""
-        assert {r.value for r in ReviewStatus} == {"pending", "approved", "rejected"}
+        """§3.1 review_status_enum 주석 3종 + `quarantined`(EOS-71 운영 확장).
+
+        골든 핀 갱신 사유: EOS-71이 사후 결함 판정으로 회수된 문항의 **비파괴 격리** 상태값을
+        더했다. v1.0 DDL 주석(`schemas/v1.0/schema_v1.0.md` §3.1)은 원안 3종 그대로 두고 확장은
+        enum docstring이 이고 간다 — `EventType`이 §6.1 주석 8종에 검산결과·힌트제공·시각화조작·
+        문제시도를 더하며 스냅샷을 고치지 않은 관례와 같다.
+        """
+        assert {r.value for r in ReviewStatus} == {
+            "pending",
+            "approved",
+            "rejected",
+            "quarantined",
+        }
+
+    def test_quarantined_is_a_distinct_value_from_rejected(self) -> None:
+        """`quarantined` ≠ `rejected` — 두 값이 같은 글자로 접히지 않는다(EOS-71 설계 핵심).
+
+        `rejected`는 "애초에 승인받지 못함", `quarantined`는 "한때 서빙되던 문항의 사후 회수"다.
+        합치면 딸린 `problem_attempt`를 재해석 대상으로 볼지 사후에 구분할 수 없게 된다.
+        """
+        assert ReviewStatus.quarantined != ReviewStatus.rejected
+        assert ReviewStatus.quarantined == "quarantined"
 
 
 class TestIsReviewStatusCleared:
@@ -379,12 +400,72 @@ class TestIsReviewStatusCleared:
         assert is_review_status_cleared("pending") is False
         assert is_review_status_cleared("rejected") is False
 
+    def test_new_quarantined_value_is_excluded_for_free(self) -> None:
+        """EOS-71 — 새 상태값 `quarantined`도 자동 배제된다(허용목록 방향의 배당금).
+
+        이 함수는 EOS-71에서 **한 줄도 바뀌지 않았다**. `== approved` 허용목록이라 새 값이
+        생기는 것만으로 L6 6모드·blueprint 조립·기본 CAT 후보 풀·빌드타임 상속 필터가 전부
+        격리 문항을 거른다. 공짜로 얻은 성질이라 아무도 지키고 있지 않으므로 여기서 지킨다 —
+        누가 이 술어를 차단목록(`!= rejected` 등)으로 바꾸면 이 단언이 red가 된다.
+        """
+        assert is_review_status_cleared(ReviewStatus.quarantined) is False
+        assert is_review_status_cleared("quarantined") is False
+
     def test_unknown_or_malformed_values_are_failed_closed(self) -> None:
         """모르는 값·공백 섞인 값도 통과시키지 않는다(관대한 정규화 금지 — 기준 이원화 방지)."""
         assert is_review_status_cleared("") is False
         assert is_review_status_cleared("APPROVED") is False
         assert is_review_status_cleared("approved ") is False
         assert is_review_status_cleared("ai_estimated") is False  # 개념 코퍼스 축 값(다른 축)
+
+
+class TestIsReviewStatusQuarantined:
+    """격리 판정의 값 수준 단일 권위(EOS-71) — 승인을 요구하지 않는 공개 표면 전용 술어.
+
+    `is_review_status_cleared`(허용목록)와 **방향이 다르다**: 이쪽은 `quarantined` 한 값만
+    지목한다. 두 술어를 합치지 않는 이유는 함수 docstring에 있다 — `api/problems.py`의 공개
+    카탈로그 GET은 검수 통과를 요구하지 않는 표면이라(SEC-07 D1) `approved`만 통과시키면
+    정책 변경이 된다(격리 계약 §7 범위 밖).
+    """
+
+    def test_only_quarantined_is_true(self) -> None:
+        """`quarantined`만 True — enum 멤버·문자열 양쪽 입력에서 같다."""
+        assert is_review_status_quarantined(ReviewStatus.quarantined) is True
+        assert is_review_status_quarantined("quarantined") is True
+
+    def test_every_other_state_is_false(self) -> None:
+        """나머지 상태는 전부 False — 이 술어는 *격리만* 지목한다(과확대 금지).
+
+        특히 `None`이 False라는 점이 중요하다. 격리 술어가 미평가 문항까지 True로 접으면
+        공개 카탈로그에서 `review_status`가 빈 문항 전체가 사라진다(SQL `IS DISTINCT FROM`이
+        막는 것과 같은 함정의 파이썬 축).
+        """
+        assert is_review_status_quarantined(None) is False
+        assert is_review_status_quarantined(ReviewStatus.pending) is False
+        assert is_review_status_quarantined(ReviewStatus.approved) is False
+        assert is_review_status_quarantined(ReviewStatus.rejected) is False
+        assert is_review_status_quarantined("pending") is False
+        assert is_review_status_quarantined("approved") is False
+        assert is_review_status_quarantined("rejected") is False
+
+    def test_unknown_or_malformed_values_are_not_quarantine(self) -> None:
+        """모르는 값·대소문자·공백은 격리가 아니다(관대한 정규화 금지).
+
+        관대하게 받으면 파이썬 술어는 격리로 보는데 SQL 술어(`quarantine_exclusion_condition`)는
+        아닌 값이 생겨 **기준이 이원화**된다 — 같은 문항이 단건 GET에서는 404인데 목록에는 나오는
+        상태가 만들어진다.
+        """
+        assert is_review_status_quarantined("") is False
+        assert is_review_status_quarantined("QUARANTINED") is False
+        assert is_review_status_quarantined("quarantined ") is False
+        assert is_review_status_quarantined("retired") is False
+
+    def test_two_predicates_never_both_true(self) -> None:
+        """전 상태값에서 두 술어가 동시에 True인 값은 없다(축 분리의 기계 확인)."""
+        for status in [*ReviewStatus, None]:
+            assert not (
+                is_review_status_cleared(status) and is_review_status_quarantined(status)
+            ), status
 
 
 # ──────────────────────────────────────────────────────────────────────

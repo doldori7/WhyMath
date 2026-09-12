@@ -30,6 +30,7 @@ from whymath_backend.db.models.concept import Concept
 from whymath_backend.l1.concept_visual_style import get_recommended_visual_styles
 from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l4.lthc import mastery_to_level
@@ -100,6 +101,9 @@ def generate_routing_request(student_subscription: str) -> RoutingRequest:
         student_subscription=student_subscription,
         budget_krw=STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
         sync=True,
+        # 등급: 생성 프롬프트에 실리는 자료는 L1 Concept(자체 개념 그래프)과 숙달도 *라벨*
+        # 뿐이다 — 학생 원문·제3자 저작물 없음. 자체 저작이라 반출 가능(EOS-59).
+        data_licenses=SELF_AUTHORED_CORPUS,
     )
 
 

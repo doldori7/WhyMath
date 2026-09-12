@@ -262,6 +262,7 @@ class QwenVlRecognizer(_BaseMathRecognizer):
             )
         # 지연 import — L5는 L3를 *호출*만 한다(하위 계층). 패키지 import만으로 L3를 끌어오지 않음.
         from whymath_backend.l3 import pipeline as l3_pipeline
+        from whymath_backend.l3.data_grade_defaults import STUDENT_SUBMITTED
         from whymath_backend.l3.models import RoutingRequest
 
         crop = _crop(image, region.bbox)
@@ -273,6 +274,11 @@ class QwenVlRecognizer(_BaseMathRecognizer):
             student_subscription=self._student_subscription,
             sync=True,  # 인식은 즉답
             requires_vision=True,  # → 라우터 비전 단축 경로(LOCAL Qwen3-VL)
+            # 등급: 프롬프트에 실리는 것은 *학생 본인의 손글씨 크롭*이다 — USER_GENERATED는
+            # 권리 모델에서 반출 불가(export=False)라 국외 프로바이더로 나갈 수 없다.
+            # 오늘도 비전 단축 경로가 LOCAL을 강제하므로 동작 변화는 0이며, 이 선언은
+            # 그 경로가 바뀌더라도 미성년자 자료가 국외로 새지 않게 하는 이중 잠금이다.
+            data_licenses=STUDENT_SUBMITTED,
         )
         result = await l3_pipeline.generate(
             req,

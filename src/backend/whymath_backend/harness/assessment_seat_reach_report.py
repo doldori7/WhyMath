@@ -23,8 +23,13 @@ ASM-03(capture)·ASM-04(assemble)·mastery 트래킹 착지로 4테이블 전부
   2. **`AssessmentType` 5종 분포** — DB에 실재하는 값만이 아니라 5종 전부를 보여준다(데이터 없는
      값도 0으로 명시 — 조용한 생략 금지).
   3. **진단 산출물 JSONB 결손** — `concept_diagnosis`(오개념 목록이 여기 담길 자리)·
-     `recommended_path`(추천 학습경로)가 비어있지 않은 row 수. 하드코딩이 아니라 실제 쿼리
-     결과를 그대로 신뢰한다(측정 없는 도입 없음).
+     `recommended_path`(추천 학습경로)·`strong_points`(강점 개념·ASM-13)가 비어있지 않은 row
+     수. 하드코딩이 아니라 실제 쿼리 결과를 그대로 신뢰한다(측정 없는 도입 없음).
+
+[ASM-13·2026-09-06] `strong_points`는 `recommend_strong_concepts`(l2/strong_concept_
+recommendation.py) writer 착지 전까지 writer 0건이었다 — "작동 신호 없는 알고리즘 부착 금지"
+준수를 위해 착지와 같은 PR에서 이 결손 카운트를 동반 추가한다(하드코딩 필드 추가가 아니라
+실제 채운 비율을 보이게 하는 것).
 
 사용:
     python -m whymath_backend.harness.assessment_seat_reach_report
@@ -81,21 +86,25 @@ _REASON_UNCALLED_WRITER = "writer 존재하나 미호출 관측"
 # 기준·기존 ability_snapshot 인용 :965도 드리프트해 :1030으로 재실측 정정). '오류 발견 시
 # 조용히 넘어가지 않기' 집행이며, 빈 테이블의 사유가 '생성 경로 부재'→'writer 존재하나 미호출
 # 관측'으로 바뀌는 것은 의도된 진실 갱신이다(동결 테스트도 새 진실로 재작성).
+# [EOS-57 실측 재정정·2026-09-01] 위 5개 행 번호가 08-10 이후 me.py 성장으로 전부 드리프트해
+# 있었다(738→759·743→764·1030→1064·2714→2768·2927→2970 · l2 134→202·136→148). EOS-57이
+# me.py 채점 경로를 건드리며 재실측해 갱신한다 — 이 인용은 사람이 코드를 찾아가는 앵커이므로
+# 틀린 번호는 조용한 거짓 주장이다(모듈 docstring이 예고한 '다음 드리프트' 회차).
 _KNOWN_WRITER_CITATION: dict[str, str | None] = {
     "assessment": (
-        "POST /v1/me/assessments/capture — capture_measurement_assessment (api/me.py:2714)"
-        " · POST /v1/me/assessments/assemble — assemble_blueprint_assessment (api/me.py:2927)"
+        "POST /v1/me/assessments/capture — capture_measurement_assessment (api/me.py:2768)"
+        " · POST /v1/me/assessments/assemble — assemble_blueprint_assessment (api/me.py:2970)"
     ),
     "concept_mastery_history": (
         "POST /v1/me/attempts — submit_attempt → record_problem_attempt_mastery"
-        " (api/me.py:738 → l2/mastery_tracking.py:134)"
+        " (api/me.py:759 → l2/mastery_tracking.py:202)"
     ),
     "skill_mastery_history": (
         "POST /v1/me/attempts — submit_attempt → record_problem_attempt_skill_mastery"
-        " (api/me.py:743 → l2/skill_mastery_tracking.py:136)"
+        " (api/me.py:764 → l2/skill_mastery_tracking.py:148)"
     ),
     "ability_snapshot": (
-        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:1030)"
+        "POST /v1/me/ability/snapshots — capture_ability_snapshot (api/me.py:1064)"
     ),
 }
 
@@ -120,6 +129,7 @@ class SeatCounts:
     assessment_type_counts: dict[str, int]
     concept_diagnosis_nonempty_count: int
     recommended_path_nonempty_count: int
+    strong_points_nonempty_count: int
 
 
 @dataclass(slots=True, frozen=True)
@@ -140,6 +150,7 @@ class SeatReachReport:
     assessment_type_distribution: dict[str, int]  # AssessmentType 5종 전부(0 보강 완료)
     concept_diagnosis_nonempty_count: int
     recommended_path_nonempty_count: int
+    strong_points_nonempty_count: int
 
 
 async def collect_seat_counts(session: AsyncSession) -> SeatCounts:
@@ -176,12 +187,18 @@ async def collect_seat_counts(session: AsyncSession) -> SeatCounts:
         .select_from(Assessment)
         .where(func.jsonb_array_length(Assessment.recommended_path) > 0)
     )
+    strong_points_nonempty = await session.execute(
+        select(func.count())
+        .select_from(Assessment)
+        .where(func.jsonb_array_length(Assessment.strong_points) > 0)
+    )
 
     return SeatCounts(
         table_row_counts=table_counts,
         assessment_type_counts=type_counts,
         concept_diagnosis_nonempty_count=concept_diagnosis_nonempty.scalar_one(),
         recommended_path_nonempty_count=recommended_path_nonempty.scalar_one(),
+        strong_points_nonempty_count=strong_points_nonempty.scalar_one(),
     )
 
 
@@ -216,6 +233,7 @@ def build_report(counts: SeatCounts) -> SeatReachReport:
         assessment_type_distribution=distribution,
         concept_diagnosis_nonempty_count=counts.concept_diagnosis_nonempty_count,
         recommended_path_nonempty_count=counts.recommended_path_nonempty_count,
+        strong_points_nonempty_count=counts.strong_points_nonempty_count,
     )
 
 
@@ -259,15 +277,17 @@ def render_report(report: SeatReachReport, *, max_listed: int = 40) -> str:
 
     lines += [
         "",
-        "## 3. 진단 산출물 JSONB 결손 (오개념 목록·추천 학습경로)",
+        "## 3. 진단 산출물 JSONB 결손 (오개념 목록·강점 개념·추천 학습경로)",
         "",
         f"- `concept_diagnosis`(오개념 목록이 담길 자리) 비어있지 않은 행: "
         f"**{report.concept_diagnosis_nonempty_count}**",
+        f"- `strong_points`(강점 개념·ASM-13) 비어있지 않은 행: "
+        f"**{report.strong_points_nonempty_count}**",
         f"- `recommended_path`(추천 학습경로) 비어있지 않은 행: "
         f"**{report.recommended_path_nonempty_count}**",
         "- 이 값은 하드코딩이 아니라 실제 쿼리 결과다(측정 없는 도입 없음) — `assessment`"
         " writer가 0이던 ASM-01 시점엔 구조적 0이었으나, capture/assemble writer 착지"
-        "(ASM-03·ASM-04) 후에는 실측값이다.",
+        "(ASM-03·ASM-04·ASM-13) 후에는 실측값이다.",
         "",
     ]
     return "\n".join(lines)
@@ -288,6 +308,7 @@ def report_to_json(report: SeatReachReport) -> dict[str, Any]:
         "assessment_type_distribution": report.assessment_type_distribution,
         "concept_diagnosis_nonempty_count": report.concept_diagnosis_nonempty_count,
         "recommended_path_nonempty_count": report.recommended_path_nonempty_count,
+        "strong_points_nonempty_count": report.strong_points_nonempty_count,
     }
 
 

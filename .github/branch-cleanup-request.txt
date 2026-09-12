@@ -35,4 +35,154 @@
 #
 # 즉 브랜치에만 있고 main에 없는 내용은 **0건**이다(폐기된 옛 문구 제외).
 # 열린 PR #713은 이 브랜치가 head라 삭제 시 자동으로 닫힌다 — 그 PR의 내용은 #786이 회수했다.
-claude/admin-01-operator-seat-grant-audit
+# claude/admin-01-operator-seat-grant-audit  ← 3차 배치 집행 완료(2026-08-29 ls-remote 잔존 0/1 실측)
+
+# ── 2026-08-29 4차 배치 (6건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-08-29.md ──
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   backup/collaboration-qlzq5m-pre-rebase          = 65b90308 (고유줄 0)
+#   backup/whymath-collaboration-design-qlzq5m-pre-rebase = 65b90308 (동일 head 중복 백업)
+#   backup/webpage-plan-8pma1f-pre-rebase           = eef8aee3 (상이 0·부재 0 — web_strategy.md 착지)
+#   whymath-nlp-design-my18a1                       = a89a6c99 (08-04 계보 재확인·config 고유 2줄=#783 대체 구문)
+#   whymath-math-engine-design-4qbaru               = f0edfac1 (08-04 계보 재확인)
+#   whymath-ai-recommendation-review-tv1f08         = fdf46d7b (REC-09 done·잔여 전건 main 우세 실측)
+#   s4-52-verifier-v2-design-status                 = 2281def0 (#899 리뷰 정정 — #866 증적 main 기존재·stub은 S4-54가 대체)
+#   whymath-solution-review-40xspg                  = 707c5665 (SOL-01=#801 실코드 포팅·잔여 전건 옛 판 실측)
+#   backup/learning-analytics-3pbkcx-pre-rebase     = 33d9ebf1 (PATH-09/10 done·me.py 고유줄=main 실재 로직 옛 포매팅)
+#   backup/whymath-account-security-dw9lww-pre-rebase = 0fca22eb (SEC-20=#809 착지·ParentalConsent 배선 main 실재)
+#   backup/whymath-curriculum-design-6eejrv-pre-rebase = 2f428729 (라이브 6eejrv와 동일 head — 중복 사본·손실 0)
+#
+# ⚠ 회수 태스크가 참조하는 브랜치는 의도적으로 제외(회수 완료 전 삭제 금지) —
+#   HARN-34: ph1ad7 · misc-04-recovery · eos-curriculum-semantic-backbone-adr
+#   HARN-35: backup/whymath-misconception-review-r1skwr-pre-rebase · backup/school-subject-6ybkis-pre-rebase · vafylb
+#   OPS-41:  backup/ai-content-a3ysut-pre-rebase · t608mk · azdnov (+8ap436 backup은 ③ 확인 후)
+#   기존 제외 승계: k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07 잔여) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · trjg5x(PB-06/Kiki) · 6dszy0 2건(MISC-01/03·PB-02) · 6eejrv(PB-08 참고) ·
+#   e98dw4(S3-28 잔여) · q8tvcx(OPS-38) · 7n9n72(최대 잔존 고립 — MISC-05/06·HARN-35/37, 삭제 절대 금지)
+#
+# ⚠ 허용 패턴(claude/*) 밖이라 이 배치에 못 싣는 삭제 확정 2건 — Kiki 수동 삭제 필요:
+#   pr/collab-07 = d45bbf38 (COLLAB-07 #817 머지·고유줄 0)
+#   backend/cur-16-concept-edge-prerequisite-meta = 6d751b57 (v2=#892 착지·전건 main 우세)
+claude/backup/collaboration-qlzq5m-pre-rebase
+claude/backup/whymath-collaboration-design-qlzq5m-pre-rebase
+claude/backup/webpage-plan-8pma1f-pre-rebase
+claude/whymath-nlp-design-my18a1
+claude/whymath-math-engine-design-4qbaru
+claude/whymath-ai-recommendation-review-tv1f08
+claude/s4-52-verifier-v2-design-status
+claude/whymath-solution-review-40xspg
+claude/backup/learning-analytics-3pbkcx-pre-rebase
+claude/backup/whymath-account-security-dw9lww-pre-rebase
+claude/backup/whymath-curriculum-design-6eejrv-pre-rebase
+
+# ── 2026-08-30 5차 배치 (5건) — 회수 착지(HARN-34·35)와 같은 머지에서 집행 ──
+# 판정 정본: docs/reviews/unmerged_branch_audit_2026-08-29.md §6. head SHA 스냅샷:
+#   unresolved-long-term-branches-ph1ad7            = 905ed311 (게이트+ASM-12 done 회수 완료)
+#   misc-04-misconception-relation-recovery         = 7eaaa695 (MISC-04 done 회수 완료)
+#   backup/whymath-misconception-review-r1skwr-pre-rebase = a95bb456 (MISC-17~20 재등재 완료·MISC-11은 흡수 판정)
+#   backup/school-subject-6ybkis-pre-rebase         = 5d2c2b71 (SEC-30 재등재 완료)
+# ⚠ eos-curriculum-semantic-backbone-adr(2f2e311e)는 허용 패턴(claude/*) 밖 — SEC-28 기록은
+#   main SEC-28 yaml notes로 이관 완료. Kiki 수동 삭제 대상에 추가:
+#   git push origin --delete curriculum/eos-curriculum-semantic-backbone-adr
+claude/unresolved-long-term-branches-ph1ad7
+claude/misc-04-misconception-relation-recovery
+claude/backup/whymath-misconception-review-r1skwr-pre-rebase
+claude/backup/school-subject-6ybkis-pre-rebase
+
+# ── 2026-08-30 6차 배치 (4건) — 보류분 정독 완결(#901) ──
+# head SHA 스냅샷:
+#   backup/visualization-review-28d0yx-pre-rebase   = b7dd3796 (상이 4건 전건 main 우세 — pre-R4 문서·옛 VIZ-10 yaml. #759 머지·VIZ-10 done)
+#   backup/whymath-visualization-review-r3-pre-rebase = 4bb6cd10 (상이 1건 = pre-R4 문서 — main이 R4 분리 후속판)
+#   backup/gamification-8ap436-pre-rebase           = ce93aaad (상이 1건 = MOB-17 yaml — main은 done+artifacts로 우세. OPS-41 ③ 축 해소 확인)
+#   backup/ai-integration-5qqcp4-pre-rebase         = 8f997a7b (상이 1건 = coach.py 옛 ConceptStandardLink join — CUR-04/#810 조인 축 통일이 의도 교체 실측)
+# ⚠ 허용 패턴 밖 수동 삭제 대상 추가(누적 3건):
+#   curriculum/cur-15-eos-concept-db-review-adr = 9bb0b22a (고유줄 4 = 미머지 '#887' 참조·낡은 CUR-16 status·adr '초안' 상태줄 — main 우세)
+claude/backup/visualization-review-28d0yx-pre-rebase
+claude/backup/whymath-visualization-review-r3-pre-rebase
+claude/backup/gamification-8ap436-pre-rebase
+claude/backup/ai-integration-5qqcp4-pre-rebase
+
+# ── 2026-09-07 7차 배치 (2건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-07.md §4-③ ──
+# 직전 배치 집행 확인(2026-09-07 ls-remote 실측): 4·5·6차 19건 잔존 0/19 · 허용 패턴 밖 수동 4건
+#   (pr/collab-07·backend/cur-16-*·curriculum/eos-curriculum-*·curriculum/cur-15-*) 전건 삭제 완료.
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   drive-eos-81-sequential-wbhw8v = 9d5f81b2 (ahead 0·diff 0파일 — 전량 흡수. EOS-81 main done·이벤트 파일 main 실재)
+#   review-dydkkx-runbook          = dbdcdf6f (PR #961 머지 91c348fd + 후행 1커밋 'EOS-80 done'은 main EOS-80 done +
+#                                    backlog/events/claude_eos80-done.ndjson으로 승계. 브랜치 고유 53줄은 전건 옛 상태
+#                                    (status·notes 후행 갱신 이전)·런북 §6은 main이 --as kiki 추가판으로 우세)
+# ⚠ 허용 패턴(claude/*) 밖 — Kiki 수동 삭제 대상 추가(누적 5건째):
+#   gates/deploy-environment-approval = 907d4629 (PR #967 닫힘·미머지. 게이트 G-deploy-environment-approval clear는
+#     main이 별도 경로(events/claude_status-uh55gf.ndjson)로 상위 증거(gh api 실측·환경 id·protection_rule id)와 함께
+#     기록. 런북 §7-3 성공 판정은 main이 2026-09-01 정정판("왜 워크플로 실행으로 판정하지 않는가")으로 브랜치 판정
+#     기준을 명시 대체. 브랜치 이벤트 파일 1줄은 같은 clear의 약한 중복 기록 — 손실 0)
+#   git push origin --delete gates/deploy-environment-approval
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 기존 승계 + 이번 갱신:
+#   7n9n72(**삭제 절대 금지** — MISC-05/06·PED-14·PB-02·S3-33/34·ASM-06·MISC-02 8건에 고립 참조 부착 + PED-37 회수) ·
+#   trjg5x(PB-13 in_progress·PB-14·ADMIN-02) · k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · a3ysut/t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(S3-28) · q8tvcx(OPS-38) · vafylb(S4-59·OPS-53)
+# ⚠ 원격 claim 활성 브랜치 3건은 다른 세션 소유라 판정 보류 — status-f6qz0c(ahead 0·diff 0 — claim 해제 시 차기 삭제 후보) ·
+#   status-f9lp65(HARN-56 block) · test-driven-development-03elxp(MP-02 block·MP-05)
+claude/drive-eos-81-sequential-wbhw8v
+claude/review-dydkkx-runbook
+
+# ── 2026-09-08 8차 배치 (1건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-08.md §4 ──
+# 직전 배치 집행 확인(2026-09-08 실측): 누적 21건 전건 잔존 0/21 · 허용 패턴 밖 수동 3건
+#   (gates/deploy-environment-approval·pr/collab-07·backend/cur-16-*) 전건 삭제 완료.
+#   ⚠ 이 파일은 삭제된 과거 배치를 계속 열거한다 — 워크플로가 그 404를 실패로 계상해 매 실행 red다(HARN-01 소유).
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   backup/ai-content-a3ysut-pre-rebase = b271671b
+#     근거: diff 16파일 **전부 main 실재**(부재 0). 고유 줄 20(6파일)은 전건 옛 판이며 main이 더 넓다 —
+#     예: schema/enums.py ReviewStatus가 브랜치 3종 docstring인 데 반해 main은 3종+quarantined+EOS-71 근거.
+#     CONT-02/03/04는 updated 날짜와 옛 notes뿐. 8회차가 유일 uncovered로 남긴 MEMORY.md 글자 깨짐은
+#     #1027이 정정해 지금 고유 줄 0. 좌석 OPS-41 ④(a)가 "이 축은 충족 상태 · 착수 세션이 재확인 후
+#     삭제 배치 후보로 내릴 수 있다"고 명시 승인했고, 9회차가 그 재확인을 독립 재도출로 수행했다.
+#     OPS-41의 나머지 두 축(t608mk·azdnov)은 브랜치가 그대로 남아 영향 없다.
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 7차 배치 승계에서 a3ysut만 해제:
+#   7n9n72(**삭제 절대 금지** — 좌석 10건이 main 기준으로 전부 참조 확인 2026-09-08) ·
+#   trjg5x(PB-13·PB-14·ADMIN-02·PATH-03) · k20m0w(MOB-18) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07) ·
+#   5t5lmv(OPS-40) · iws58k(ARCH-30) · t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(S3-28) ·
+#   q8tvcx(OPS-38·SEC-32는 done이나 OPS-38·OPS-67 잔존) · vafylb(S4-59·OPS-53)
+# ⚠ 원격 claim 활성 4건은 다른 세션 소유라 판정 보류 — status-f6qz0c(ahead 0·diff 0) ·
+#   test-driven-development-03elxp(ahead 0·diff 0 — 9회차 신규 측정) · status-f9lp65(2↑·diff 5) ·
+#   status-iraoq3(MISC-21·9회차 신규 등장). 앞 둘은 claim 해제 시 잃을 내용 0으로 즉시 삭제 후보다.
+claude/backup/ai-content-a3ysut-pre-rebase
+
+# ── 2026-09-10 9차 배치 (1건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-10.md §3.1·§4 ──
+# 직전 배치 집행 확인(2026-09-10 실측): 누적 22건(8차 a3ysut 포함) 전건 잔존 0/22.
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   misc-24-extremum-ambiguous-coincidence = c3415fd4
+#     근거: 소유 태스크 MISC-24(done)의 notes가 "PR #1072는 중복 diff로 close, 실제 변경은
+#     PR #1071(claude/status-vlul18, 2026-09-09 07:54 UTC 머지)로 통합"이라고 기록한 경위를
+#     GitHub API로 직접 재확인(PR #1071 merged:true · PR #1072 closed·merged:false, 기록과 일치).
+#     diff 13파일(main 부재 0) — models.py 바이트 동일, catalog.py는 main이 MISC-25 후속까지
+#     포함한 상위집합(고유 줄은 들여쓰기 차이뿐).
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 8차 배치 승계 전건 유지:
+#   7n9n72(**삭제 절대 금지**) · trjg5x(PB-13·PB-14·ADMIN-02·PATH-03) · k20m0w(MOB-18) ·
+#   gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07·HARN-80) · 5t5lmv(OPS-40) · iws58k(ARCH-30) ·
+#   t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(S3-28·VIZ-11) · q8tvcx(OPS-67) · vafylb(S4-59·OPS-53)
+# ⚠ 원격 claim 활성 3건은 다른 세션 소유라 판정 보류 — status-f6qz0c(ahead 0·diff 0) ·
+#   test-driven-development-03elxp(ahead 0·diff 0) · status-f9lp65(diff 5). 9회차의 status-iraoq3은
+#   이번 population에서 부재(브랜치 삭제 확인).
+# ⚠ 참고(판정 아님) — claude/entity-model-freeze-lji37v는 PR #1007(오픈)로 이미 노출된 브랜치라
+#   이 배치의 판정 대상이 아니다. 그 PR의 Gate 0 r6 판정 부분은 이 세션의 별도 PR #1081이 이미
+#   main에 직접 포팅했다 — PR #1007 자체의 처분(HARN-77·OPS-65·OPS-66 부분 재제출 여부)은
+#   그 PR 소유자가 판단할 사안이다(감사 §6 정직한 공백 참조).
+claude/misc-24-extremum-ambiguous-coincidence
+
+# ── 2026-09-12 10차 배치 (1건) — 판정 정본: docs/reviews/unmerged_branch_audit_2026-09-12.md ──
+# 직전 배치 집행 확인: 누적 23건(9차 misc-24 포함) 삭제 대상 등재 이력 — 이번 세션은 ls-remote
+# 재확인을 수행하지 않았다(범위 밖 — OPS-74/75 세션이 stray-code 감사 요청을 이어받아 실행).
+# 삭제 전 head SHA 스냅샷(복구 경로 = GitHub API commits/<sha>·contents?ref=<sha>):
+#   ops-50-51-52-moe-rocm-followup = 167b5dd0
+#     근거: PR #860(오늘 superseded 판정으로 종료) 원 브랜치. diff 39파일이지만 내용 대조 결과
+#     부재 0 — LIC-01 rights 모듈 9파일 바이트 동일 · quality_tier_moe_accuracy_battle.py는
+#     main이 더 신판(PR #854 JSON schema 강화 반영, 브랜치는 구판) · LIC-01 alembic 마이그레이션은
+#     revision-id 헤더만 다르고 본문 동일 · 나머지 파일들의 브랜치 고유 추가줄 259개 중 256개가
+#     main에 그대로 존재(3개는 black 재포맷 줄바꿈 차이뿐). OPS-52.yaml(done) notes가 "PR #860
+#     diff에서 결과 서술·doc 갱신을 PR #1090으로 추가 포팅했다"고 명시. OPS-51(done·PR #876
+#     후속 재측정)·LIC-01(in_progress이나 코드는 이미 착지) 교차 확인 완료.
+# ⚠ 회수 태스크·좌석이 참조하는 브랜치는 의도적 제외(회수 완료 전 삭제 금지) — 9차 배치 승계 전건 유지:
+#   7n9n72(**삭제 절대 금지**) · trjg5x(PB-13 in_progress·PB-14·ADMIN-02·PATH-03) ·
+#   k20m0w(MOB-18 in_progress) · gdmwhk/uqyg79(PED-26) · 34zvse(CUR-07·HARN-80) · 5t5lmv(OPS-40) ·
+#   iws58k(ARCH-30) · t608mk/azdnov(OPS-41) · 6eejrv(PB-08) · e98dw4(VIZ-11) · q8tvcx(OPS-38·OPS-67) ·
+#   vafylb(S4-59·OPS-53)
+claude/ops-50-51-52-moe-rocm-followup

@@ -23,13 +23,18 @@ from whymath_backend.l2.pedagogy_evidence import (
     EVENT_TYPE_TREATMENT as PEDAGOGY_EVENT_TYPE_TREATMENT,
 )
 from whymath_backend.l2.recommendation_evidence import (
+    CANDIDATES_META_CAP,
     EVENT_TYPE_RECOMMENDATION_TREATMENT,
     META_KEY_APPLIED_WEIGHTS,
+    META_KEY_CANDIDATES,
     META_KEY_GATE_REASON,
     META_KEY_MODE,
+    META_KEY_POLICY_VERSION,
     META_KEY_POOL_SIZE,
     META_KEY_PROBLEM_ID,
     META_KEY_THETA,
+    POLICY_VERSION_CAT,
+    POLICY_VERSION_SUNEUNG,
     record_recommendation_treatment,
 )
 
@@ -131,6 +136,84 @@ class TestRecommendationTreatment:
     def test_event_type_constant_is_frozen(self) -> None:
         expected = "recommendation_render"
         assert recommendation_evidence.EVENT_TYPE_RECOMMENDATION_TREATMENT == expected
+
+
+class TestCandidatesAndPolicyVersion:
+    """REC-11 — candidates[]·policy_version 영속(추천 오프라인 평가 소급 불가 축 해소)."""
+
+    async def test_omits_candidates_and_policy_version_when_absent(self) -> None:
+        """둘 다 선택 인자 — 생략하면 기존 동작과 완전히 동일(회귀 0)."""
+        session = _FakeSession()
+        row = await record_recommendation_treatment(
+            session,  # type: ignore[arg-type]
+            problem_id=uuid.uuid4(),
+            theta=0.0,
+            pool_size=1,
+            applied_weights=False,
+            occurred_at=_AT,
+        )
+        assert row.meta is not None
+        assert META_KEY_CANDIDATES not in row.meta
+        assert META_KEY_POLICY_VERSION not in row.meta
+
+    async def test_records_candidates_sorted_by_score_descending(self) -> None:
+        session = _FakeSession()
+        pid_low, pid_high, pid_mid = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        row = await record_recommendation_treatment(
+            session,  # type: ignore[arg-type]
+            problem_id=pid_high,
+            theta=0.0,
+            pool_size=3,
+            applied_weights=False,
+            candidates=[(pid_low, 0.1), (pid_high, 0.9), (pid_mid, 0.5)],
+            policy_version=POLICY_VERSION_CAT,
+            occurred_at=_AT,
+        )
+        assert row.meta is not None
+        assert row.meta[META_KEY_CANDIDATES] == [
+            {"problem_id": str(pid_high), "score": 0.9},
+            {"problem_id": str(pid_mid), "score": 0.5},
+            {"problem_id": str(pid_low), "score": 0.1},
+        ]
+        assert row.meta[META_KEY_POLICY_VERSION] == "cat_v1"
+
+    async def test_candidates_truncated_to_cap(self) -> None:
+        """원 풀이 상한보다 크면 점수 상위 `CANDIDATES_META_CAP`건만 남는다."""
+        session = _FakeSession()
+        pool_size = CANDIDATES_META_CAP + 5
+        candidates = [(uuid.uuid4(), float(i)) for i in range(pool_size)]
+        row = await record_recommendation_treatment(
+            session,  # type: ignore[arg-type]
+            problem_id=candidates[-1][0],
+            theta=0.0,
+            pool_size=pool_size,
+            applied_weights=False,
+            candidates=candidates,
+            policy_version=POLICY_VERSION_SUNEUNG,
+            occurred_at=_AT,
+        )
+        assert row.meta is not None
+        stored = row.meta[META_KEY_CANDIDATES]
+        assert len(stored) == CANDIDATES_META_CAP
+        # 점수 내림차순 상위 CANDIDATES_META_CAP건 — 가장 높은 점수(pool_size-1)부터.
+        assert stored[0]["score"] == float(pool_size - 1)
+        assert stored[-1]["score"] == float(pool_size - CANDIDATES_META_CAP)
+
+    async def test_policy_version_string_is_recorded_verbatim(self) -> None:
+        session = _FakeSession()
+        row = await record_recommendation_treatment(
+            session,  # type: ignore[arg-type]
+            problem_id=uuid.uuid4(),
+            theta=0.0,
+            pool_size=1,
+            applied_weights=False,
+            policy_version=POLICY_VERSION_SUNEUNG,
+            occurred_at=_AT,
+        )
+        assert row.meta is not None
+        assert row.meta[META_KEY_POLICY_VERSION] == "suneung_v1"
+        # candidates는 생략됐으므로 policy_version만 실린다(둘은 독립 선택 인자).
+        assert META_KEY_CANDIDATES not in row.meta
 
 
 class TestB1PlaintextProhibition:

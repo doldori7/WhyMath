@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any, Final
 from whymath_backend.config import Settings
 from whymath_backend.db.models.concept_content import CONTENT_REVIEW_STATUS_AI_ESTIMATED
 from whymath_backend.l1.embedding_primitives import build_sync_engine
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -288,6 +289,9 @@ class AnalogyGenerator:
                 requires_reasoning=True,
                 student_subscription=self._subscription,
                 sync=True,
+                # 등급: 비유 생성 프롬프트에는 자체 개념 그래프의 대상 개념만 실린다 —
+                # 학생 자료·제3자 저작물 없음(EOS-59).
+                data_licenses=SELF_AUTHORED_CORPUS,
             )
         )
         if self._authoring_family is None:
@@ -307,6 +311,11 @@ class AnalogyGenerator:
             reason=f"{decision.reason} → 저작:{self._authoring_family.value}",
             est_latency_ms=decision.est_latency_ms,
             est_cost_krw=decision.est_cost_krw,
+            # 데이터 등급 게이트의 판정·발동 신호는 *승계*한다 — 여기서는 패밀리 축만
+            # 갈아탈 뿐 법적 판정을 다시 하지 않는다. 안 실어 보내면 원본 결정이 게이트에
+            # 막혔다는 사실이 관측에서 조용히 사라진다(발동률 과소집계·EOS-59 ②).
+            data_export_blocked=decision.data_export_blocked,
+            data_export_reason=decision.data_export_reason,
         )
 
     def _invoke(
@@ -440,6 +449,8 @@ def run_analogy_review(rows: Sequence[dict[str, Any]]) -> list[AnalogyOutcome]:
             sympy_verified=row.get("sympy_verified"),
             tts_safe=row.get("tts_safe"),
         )
+        # EOS-89: 비유 payload도 `verification` 주장이 없다 — 능력 주입 불요(위 example_generator
+        # 주석과 같은 이유). 주장이 생기면 조용히 통과하지 않고 LookupError로 드러난다.
         verdict: ReviewVerdict = review_slot(payload)
         if verdict.approved:
             # 비유 전용 결함 축 — 본문+깨짐 요약을 합쳐 검사한다(둘 다 학생 노출 후보 문면).

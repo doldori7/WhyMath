@@ -38,6 +38,7 @@ from whymath_backend.harness.wh1_loop import (
     ENCOURAGE_FALLBACK_UTTERANCE,
     NEUTRAL_GUIDE_UTTERANCE,
 )
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.equivalent.rephrase import (
     REASON_EMPTY,
     REASON_HYGIENE_REJECT,
@@ -194,6 +195,12 @@ def _decide_routing() -> RoutingDecision:
         requires_reasoning=False,
         student_subscription="free",
         sync=True,
+        # 등급: 이 프롬프트에는 *학생 자료가 실리지 않는다* — `_build_prompt`가 원 템플릿 +
+        # 비민감 컨텍스트(행위 유형·판정·턴 번호·오개념 라벨)만 싣고, "학생 원문·풀이 단계는
+        # 절대 싣지 않는다"를 프롬프트 캡처 테스트로 봉인하고 있다. `student_material`은
+        # *산출물 검증*(gate_policy_prose의 외래 등식 판별)에만 쓰이지 프롬프트에 안 들어간다.
+        # 실리는 것은 우리 코치 템플릿·카탈로그 라벨뿐 → 자체 저작(EOS-59).
+        data_licenses=SELF_AUTHORED_CORPUS,
     )
     decision = Router().route(request)
     is_local = decision.cost_tier == CostTier.LOCAL.value
@@ -211,6 +218,10 @@ def _decide_routing() -> RoutingDecision:
         reason=f"{decision.reason} → prose:{ModelFamily.GENERAL.value}",
         est_latency_ms=decision.est_latency_ms,
         est_cost_krw=decision.est_cost_krw,
+        # 데이터 등급 게이트의 판정·발동 신호는 *승계*한다 — 패밀리 축만 갈아탈 뿐 법적
+        # 판정을 다시 하지 않는다. 안 실으면 발동 사실이 관측에서 사라진다(EOS-59 ②).
+        data_export_blocked=decision.data_export_blocked,
+        data_export_reason=decision.data_export_reason,
     )
 
 

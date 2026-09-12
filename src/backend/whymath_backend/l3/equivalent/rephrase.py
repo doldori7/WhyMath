@@ -38,6 +38,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.equivalent.rephrase_hygiene import (
     REASON_UNCHANGED_FROM_ORIGINAL,
     question_hygiene_violations,
@@ -326,6 +327,9 @@ class QuestionRephraser:
             student_subscription=self._subscription,
             budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
             sync=True,
+            # 등급: 다양화 대상은 *자체 저작 동등문제*의 발문이다(평가원·EBS·교과서 본문은
+            # 애초에 코퍼스에 없다 — 저작권 레일). 자체 저작이라 반출 가능(EOS-59).
+            data_licenses=SELF_AUTHORED_CORPUS,
         )
         decision = Router().route(request)
         if self._authoring_family is None:
@@ -345,6 +349,11 @@ class QuestionRephraser:
             reason=f"{decision.reason} → rephrase:{self._authoring_family.value}",
             est_latency_ms=decision.est_latency_ms,
             est_cost_krw=decision.est_cost_krw,
+            # 데이터 등급 게이트의 판정·발동 신호는 *승계*한다 — 여기서는 패밀리 축만
+            # 갈아탈 뿐 법적 판정을 다시 하지 않는다. 안 실어 보내면 원본 결정이 게이트에
+            # 막혔다는 사실이 관측에서 조용히 사라진다(발동률 과소집계·EOS-59 ②).
+            data_export_blocked=decision.data_export_blocked,
+            data_export_reason=decision.data_export_reason,
         )
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:

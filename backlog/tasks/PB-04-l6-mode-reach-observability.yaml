@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - PB-03-exposure-path-gates
@@ -22,5 +23,5 @@ paths:
   - src/backend/whymath_backend/api/gating.py
   - "src/mobile/lib/features/problems/**"
 session: null
-notes: "정본: docs/architecture/problem_bank_gap_review_r2.md §0-②-나 · §3 R5. '완비된 소비 경로 + 미도달 공급원' 반복 패턴의 변형 — 이번엔 공급원이 아니라 경로 자체가 미도달이다. depends_on PB-03: 이 태스크가 모드를 켜는 순간 _CANDIDATE_FETCH_LIMIT=1000 < 2,647 절단(R2 문서 §0-②-마)이 즉시 발화한다."
-updated: 2026-08-03
+notes: "정본: docs/architecture/problem_bank_gap_review_r2.md §0-②-나 · §3 R5. '완비된 소비 경로 + 미도달 공급원' 반복 패턴의 변형 — 이번엔 공급원이 아니라 경로 자체가 미도달이다. depends_on PB-03: 이 태스크가 모드를 켜는 순간 _CANDIDATE_FETCH_LIMIT=1000 < 2,647 절단(R2 문서 §0-②-마)이 즉시 발화한다.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

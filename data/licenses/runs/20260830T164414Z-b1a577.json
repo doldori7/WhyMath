@@ -1,0 +1,50 @@
+{
+  "exit_code": 0,
+  "failed": 0,
+  "finished_at": "2026-08-30T16:44:20Z",
+  "ok": 6,
+  "planned": [
+    "prm800k",
+    "mathlib4",
+    "gsm8k",
+    "metamath-set-mm",
+    "minif2f",
+    "math-hendrycks"
+  ],
+  "results": {
+    "gsm8k": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b"
+    },
+    "math-hendrycks": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "8f6401fb0b1fbfcac17aac8d61e4e1b0d2de9aa190d8aa655fedc5fd783b2ace"
+    },
+    "mathlib4": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    "metamath-set-mm": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "8a5f6a2b110cdecd3543c2b18c4d17fa2f08d16ca61c1fe0a1e41b1343464b5c"
+    },
+    "minif2f": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "9b6de2b0a301c31809f62e1b6bd2154c83f8e8b25b76c37e7ddc7b1a0126f21a"
+    },
+    "prm800k": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "22d61a2226e035da51c56149c3358c36d1f61716435866bc6e6fe0e54c7270db"
+    }
+  },
+  "run_id": "20260830T164414Z-b1a577",
+  "started_at": "2026-08-30T16:44:14Z",
+  "status": "completed",
+  "timeout_s": 20.0
+}

@@ -7,6 +7,7 @@ subject: cross
 layer: infra
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -21,5 +22,5 @@ paths:
   - "scripts/harness/**"
   - "tests/harness/**"
 session: null
-notes: "사고 경위(2026-08-11 실측): 개념 축 r3 세션과 운영 EOS r3 세션이 **각각** backlog.py add로 OPS-26을 시도해 둘 다 원격 브랜치 claude/whymath-ai-integration-check-5qqcp4의 인플라이트 OPS-26 때문에 거부됐고, 가드가 **양쪽에 똑같이 OPS-29를 제안**해 둘 다 수용했다. 운영 세션의 OPS-29-ci-enforcement-declaration-contract가 PR #775로 먼저 머지되면서, 개념 세션 PR(#778)이 main을 병합한 순간 validate가 'OPS-29 번호 충돌'을 exit 1로 잡았다 — 상대가 머지분이라 이쪽을 OPS-33으로 개명해 해소(그랜드파더 등재 아님). 원인은 가드가 **관측만 하고 예약하지 않는** 구조적 성질(TOCTOU). HARN-10(가드 신설)·HARN-15(원격 스캔 확장)·HARN-21(파서 구멍)은 전부 done이나 이 경쟁 구간은 어느 태스크도 다루지 않는다. ID 충돌 자체는 ARCH-13(2026-07-18/25)·OPS-15(07-29)에 이어 **3회차 이상**이며, 이번 건은 가드가 존재하는데도 발생한 첫 사례다. 완화 우선순위 근거: 가드가 잡아주므로 데이터 손상은 없으나, 개명 비용이 문서·커밋·PR 본문 전반의 번호 참조 정정으로 번진다(이번 세션 실측 — 문서 7곳·MEMORY 3곳·태스크 1건)."
-updated: 2026-08-11
+notes: "사고 경위(2026-08-11 실측): 개념 축 r3 세션과 운영 EOS r3 세션이 **각각** backlog.py add로 OPS-26을 시도해 둘 다 원격 브랜치 claude/whymath-ai-integration-check-5qqcp4의 인플라이트 OPS-26 때문에 거부됐고, 가드가 **양쪽에 똑같이 OPS-29를 제안**해 둘 다 수용했다. 운영 세션의 OPS-29-ci-enforcement-declaration-contract가 PR #775로 먼저 머지되면서, 개념 세션 PR(#778)이 main을 병합한 순간 validate가 'OPS-29 번호 충돌'을 exit 1로 잡았다 — 상대가 머지분이라 이쪽을 OPS-33으로 개명해 해소(그랜드파더 등재 아님). 원인은 가드가 **관측만 하고 예약하지 않는** 구조적 성질(TOCTOU). HARN-10(가드 신설)·HARN-15(원격 스캔 확장)·HARN-21(파서 구멍)은 전부 done이나 이 경쟁 구간은 어느 태스크도 다루지 않는다. ID 충돌 자체는 ARCH-13(2026-07-18/25)·OPS-15(07-29)에 이어 **3회차 이상**이며, 이번 건은 가드가 존재하는데도 발생한 첫 사례다. 완화 우선순위 근거: 가드가 잡아주므로 데이터 손상은 없으나, 개명 비용이 문서·커밋·PR 본문 전반의 번호 참조 정정으로 번진다(이번 세션 실측 — 문서 7곳·MEMORY 3곳·태스크 1건).\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/하네스 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -7,6 +7,7 @@ subject: math
 layer: infra
 status: todo
 priority: 5
+eos_priority: P2
 owner: kiki
 depends_on: []
 requires_gates: []
@@ -15,5 +16,5 @@ acceptance:
 artifacts: []
 paths: []
 session: null
-notes: "SEC-01(2026-07-26)에서 분리. SEC-01은 기계 게이트(prod 추정 환경 키 부재 시 RuntimeError)로 조용한 평문 저장을 차단했으나, '키가 실제로 설정돼 있고 행이 암호화되고 있다'는 양성 증거는 미확보. 프로덕션 DB·env는 Kiki 머신(Phaiakes9)에만 있어 claude 컨테이너에서 수행 불가 — 사람 소유 액션. 절차·명령·판정 SQL은 체크리스트 문서 §2·§3에 고정됨."
-updated: 2026-07-26
+notes: "SEC-01(2026-07-26)에서 분리. SEC-01은 기계 게이트(prod 추정 환경 키 부재 시 RuntimeError)로 조용한 평문 저장을 차단했으나, '키가 실제로 설정돼 있고 행이 암호화되고 있다'는 양성 증거는 미확보. 프로덕션 DB·env는 Kiki 머신(Phaiakes9)에만 있어 claude 컨테이너에서 수행 불가 — 사람 소유 액션. 절차·명령·판정 SQL은 체크리스트 문서 §2·§3에 고정됨.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

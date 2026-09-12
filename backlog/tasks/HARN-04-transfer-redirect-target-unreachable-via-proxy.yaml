@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-04-transfer-redirect-target-unreachable-via-proxy
+title: "리다이렉트를 따라가도 목적지가 막힌다 — 숫자 ID 경로를 에이전트 프록시가 거부해 CCR 세션의 PR 상태 판정이 여전히 불능"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: todo
+priority: 2
+eos_priority: P2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "① 실측 고정 — HARN-03의 `-L` 착지 이후 이 컨테이너의 SessionStart 브리핑 오류 문구가 바뀌었다. 전: `{'message': 'Moved Permanently', 'url': '.../repositories/1237870848/pulls/675'}` · 후: `{'message': 'Numeric-ID repository paths (repositories/{id}/...) are not supported through this proxy. Use repos/{owner}...'}`. 즉 curl이 리다이렉트를 **따라가기는 하는데** 그 목적지가 숫자 ID 경로이고 에이전트 프록시가 그것을 거부한다. 미머지 브랜치 13건의 열림/닫힘은 여전히 미판정이다."
+  - "② 범위 구분(중요) — 이것은 HARN-03의 회귀가 아니다. 프록시가 없는 환경(GitHub Actions 러너·Kiki 머신)에서는 `-L`만으로 리다이렉트가 완결되므로 그쪽은 고쳐졌다. 남은 것은 **에이전트 프록시가 숫자 ID 경로를 막는 CCR 컨테이너 한정** 문제다. 다만 이 저장소의 작업 대부분이 CCR 세션에서 일어나므로 실효 피해는 작지 않다 — 매 세션 브리핑이 13건을 \"상태 미확인\"으로 낸다."
+  - "③ 해법 후보와 판단 기준 — ⓐ `GITHUB_REPOSITORY` 등 환경변수 우선 사용(CI에서는 자동 설정·CCR에서는 세션이 export해야 함) ⓑ 정본 이름을 저장소 안의 설정 파일에 두고 읽기 ⓒ `git remote set-url` 안내(클론별 조치라 코드로 못 막는다) ⓓ 프록시가 숫자 경로를 허용하도록 요청. **ⓐ와 ⓑ는 \"이름을 어딘가에 적는다\"는 점에서 HARN-02가 반대한 방향과 닿아 있으므로**, 어느 것을 택할지는 실측(각 경로가 실제로 뚫리는지)과 Kiki 판단을 함께 밟는다. 추론으로 고르지 않는다."
+  - "④ 변별력 — 어떤 해법을 택하든 착수 세션은 ⓐ해법 적용 전 브리핑이 13건 미판정임을 재현하고 ⓑ적용 후 실제로 열림/닫힘이 판정되는지 확인한다. \"오류 문구가 바뀌었다\"는 해결의 증거가 아니다 — 이번 실측이 정확히 그 함정이었다(문구는 바뀌었는데 결과는 동일)."
+  - "[2026-09-11 재측정 — 재현 실패] 이 CCR 세션(브랜치 claude/harn-04-repro-note)에서\n`_fetch_pr_states(root, [675, 802, 1101, 1102])`를 직접 호출 + `backlog.py branches`(unshallow 후)로\n실측한 결과, 원 사고에서 인용된 PR #675를 포함해 전건이 리다이렉트·프록시 거부 없이 정상 응답했다\n(`{675: ('closed', False), 802: ('closed', False), 1101: ('closed', True), 1102: ('open', False)}`).\n`branches` 브리핑도 \"미판정\" 없이 전건(고립 11·PR-닫힘 2·PR 12)을 정상 분류했다. 즉 이 세션 시점\n기준으로는 acceptance①이 기술한 \"숫자 ID 경로 거부\"가 재현되지 않는다 — 프록시 쪽이 그 사이 바뀌었을\n가능성이 있으나 확정할 방법은 없다(간헐적·컨테이너별일 수 있음). acceptance④의 \"재현 후 고침\" 순서상\n지금은 고칠 대상이 없어 해법 ⓐ~ⓓ 중 하나를 추론으로 착수하지 않는다 — 다음에 이 브리핑에서 \"미판정\"이\n다시 보이는 세션이 착수하며, 그때는 이 기록과 비교해 재현 조건(시점·PR 번호·컨테이너)을 좁힐 수 있다.\nstatus는 todo로 유지한다(고쳐지지 않았고, 재발 가능성도 배제 못함)."
+artifacts: []
+paths:
+  - scripts/harness/remote_claims.py
+  - tests/harness/test_remote_claims_pr_state.py
+session: null
+notes: "발견 경위(2026-09-10 04:19Z): HARN-03 착지 직후 SessionStart 브리핑을 다시 읽었더니 오류 문구만 바뀌고 결과(13건 미판정)는 그대로였다. HARN-03의 done 증적에 \"실효는 토큰 부재로 미관측\"이라고 적었는데, 실제 잔여 원인은 토큰이 아니라 프록시의 숫자 경로 거부였다 — 공백을 적어 둔 덕에 다음 관측에서 바로 잡혔다.\n\n[교훈] 이관 결함의 축이 셋으로 늘었다: ⓐ이름 리터럴(HARN-02) ⓑ리다이렉트 미추종(HARN-03) ⓒ**리다이렉트 목적지가 접근 불가**(이 태스크). ⓒ는 ⓑ를 고쳐야 비로소 보인다 — 앞 결함이 뒤 결함을 가리고 있었다.\n\n[겹침] scripts/harness/remote_claims.py는 HARN-03이 방금 건드린 파일이다. 다른 열린 태스크의 소유는 없다.\n\n[정정 2026-09-11] 실측 재확인 — 원 사고 PR #675 포함 4건이 현재 세션에서 리다이렉트/프록시 거부 없이 정상 응답. 재현 실패로 고칠 대상 없음, 다음 재현 세션을 위해 기록만 남김."
+updated: 2026-09-11

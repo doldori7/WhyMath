@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: EOS-67-core-adapter-import-contract
+title: "Core→Adapter import 금지 계약 기계 강제 — import-linter forbidden 계약 추가 + CI 배선 실재 동결 (G1 차단 조건 'Core→Math 정적 의존 0'의 측정 도구)"
+track: math-completion
+stage: S3
+subject: math
+layer: infra
+status: done
+priority: 1
+owner: claude
+depends_on:
+  - EOS-65-core-adapter-boundary-map
+requires_gates: []
+acceptance:
+  - "① 계약 추가: src/backend/pyproject.toml [tool.importlinter]에 forbidden 계약 신설 — EOS-65가 Core로 지정한 패키지 → Adapter로 지정한 패키지 import 금지. 기존 7계층 layers 계약은 건드리지 않는다(축이 다름)"
+  - "② 변별력 확인: 일부러 Core에서 Adapter를 import하는 뮤테이션을 넣어 lint-imports가 exit 1을 내는지 실측하고 복원. 원복은 cp 백업으로만(git checkout 금지 — 2026-08-10 규칙). 복원 후 git diff --stat으로 규모 대조"
+  - "③ 배선 실재 동결(정본화≠집행): 이 계약이 CI에서 실제로 실행됨을 tests/infra 계약 테스트로 대조(OPS-10 선례). 'pyproject에 존재함'과 '잡이 돌아감'은 다르다 — ci.yml lint 스텝이 lint-imports를 부르는지까지 기계 대조"
+  - "④ 현행 위반이 0이 아니면: 위반 전건을 열거하고 baseline 허용(ignore_imports)으로 동결하되 만료·재확인 지점을 함께 적는다 — 만료 없는 유예 금지. 위반 0이면 그 사실을 실측 출력으로 기록"
+artifacts:
+  - "#924"
+  - "src/backend/pyproject.toml (forbidden 계약 2건)"
+  - "tests/infra/test_eos_boundary_contract_wiring.py (9건)"
+  - "lint-imports: 3 kept 0 broken · baseline 9간선(EOS-69 소유)·구조적 제외 11"
+paths:
+  - src/backend/pyproject.toml
+  - tests/infra/test_import_contract_wiring.py
+session: null
+notes: "출처: 대조 §4 A2(#924). 계획서 006 §32·§15('이 테스트는 매우 중요하다 — 없으면 EOS 전환이 형식적 리팩터링에 그친다') · 100 Rule 6 · Gate 0-B. 실측: 현행 import-linter 계약은 7계층 축 1건뿐(pyproject.toml:184-199)이고 tests/architecture 부재 — G1(9/27) 차단 조건을 잴 도구가 없다. crosswalk H1도 같은 지적을 남겼으나 대응 태스크가 없었다. EOS-65 선결 이유: 어느 모듈이 Core인지 안 적고 계약부터 걸면 위반이 쏟아진다."
+updated: 2026-08-31

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on:
   - CUR-07-achievement-standard-schema-extension
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/schema/standard.py
   - src/backend/alembic/versions/
 session: null
-notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 4. 별도 엔티티 분리는 NCIC 기반 MVP에 과해, AchievementStandard 확장으로 충분함."
-updated: 2026-08-25
+notes: "EOS Curriculum Semantic Backbone ADR Phase 1 실행 항목 4. 별도 엔티티 분리는 NCIC 기반 MVP에 과해, AchievementStandard 확장으로 충분함.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

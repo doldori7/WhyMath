@@ -43,7 +43,9 @@ from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
     ConceptRole,
+    DependencyLevel,
     EdgeType,
+    RequiredStrength,
 )
 
 
@@ -210,6 +212,22 @@ class ConceptEdge(Base):
     notes: Mapped[str | None] = mapped_column(sa.Text)
     # 원자 백본 관계유형(원본/소단원내/소단원간/학년간/학교급간 등) — 자유 텍스트 주석.
     relation_subtype: Mapped[str | None] = mapped_column(sa.Text)
+
+    # ── EOS 6_개념 DB 검토 §13 prerequisite 메타 (CUR-16) ─────────
+    required_strength: Mapped[RequiredStrength | None] = mapped_column(
+        _pg_enum(RequiredStrength, "required_strength_enum")
+    )
+    dependency_level: Mapped[DependencyLevel | None] = mapped_column(
+        _pg_enum(DependencyLevel, "dependency_level_enum")
+    )
+    minimum_mastery: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    curriculum_context: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text),
+        nullable=False,
+        server_default=sa.text("'{}'::text[]"),
+    )
+    evidence_source_id: Mapped[str | None] = mapped_column(sa.String(64))
+
     created_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now()
     )

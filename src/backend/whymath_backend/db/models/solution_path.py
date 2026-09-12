@@ -25,6 +25,11 @@
     기본 false: 승격 직후는 항상 미검수(AI 자기승인 금지).
   - `equivalence_cluster_id` TEXT nullable — 동치 *후보* 군집(확정 동치 아님 — 정직 경계).
     군집 판정·부여는 S4-12(D4) 몫이라 지금은 좌석만.
+  - `gen_meta` JSONB nullable (S4-10·D2 추가) — 다중 풀이 *생성* 시 산출된 주관 메타
+    (elegance·educational_value·difficulty·key_insight·comparison)의 **단일 JSONB 좌석**
+    (컬럼 폭발 방지). 내부에 `review_status="ai_estimated"`를 항상 동반해 게이팅한다 —
+    **학생 대면 서빙 결선 0**(어떤 API·스키마도 이 컬럼을 읽지 않는다 — 거버넌스 테스트
+    동결·§4-⑥ 유보). NULL = 생성 메타 없음(승격 어댑터 경유 레거시 경로).
   - `created_at` TIMESTAMPTZ NOT NULL server_default now().
   - `embedding` 컬럼 **없음** — S4-12에서 판정(acceptance 명시·임베딩 네임스페이스 거버넌스).
 
@@ -39,6 +44,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
@@ -80,6 +86,9 @@ class SolutionPath(Base):
     )
     # 동치 *후보* 군집(확정 동치 아님) — 부여는 S4-12(D4) 몫, 지금은 좌석만.
     equivalence_cluster_id: Mapped[str | None] = mapped_column(sa.Text)
+    # 생성 주관 메타(S4-10·D2) — 내부 review_status="ai_estimated" 게이팅·학생 서빙 결선 0.
+    # `none_as_null=True`(SEC-06 전수 거버넌스). NULL=생성 메타 없음(레거시 승격 경로).
+    gen_meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 운영 메타 =====
     created_at: Mapped[datetime] = mapped_column(

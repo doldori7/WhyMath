@@ -126,6 +126,25 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "b8e76fe238d0",  # EOS-3: Achievement Standard lifecycle expansion
     "fcfdfc277348",  # CUR-07: Achievement Standard evaluation criteria codes + level unit
     "899ae0efbb8b",  # CUR-10: Curriculum Framework / Version tables
+    "fad7f750090d",  # CUR-16: concept_edge prerequisite 메타 확장
+    "d7e8f1a2b4c6",  # S4-10 solution_paths.gen_meta — 다중 풀이 생성 주관 메타(ai_estimated)
+    "8f0b8e906362",  # EOS-32: answer_submission — attempt 내 다회 제출 시퀀스 정규화
+    "0e148995e6e9",  # EOS-45: hint_usage — 힌트 횟수·레벨·열람시간 1급 데이터화
+    "a926d39f126a",  # EOS-46: student_solution_step — 학생 풀이 step 정규 기록(ADR-002)
+    "c9bc2555282e",  # EOS-48: event_time/ingested_at 분리 + active/idle 실측 좌석(3테이블 ALTER)
+    "84c782415837",  # EOS-54: review_timer_event — HIT 검수 타이머 이벤트 계측기
+    "f4b2d8c1a3e5",  # EOS-55: generation_log 재현 좌석 5컬럼(prompt_version·seed·스냅샷·cu_slug)
+    "d4a71c0f9b32",  # EOS-57: attempt_event.skill_ids[] 좌석 + event_type_enum '문제시도'
+    "e7c3b9a15f24",  # EOS-71: problem 격리 좌석 2컬럼 + review_status_enum 'quarantined'
+    "b8d3f6a91c24",  # EOS-97: generation_log.run_id — 리콜 조인 축 + idx_generation_run_id
+    "c1a5e07b4d38",  # EOS-99: generation_log 프롬프트 캐시 2종(cache_read/creation_input_tokens)
+    "d2f4a68b91e7",  # MISC-20: misconception_hypothesis.deactivated_reason — 해소율 정직화 축
+    "e3b5c79d02f8",  # MISC-20: evidence_links.provenance — 해소 판정의 출처 축(가중치 추론 폐기)
+    "19149e92d368",  # SEC-33 ⑥: problem_attempt.ingested_at server_default(신규 행 좌석 보장)
+    "f2662166a661",  # SEC-27: job_ownership — 비동기 QUALITY 작업 소유권(job_id→user_id)
+    "4c6dfb1527a9",  # SEC-29: privacy_audit.resource_type/resource_id/action — 콘텐츠CUD 감사
+    "3f5c83f51246",  # SEC-31: 학생 답안/풀이 3테이블 봉투 암호화(problem_attempt·
+    # answer_submission·student_solution_step 8쌍 16컬럼 + expression nullable 완화)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

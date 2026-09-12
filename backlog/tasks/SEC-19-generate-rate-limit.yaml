@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on: []
 requires_gates: []
@@ -19,5 +20,5 @@ paths:
   - src/backend/whymath_backend/app.py
   - tests/backend/test_app.py
 session: null
-notes: "ai_integration_gap_review.md D3(2026-08-10, 축소판 — jobs 축은 SEC-15로 승계). functional_security_audit_2026-08-08.md(미머지 브랜치 claude/whymath-issues-review-k20m0w)는 generate를 CurrentUser 봉인으로만 기록 — 레이트리밋 부재는 그 감사 미커버 축. SEC-15와 app.py paths 의도적 겹침(겹침 경고는 대기 신호) — SEC-15 착지 후 착수."
-updated: 2026-08-10
+notes: "ai_integration_gap_review.md D3(2026-08-10, 축소판 — jobs 축은 SEC-15로 승계). functional_security_audit_2026-08-08.md(미머지 브랜치 claude/whymath-issues-review-k20m0w)는 generate를 CurrentUser 봉인으로만 기록 — 레이트리밋 부재는 그 감사 미커버 축. SEC-15와 app.py paths 의도적 겹침(겹침 경고는 대기 신호) — SEC-15 착지 후 착수.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/비용KPI — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

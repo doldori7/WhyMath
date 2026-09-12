@@ -46,6 +46,7 @@ __all__ = [
     "load_sample_corpus",
     "main",
     "render_markdown",
+    "rotation_key",
     "select_sample",
     "summarize_sample",
 ]
@@ -172,7 +173,7 @@ def load_sample_corpus(text: str) -> list[SampleProblem]:
 # ──────────────────────────────────────────────────────────────────────────
 # 층화 샘플링 (결정론 — 도메인 비례 + 오개념 강제 + 난이도·형식 분산)
 # ──────────────────────────────────────────────────────────────────────────
-def _rotation_key(problem_id: str, rotation: int) -> str:
+def rotation_key(problem_id: str, rotation: int) -> str:
     """표본 회전(S2-11)의 안정 선택 키 — rotation=0이면 항등(기존 산출물 바이트 불변).
 
     rotation>0이면 problem_id를 salt와 함께 해시해 *선택 순서*만 결정론적으로 재배열한다.
@@ -183,6 +184,12 @@ def _rotation_key(problem_id: str, rotation: int) -> str:
     if rotation == 0:
         return problem_id
     return hashlib.sha256(f"rot{rotation}:{problem_id}".encode()).hexdigest()
+
+
+# 하위호환 별칭 — 이 모듈 안의 기존 호출부(select_sample 등)와 외부 참조를 그대로 둔다.
+# 공개명(`rotation_key`)은 EOS-60 골든 셋이 같은 회전 메커니즘을 재사용하려고 승격한 것이다
+# (S2-11 재추출 메커니즘의 단일 진실 원천 — 골든 쪽에 해시 규칙을 재구현하지 않는다).
+_rotation_key = rotation_key
 
 
 def allocate_quota(counts: Mapping[str, int], n: int) -> dict[str, int]:

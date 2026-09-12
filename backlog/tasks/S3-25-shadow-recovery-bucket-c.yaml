@@ -7,6 +7,7 @@ subject: math
 layer: mobile
 status: todo
 priority: 2
+eos_priority: P1
 owner: claude
 depends_on:
   - S3-32-learning-loop-closure-recovery
@@ -22,41 +23,8 @@ artifacts: []
 paths:
   - "src/mobile/lib/**"
   - "src/mobile/test/**"
-  - "src/backend/whymath_backend/api/coach.py"
+  - src/backend/whymath_backend/api/coach.py
   - "src/backend/whymath_backend/harness/**"
-notes: |
-  [출처] 브랜치 claude/shadow-data-s3-pilot-nh5kbz(main과 907fca9f 분기 · 2026-07-30 발견 ·
-  2026-08-10 원격 삭제됨). 회수는 GitHub API SHA 접근만 가능.
-
-  [2026-08-10 범위 축소 — 7건 → 2건] 착수 전 실측으로 7건 중 5건이 **이미 다른 태스크가
-  커버**함을 확인해 축소했다. main이 같은 기능을 *다른* 섀도 브랜치(tlthrr)에서 재작성하는
-  쪽으로 이미 진행했기 때문이며, 그대로 두면 중복 구현이 된다.
-    · ① 원S3-09(학습 루프 닫힘 G1/G2) → **S3-32**가 커버
-    · ② 원S3-10 **서버분**(2f6433b) → **S3-32**가 커버. 커밋 메시지 실측 대조: l4/completion.py
-      상태머신(NONE/ENTER_REVIEW/CONTINUE_REVIEW/COMPLETE) · 정답 도달 시 Polya 돌아보기 1턴 후
-      완료 · ProblemAttempt 적재 · 응답 3필드 — S3-32 notes의 "서버측 검증 게이팅 → Polya REVIEW
-      경유 → ProblemAttempt 적재 → completion 신호 노출"과 동일 설계다. alembic d5e6f0a1b2c3
-      (dialogue.review_turns_remaining)도 S3-32가 현재 main 기준으로 새로 잡는다(원 리비전
-      재채번 문제 소멸 — 구 acceptance의 sliding-window hex 항목을 제거한 이유).
-    · ③ 원S3-11(대화 입력 최종답 감지) → **S3-33**(notes에 "원 S3-28" 명시)
-    · ④ 원S3-12(객관식 선택지 버튼) → **S3-33**(원 S3-29) + **S3-35**(done, 세로 번호 목록)
-    · ⑤ 원S3-14(문제별 dialogue 리셋) → **S3-34**(원 S3-30)
-    · ⑥ 원S3-15(오답 최종답 피드백) → **S3-34**(원 S3-31)
-  잔여는 ②의 **클라 절반**과 ⑦뿐이며, 둘 다 위 태스크들의 하류라 depends_on으로 고정했다
-  (S3-32 → ② 클라가 소비할 서버 신호 · S3-34 → ⑦이 폴백할 S3-15 `_REDIRECT_PROMPT`).
-
-  [보존 SHA — 브랜치 삭제 후 유일한 회수 좌표]
-    · ② 원S3-10: 서버 2f6433bad2fb5bdd2bd31850beb9e0e20fc08449(회수 안 함·S3-32 소관) ·
-      **클라 ead23ef3abc47758dfb1e12f00c9e84ef08ba0f0**(회수 대상) ·
-      기록 557485f992481a3a9fc744b09eb07ab5a8ca7a83
-    · ⑦ 원S3-16: 등재 a495222eac157eec088856be62076fd8bb9a9973 ·
-      **구현 879ad99a4b3c2094456e157a478c85556e49b7d8**(회수 대상) ·
-      기록 3ab4e20d60f9ae2a684d78bf1631bb2bf4779347
-
-  [구 acceptance에서 삭제한 항목과 사유]
-    · "7개 항목을 S3-26~32로 재등재" — 제안 번호가 전부 선점됐고(S3-26·27·28·32·33·34·35 점유,
-      빈 번호는 S3-29·30·31), 애초에 5건은 재등재 자체가 불필요해졌다.
-    · "alembic d5e6f0a1b2c3 재채번" — S3-32 소관으로 이관(위 참조).
-    · "S3-22와 함께 coach.py 재조정" — 잔여 2건 중 coach.py를 건드리는 건 ⑦뿐이고 그마저
-      S3-34 착지 후라 파편화 우려가 해소됐다.
-updated: 2026-08-10
+session: null
+notes: "[출처] 브랜치 claude/shadow-data-s3-pilot-nh5kbz(main과 907fca9f 분기 · 2026-07-30 발견 ·\n2026-08-10 원격 삭제됨). 회수는 GitHub API SHA 접근만 가능.\n\n[2026-08-10 범위 축소 — 7건 → 2건] 착수 전 실측으로 7건 중 5건이 **이미 다른 태스크가\n커버**함을 확인해 축소했다. main이 같은 기능을 *다른* 섀도 브랜치(tlthrr)에서 재작성하는\n쪽으로 이미 진행했기 때문이며, 그대로 두면 중복 구현이 된다.\n  · ① 원S3-09(학습 루프 닫힘 G1/G2) → **S3-32**가 커버\n  · ② 원S3-10 **서버분**(2f6433b) → **S3-32**가 커버. 커밋 메시지 실측 대조: l4/completion.py\n    상태머신(NONE/ENTER_REVIEW/CONTINUE_REVIEW/COMPLETE) · 정답 도달 시 Polya 돌아보기 1턴 후\n    완료 · ProblemAttempt 적재 · 응답 3필드 — S3-32 notes의 \"서버측 검증 게이팅 → Polya REVIEW\n    경유 → ProblemAttempt 적재 → completion 신호 노출\"과 동일 설계다. alembic d5e6f0a1b2c3\n    (dialogue.review_turns_remaining)도 S3-32가 현재 main 기준으로 새로 잡는다(원 리비전\n    재채번 문제 소멸 — 구 acceptance의 sliding-window hex 항목을 제거한 이유).\n  · ③ 원S3-11(대화 입력 최종답 감지) → **S3-33**(notes에 \"원 S3-28\" 명시)\n  · ④ 원S3-12(객관식 선택지 버튼) → **S3-33**(원 S3-29) + **S3-35**(done, 세로 번호 목록)\n  · ⑤ 원S3-14(문제별 dialogue 리셋) → **S3-34**(원 S3-30)\n  · ⑥ 원S3-15(오답 최종답 피드백) → **S3-34**(원 S3-31)\n잔여는 ②의 **클라 절반**과 ⑦뿐이며, 둘 다 위 태스크들의 하류라 depends_on으로 고정했다\n(S3-32 → ② 클라가 소비할 서버 신호 · S3-34 → ⑦이 폴백할 S3-15 `_REDIRECT_PROMPT`).\n\n[보존 SHA — 브랜치 삭제 후 유일한 회수 좌표]\n  · ② 원S3-10: 서버 2f6433bad2fb5bdd2bd31850beb9e0e20fc08449(회수 안 함·S3-32 소관) ·\n    **클라 ead23ef3abc47758dfb1e12f00c9e84ef08ba0f0**(회수 대상) ·\n    기록 557485f992481a3a9fc744b09eb07ab5a8ca7a83\n  · ⑦ 원S3-16: 등재 a495222eac157eec088856be62076fd8bb9a9973 ·\n    **구현 879ad99a4b3c2094456e157a478c85556e49b7d8**(회수 대상) ·\n    기록 3ab4e20d60f9ae2a684d78bf1631bb2bf4779347\n\n[구 acceptance에서 삭제한 항목과 사유]\n  · \"7개 항목을 S3-26~32로 재등재\" — 제안 번호가 전부 선점됐고(S3-26·27·28·32·33·34·35 점유,\n    빈 번호는 S3-29·30·31), 애초에 5건은 재등재 자체가 불필요해졌다.\n  · \"alembic d5e6f0a1b2c3 재채번\" — S3-32 소관으로 이관(위 참조).\n  · \"S3-22와 함께 coach.py 재조정\" — 잔여 2건 중 coach.py를 건드리는 건 ⑦뿐이고 그마저\n    S3-34 착지 후라 파편화 우려가 해소됐다.\n\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/회수 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

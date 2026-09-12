@@ -1,0 +1,134 @@
+{
+  "exit_code": 3,
+  "failed": 17,
+  "finished_at": "2026-08-30T16:42:53Z",
+  "ok": 3,
+  "planned": [
+    "ncic",
+    "kogl-license-types",
+    "aihub",
+    "schoolinfo",
+    "openstax",
+    "siyavula",
+    "illustrative-mathematics",
+    "numinamath-cot",
+    "numinamath-tir",
+    "prm800k",
+    "phet",
+    "metamath-set-mm",
+    "omnimath",
+    "minif2f",
+    "olymmath",
+    "mathlib4",
+    "gsm8k",
+    "math-hendrycks",
+    "openmathinstruct-1",
+    "dlmf"
+  ],
+  "results": {
+    "aihub": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "dlmf": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "gsm8k": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b"
+    },
+    "illustrative-mathematics": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "kogl-license-types": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "math-hendrycks": {
+      "error_type": "HTTP403",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "mathlib4": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    "metamath-set-mm": {
+      "error_type": "HTTP403",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "minif2f": {
+      "error_type": "HTTP404",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "ncic": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "numinamath-cot": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "numinamath-tir": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "olymmath": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "omnimath": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "openmathinstruct-1": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "openstax": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "phet": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "prm800k": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "22d61a2226e035da51c56149c3358c36d1f61716435866bc6e6fe0e54c7270db"
+    },
+    "schoolinfo": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    },
+    "siyavula": {
+      "error_type": "URLError",
+      "event": "fetch_failed",
+      "sha256": null
+    }
+  },
+  "run_id": "20260830T164229Z-c98e84",
+  "started_at": "2026-08-30T16:42:29Z",
+  "status": "completed",
+  "timeout_s": 20.0
+}

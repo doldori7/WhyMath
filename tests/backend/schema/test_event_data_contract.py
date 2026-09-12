@@ -1,9 +1,10 @@
 """이벤트 페이로드 타입별 계약 거버넌스 게이트 — invariant ⑫.
 
-`event_data`가 자유 JSONB로 방치되던 것을 *생산 6종*(검산결과·힌트제공·시각화조작·막힘·힌트요청·
-답입력)에 대해 계약(`schema/event_data_contract.py`)으로 고정했다(S3-16: 막힘·힌트요청·답입력
-3종이 휴면에서 편입 — 신규 EventType 추가 아님·소생). 이 테스트는 그 계약이:
-  1) 생산 6종을 빠짐없이 덮고(휴면 5종은 명시적 면제·분류 누락 0),
+`event_data`가 자유 JSONB로 방치되던 것을 *생산 7종*(검산결과·힌트제공·시각화조작·막힘·힌트요청·
+답입력·문제시도)에 대해 계약(`schema/event_data_contract.py`)으로 고정했다(S3-16: 막힘·힌트요청·
+답입력 3종이 휴면에서 편입 — 소생 / EOS-57: 문제시도는 *신규* EventType 추가). 이 테스트는 그
+계약이:
+  1) 생산 7종을 빠짐없이 덮고(휴면 5종은 명시적 면제·분류 누락 0),
   2) 하네스가 실제로 읽는 키(passed·hint_level)를 포함하며,
   3) stray key(자유 JSONB의 씨앗)를 produce 좌석에서 거부하고,
   4) `시각화조작.payload` 내부 자유형은 의도적으로 보존하는지
@@ -22,6 +23,7 @@ from whymath_backend.schema.enums import EventType
 from whymath_backend.schema.event_data_contract import (
     CONTRACT_EXEMPT_EVENT_TYPES,
     EVENT_DATA_CONTRACT,
+    AttemptedEventData,
     DemandEventData,
     HintEventData,
     InteractionEventData,
@@ -31,8 +33,9 @@ from whymath_backend.schema.event_data_contract import (
     build_event_data,
 )
 
-# 코드가 실제로 event_data를 *쓰는* EventType — 탐사(producer 전수 grep)로 확정한 6종.
-# (api/coach.py: 검산결과·힌트제공·막힘·힌트요청·답입력, api/interactions.py: 시각화조작.)
+# 코드가 실제로 event_data를 *쓰는* EventType — 탐사(producer 전수 grep)로 확정한 7종.
+# (api/coach.py: 검산결과·힌트제공·막힘·힌트요청·답입력, api/interactions.py: 시각화조작,
+#  l2/attempt_skill_event.py: 문제시도 — EOS-57.)
 _PRODUCED = {
     EventType.검산결과,
     EventType.힌트제공,
@@ -40,11 +43,12 @@ _PRODUCED = {
     EventType.막힘,
     EventType.힌트요청,
     EventType.답입력,
+    EventType.문제시도,
 }
 
 
 def test_contract_covers_exactly_the_produced_types() -> None:
-    """계약 키 == 실제 생산 6종(누락·잉여 0) — 단일 진실원 완전성."""
+    """계약 키 == 실제 생산 7종(누락·잉여 0) — 단일 진실원 완전성."""
     assert set(EVENT_DATA_CONTRACT) == _PRODUCED
 
 
@@ -350,3 +354,32 @@ def test_dormant_type_is_not_a_build_target() -> None:
     `막힘`은 S3-16으로 계약 대상이 됐으므로(위 test_stuck_shape) 휴면 예시로는 `지움`을 쓴다."""
     with pytest.raises(KeyError):
         build_event_data(EventType.지움, foo="bar")
+
+
+class TestAttemptedEventContract:
+    """`문제시도`(EOS-57) 계약 — 스킬 배열이 event_data로 새지 않는 경계를 못박는다."""
+
+    def test_source_and_is_correct_are_required(self) -> None:
+        """두 필드 모두 required — 경로 라벨 없는 기록은 경로별 분모를 만들 수 없다."""
+        with pytest.raises(ValidationError):
+            AttemptedEventData(is_correct=True)  # type: ignore[call-arg]
+        with pytest.raises(ValidationError):
+            AttemptedEventData(source="attempt_submit")  # type: ignore[call-arg]
+
+    def test_skill_ids_is_rejected_in_payload(self) -> None:
+        """`skill_ids`는 event_data에 담기지 않는다 — 1급 컬럼이 정본 좌석이다.
+
+        JSONB에 병기하면 두 진실원이 생기고("유지보수 지옥" 방어), 집계가 매번 JSON 파싱이
+        된다. extra='forbid'가 그 유혹을 produce 좌석에서 구조적으로 차단한다.
+        """
+        with pytest.raises(ValidationError):
+            build_event_data(
+                EventType.문제시도,
+                is_correct=True,
+                source="attempt_submit",
+                skill_ids=["skill.a"],
+            )
+
+    def test_build_event_data_round_trip(self) -> None:
+        payload = build_event_data(EventType.문제시도, is_correct=False, source="coach_completion")
+        assert payload == {"is_correct": False, "source": "coach_completion"}

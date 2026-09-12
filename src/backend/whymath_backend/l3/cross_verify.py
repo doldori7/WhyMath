@@ -53,6 +53,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from whymath_backend.config import Settings
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
@@ -535,6 +536,10 @@ class CrossVerifier:
             budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
             call_site=CallSite.SELF_VERIFY,
             sync=False,
+            # 등급: 교차검증 대상은 *자체 저작 코퍼스의 문항*이다(2026-09-01 실측 —
+            # data/corpus 전 27개 pool이 whymath-original). AIHub 유래 자료가 저작
+            # 입력이 되면 `SELF_AUTHORED_CORPUS` 한 자리만 고치면 이 경로도 함께 잠긴다.
+            data_licenses=SELF_AUTHORED_CORPUS,
         )
 
     @property

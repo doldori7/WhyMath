@@ -263,6 +263,23 @@ class Problem(Base):
     )
     review_score: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
+    # ===== 운영 격리 (EOS-71 — review_status=quarantined의 근거 기록) =====
+    # 격리 = *삭제가 아닌 회수*. 레코드도 딸린 problem_attempt도 보존하고 노출만 끊는다
+    # (계약 정본 `docs/standards/problem_quarantine_contract.md` §2 비파괴 원칙).
+    #
+    # **server_default를 달지 않는 이유(날조 방지)**: `quarantined_at`에 `DEFAULT now()`를 달면
+    # PG가 ALTER 시점에 기존 행 전체를 마이그레이션 시각으로 백필한다 — 그 순간 "격리된 적 없음"과
+    # "이 시각에 격리됨"이 같은 값이 되어 격리 이력이 통째로 날조된다. NULL=미격리가 정직한
+    # 상태이며 관리자 PATCH가 격리 시점에 채운다(`activity.py` `ingested_at`·`attempt_event.
+    # skill_ids` 규약과 동형).
+    #
+    # **CHECK 제약을 두지 않는 이유**: "quarantined면 사유·시각 NOT NULL"은 매력적이지만 기존
+    # 행·중간 상태(상태를 먼저 바꾸고 사유를 뒤에 쓰는 트랜잭션)와 충돌한다. 가짜 DB CHECK를 만들지
+    # 않는다는 이 모듈 docstring의 판단(본문 미보유 불변식 처리)과 같은 이유로, 기록 의무는 계약
+    # 문서 §3의 절차로 둔다.
+    quarantine_reason: Mapped[str | None] = mapped_column(sa.Text)
+    quarantined_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+
     # ── 인덱스 (§3.1 CREATE INDEX — GIN 4종 포함) ──
     __table_args__ = (
         sa.Index("idx_problem_exam", "exam_type", "exam_year", "exam_month"),

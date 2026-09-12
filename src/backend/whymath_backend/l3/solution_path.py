@@ -7,17 +7,19 @@
 좌석이 필요하다(신규 데이터 창조가 아니라 이미 흐르는 데이터의 구조화 — dead code 아님).
 
 축 구분(yaml 경계 명시 그대로):
-  - `approach_type` — 풀이 *전체*의 6유형(대수/기하/조합/귀납/시각/역방향). **Enum 클래스를
-    신설하지 않고 Literal로 둔다** — 단일 좌석(`schema/enums.py` `ApproachType`) 승격은 후속
-    S4-10 몫이다(`tests/backend/l1/test_strategy_governance.py` 리터럴 6값과 동일 집합).
+  - `approach_type` — 풀이 *전체*의 6유형(대수/기하/조합/귀납/시각/역방향). S4-09가 예고한
+    좌석 승격이 S4-10(D2)에서 수행됐다 — Literal을 걷어내고 단일 좌석
+    `schema/enums.py::ApproachType`(폐쇄 6종)을 **소비만** 한다(값 집합·직렬화 str 값은
+    Literal 시절과 완전 동일 — 인터페이스 호환 유지. `test_strategy_governance.py`의 리터럴
+    상수도 같은 좌석 참조로 승격됐다).
   - `reasoning_type` — *스텝 단위* 추론 유형. 기존 단일 좌석 `schema/enums.py::ReasoningType`
     (폐쇄 7종)을 **소비만** 한다(신설 금지 — S4-09 acceptance).
 
 검증 책임 경계(어디까지 Pydantic인가):
   - 본 모듈(Pydantic)이 강제하는 invariant: ① steps order가 1부터 연속(중복·건너뜀·역순 거부)
     ② justification.prior_step_orders 각 값 < 현재 order(전방참조·자기참조 금지·비순환)
-    ③ reasoning_type 폐쇄 7종 밖 거부(enum이 자연 거부) ④ approach_type 6종 밖 거부(Literal이
-    자연 거부).
+    ③ reasoning_type 폐쇄 7종 밖 거부(enum이 자연 거부) ④ approach_type 6종 밖 거부(단일
+    좌석 enum이 자연 거부).
   - **참조 실재**(problem_id가 실재하는 Problem인지·concept_node_id/justification의 각 ID가
     실재하는 Concept 노드인지 — cross-dataset)는 Pydantic이 아니라 *적재 시점* 책임이다:
     `whs/path_promotion.py`(승격 어댑터)의 존재 확인 + DB FK(`solution_paths.problem_id`)가
@@ -33,27 +35,58 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from whymath_backend.schema.enums import ReasoningType
+from whymath_backend.schema.enums import ApproachType, ReasoningType
 
 __all__ = [
+    "APPROACH_LABELS_KR",
     "APPROACH_TYPES",
     "ApproachType",
     "Justification",
     "SolutionPath",
     "SolutionStep",
+    "parse_approach_label",
 ]
 
-# 풀이 전체 접근유형 6종 — yaml `approach_type` enum과 1:1. Enum 클래스 신설 금지(S4-09):
-# schema/enums.py `ApproachType` 단일 좌석 승격은 S4-10에서 수행 예정(그때 이 Literal을 좌석
-# 참조로 교체·`test_strategy_governance.py`의 하드코딩 6값도 좌석 참조로 승격).
-ApproachType = Literal["algebraic", "geometric", "combinatorial", "inductive", "visual", "backward"]
+# 폐쇄 6값 튜플(리포트·JSON 스키마·매핑 테이블용) — S4-10 좌석 승격: Literal `get_args` 파생을
+# 단일 좌석 `schema/enums.py::ApproachType` 파생으로 교체(이중 정의 방지·단일 진실 원천 유지).
+# 기존 소비처(path_promotion·테스트)의 값·순서 인터페이스는 그대로다.
+APPROACH_TYPES: tuple[str, ...] = tuple(member.value for member in ApproachType)
 
-# 폐쇄 6값 튜플(리포트·매핑 테이블용) — Literal 정의에서 파생(이중 정의 방지·단일 진실 원천).
-APPROACH_TYPES: tuple[str, ...] = get_args(ApproachType)
+# 한글 라벨 → 좌석 멤버 결정론 번역표(1:1) — 근거: yaml enum 한글 설명("대수적 — 식 변형·계산
+# 중심" 등)·`verified_solution.py` §2.4 docstring 표기. 영문 값은 좌석 참조라 리터럴 중복 0.
+# LLM 응답·strategy_tag 자유 텍스트가 한글 라벨로 올 때의 *유일한* 허용 번역 경로다 — 그 외
+# 표기는 추측하지 않는다(`parse_approach_label`이 None 반환 → 사람 판정 몫·AI 자기승인 금지).
+APPROACH_LABELS_KR: dict[str, ApproachType] = {
+    "대수적": ApproachType.algebraic,
+    "기하적": ApproachType.geometric,
+    "조합적": ApproachType.combinatorial,
+    "귀납적": ApproachType.inductive,
+    "시각적": ApproachType.visual,
+    "역방향": ApproachType.backward,
+}
+
+
+def parse_approach_label(text: str | None) -> ApproachType | None:
+    """자유 텍스트 → `ApproachType` 결정론 파싱. 매핑 불가면 None(추측 금지).
+
+    허용 입력: ① 영문 enum 값 정확 일치(공백 trim) ② 한글 라벨 6종(`APPROACH_LABELS_KR`
+    1:1 번역). 그 외("비유적"·"corpus-replay" 등)는 전부 None — 호출자가 검수 큐/카운트로
+    정직 처리한다. `whs/path_promotion.py`(strategy_tag 승격)·`l3/multi_solution.py`
+    (LLM 응답 approach 필드)가 공유하는 단일 번역 경로다(S4-10 값 중복 제거).
+    """
+    if text is None:
+        return None
+    stripped = text.strip()
+    kr = APPROACH_LABELS_KR.get(stripped)
+    if kr is not None:
+        return kr
+    try:
+        return ApproachType(stripped)
+    except ValueError:
+        return None
 
 
 class Justification(BaseModel):
@@ -192,7 +225,8 @@ class SolutionPath(BaseModel):
     approach_type: ApproachType = Field(
         description=(
             "6가지 solution_approaches 중 하나(풀이 *전체* 유형·스텝 단위 reasoning_type과 "
-            "직교). 6종 밖은 Literal이 자연 거부."
+            "직교). 6종 밖은 단일 좌석 enum(`schema/enums.py::ApproachType`)이 자연 거부. "
+            "use_enum_values=True라 검증 후 값은 소문자 str(Literal 시절과 동일)."
         )
     )
     concept_sequence: list[str] = Field(

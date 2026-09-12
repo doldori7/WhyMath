@@ -13,12 +13,20 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import CurrentUser
+from whymath_backend.db.session import get_session
+from whymath_backend.l1.standards.alignment_query import (
+    AlignmentAxis,
+    get_alignments,
+    log_join_stats,
+)
 from whymath_backend.l3.dsl.compiler import ContentCompiler
 from whymath_backend.l3.dsl.math_verifier import MathValidator
 from whymath_backend.l3.dsl.models import (
@@ -47,7 +55,12 @@ from whymath_backend.l3.dsl.validators import (
 )
 from whymath_backend.l3.dsl.variable_engine import VariableBinding
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/v1/dsl", tags=["dsl"])
+
+# get_session 의존성 — Annotated 메타데이터(B008 회피·concepts.py 선례).
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
 # =============================================================================
@@ -152,6 +165,7 @@ CompilerDep = Annotated[ContentCompiler, Depends(get_compiler)]
 async def generate_dsl(
     body: GenerateRequest,
     user: CurrentUser,
+    session: SessionDep,
     pipeline: ValidationPipelineDep,
     repair_engine: RepairEngineDep,
     quality_gate: QualityGateDep,
@@ -160,7 +174,28 @@ async def generate_dsl(
 
     현재 MVP는 LLM 생성 대신 *스캐폴드 DSL*을 만들어 검증 파이프라인을
     검증하는 데 집중한다. 실제 LLM 생성은 `l3/pipeline.py`와 연동한다.
+
+    **CUR-12 통합 경유**: 사양의 `concept`(개념 키)을 `l1/standards/alignment_query.
+    get_alignments`(단일 진실 원천)에 대조해 성취기준 코드를 `curriculum.standard_codes`에
+    싣는다. 개념 키가 개념 공간에 없으면 빈 채로 남고 — 그것이 정직한 결과다 — 조인이
+    성립했는지 아닌지는 `log_join_stats`가 회계로 남긴다(0건이 "매핑 없음"인지 "조인 실패"인지
+    묻히지 않게 한다·CLAUDE.md 침묵 실패 금지).
     """
+    # 축은 **official_code 어휘를 내는 것만** 고른다(#933 리뷰 P2): `concept_standard_link`는
+    # norm_id를 내므로 함께 담으면 `2022_...`와 `[...]`가 한 리스트에 섞여 어느 쪽 조회도
+    # 성립하지 않는다 — 이 모듈이 금지하는 "가짜 통일"이 결과물에서 일어난다. 축 선택과
+    # `kind` 필터를 **둘 다** 건다(축 집합이 나중에 바뀌어도 어휘가 새지 않게).
+    alignment = await get_alignments(
+        session,
+        concept_codes=[body.spec.concept],
+        axes={AlignmentAxis.ATOM_NODE, AlignmentAxis.CURRICULUM_ENTRY},
+    )
+    log_join_stats(
+        alignment.stats,
+        logger=logger,
+        context=f"dsl.generate/concept={body.spec.concept}",
+    )
+
     # TODO: l3/pipeline.py 연동 — 현재는 사양 기반 스캐폴드 DSL 생성
     dsl = ProblemDSL(
         content_id=f"{body.spec.subject[:3].upper()}-{body.spec.concept[:8].upper()}-000001",
@@ -170,6 +205,7 @@ async def generate_dsl(
             grade=body.spec.grade,
             domain=body.spec.concept,
             concept=body.spec.concept,
+            standard_codes=alignment.standard_refs(kind="official_code"),
         ),
         difficulty=DifficultyMeta(level=body.spec.difficulty, target_time_sec=120),
         learning={"skill": ("equation_transformation",)},
@@ -200,6 +236,9 @@ async def generate_dsl(
                 "dsl_version": dsl.dsl_version,
                 "quality_score": report.quality_score,
                 "publishable": report.publishable,
+                # CUR-12 — 정렬 결과가 실제로 DSL에 실렸는지 응답에서 관측 가능해야 한다.
+                # 아무도 보지 못하는 슬롯은 배선됐는지 확인할 수 없다(검증 장치의 배선 확인).
+                "curriculum": dsl.curriculum.model_dump(mode="json"),
             }
         ],
     )

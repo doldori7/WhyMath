@@ -99,7 +99,7 @@ import hashlib
 import json
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from functools import lru_cache
 
 import sympy
@@ -107,10 +107,12 @@ from pydantic import ValidationError
 
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_bank.populate import ConceptTag
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.escalation_defaults import default_student_escalation_signals
+from whymath_backend.l3.generation_seed import SeedSource, seed_for_decision
 from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
@@ -120,6 +122,10 @@ from whymath_backend.l3.models import (
     RoutingDecision,
     RoutingRequest,
     Usage,
+)
+from whymath_backend.l3.pregenerate.provenance_bridge import (
+    actual_cost_usd_or_none,
+    model_name_for_decision,
 )
 from whymath_backend.l3.prompt_assets import fill, prompt_text
 from whymath_backend.l3.router import Router, _as_cost_tier, actual_cost_krw, langfuse_fields
@@ -134,7 +140,7 @@ from whymath_backend.schema.enums import (
     Subject,
 )
 from whymath_backend.schema.problem import DistractorEntry, Problem
-from whymath_backend.schema.provenance import ContentProvenance
+from whymath_backend.schema.provenance import ContentProvenance, GenerationLog, text_sha256
 
 __all__ = ["LLMEquivalentProblemGenerator"]
 
@@ -219,6 +225,34 @@ def _system_prompt() -> str:
     return prompt_text("l3.equivalent.system")
 
 
+# 이 생성기가 인용하는 정본 프롬프트 자산 전량(고정 순서) — prompt_version 식별의 재료.
+_EQUIVALENT_PROMPT_ASSET_IDS: tuple[str, ...] = (
+    "l3.equivalent.system",
+    "l3.equivalent.user",
+    "l3.equivalent.user_topic",
+)
+
+
+@lru_cache(maxsize=1)
+def _prompt_version() -> str:
+    """이 경로의 프롬프트 정본 식별자 — 자산 내용 해시(EOS-55 `prompt_version` 좌석).
+
+    별도 버전 번호 체계가 없으므로(2026-08-30 실측: `prompt_template_id` 적재 0·Langfuse
+    프롬프트 버전 미사용·정본 md에 버전 헤더 없음) 번호를 *발명하지 않고*, 실제 호출부가
+    아는 값 — 인용하는 정본 자산 3종의 내용 — 으로 결정론 식별한다. 정본(doc-first)이
+    바뀌면 식별자도 바뀐다(같은 식별자 = 같은 문면 보증). 형식:
+    `l3.equivalent@sha256:<12hex>`. 프로세스당 1회 계산(`_system_prompt` 캐시 동형).
+    """
+    digest = hashlib.sha256()
+    for asset_id in _EQUIVALENT_PROMPT_ASSET_IDS:
+        # 자산 경계를 \x00으로 구분 — 이어붙임 모호성(id/본문 경계 이동) 방지.
+        digest.update(asset_id.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(prompt_text(asset_id).encode("utf-8"))
+        digest.update(b"\x00")
+    return f"l3.equivalent@sha256:{digest.hexdigest()[:12]}"
+
+
 # 학생 요청 라우팅 신호 기본값 — 6개 호출부 공용 단일 좌석(OPS-18, `api/visualization.py` 미러).
 _STUDENT_ESCALATION_DEFAULTS = default_student_escalation_signals()
 
@@ -243,6 +277,7 @@ class LLMEquivalentProblemGenerator:
         misconception_catalog: Mapping[str, str] | None = None,
         topic_hint: str | None = None,
         subscription: str = _STUDENT_ESCALATION_DEFAULTS.student_subscription,
+        budget_krw: float = _STUDENT_ESCALATION_DEFAULTS.budget_krw,
         difficulty: str | None = None,
         temperature: float = 0.9,
         authoring_family: ModelFamily | None = ModelFamily.GENERAL,
@@ -251,6 +286,8 @@ class LLMEquivalentProblemGenerator:
         curriculum_version: Curriculum = Curriculum.REVISION_2022,
         valid_from_year: int = 2022,
         fallback_unit_codes: Sequence[str] = (),
+        generation_log_sink: Callable[[GenerationLog], None] | None = None,
+        seed_source: SeedSource | None = None,
     ) -> None:
         """생성기 구성.
 
@@ -272,6 +309,15 @@ class LLMEquivalentProblemGenerator:
             subscription: 라우팅 신호(구독 — 클라우드 승급 가드). 기본값은
                 `escalation_defaults.default_student_escalation_signals()` 단일 좌석(OPS-18,
                 오늘은 free).
+            budget_krw: 라우팅 신호(클라우드 잔여 예산·원). 기본값은 같은 단일 좌석(오늘은 0.0)
+                이라 **동작 변경 0**이다. 이 좌석이 따로 필요한 이유(EOS-99 PR #1023 codex P1):
+                클라우드로 나가려면 `subscription != free`와 `budget_krw > 0`이 **둘 다** 필요한데
+                (`router.business_cost_tier` 규칙1이 예산을, 규칙2가 구독을 각각 LOCAL로 강제하고
+                `guard_cloud`가 한 번 더 본다), 종전에는 구독만 열려 있고 예산은 단일 좌석 상수로
+                박혀 있어 **구독만 바꿔도 여전히 LOCAL**이었다. 즉 클라우드 경로를 실제로 태울
+                방법이 이 생성기에 없었고, 그래서 프롬프트 캐시 적중 계측(EOS-99)이 이 경로에서는
+                영영 `not_applicable`만 낸다. 실측(2026-09-07): free/0=local · premium/0=local ·
+                premium/5000=cloud_mid.
             difficulty: 라우팅 난이도 라벨(None이면 spec.difficulty_overall에서 파생).
             temperature: **생성 샘플링 온도**(S2-g 생성 다양성·기본 0.9). 튜터링(도구선택·다음
                 행동)은 *결정론*이 좋아 온도를 지정하지 않지만(제공자 기본), *동등문제 저작*은
@@ -289,6 +335,21 @@ class LLMEquivalentProblemGenerator:
             slug_prefix: 안정 slug 접두사(결정론 해시와 결합해 멱등 upsert 키 생성).
             subject·curriculum_version·valid_from_year: Problem 필수 메타 기본값(스펙 밖·저작 배선).
             fallback_unit_codes: LLM이 unit_codes를 안 주면 쓰는 폴백(비면 결측 시 생성 실패).
+            generation_log_sink: **생성 Run 재현 로그 싱크**(EOS-55 집행 별항). LLM 호출
+                1건마다 `GenerationLog`(모델·prompt_version·seed 좌석·입력 스냅샷 해시+참조)를
+                조립해 흘린다 — provider 예외·파싱/조립 실패도 success=False로 기록한다
+                (성공 경로만 보는 계측 금지·2026-08-22 규칙). Langfuse trace(SaaS)와 별개의
+                인프로세스 이중 회계 축이다. None(기본)이면 종전 동작 그대로(기존 호출부
+                무영향) — 배치 CLI(`harness/problem_corpus_accumulate`)가 JSONL appender를
+                배선한다.
+            seed_source: **샘플링 시드 공급자**(EOS-73). LLM 호출마다 여기서 시드를 뽑아
+                provider로 실어 보내고 *같은 값을* GenerationLog.seed에 기록한다 — 좌석만 있고
+                값이 전무하던 상태(전 경로 NULL)의 해소. None(기본)이면
+                `generation_seed.default_seed_source()`(호출마다 새 난수)다. **난수인 이유**:
+                입력에서 결정론 유도하면 같은 스펙 n건 배치가 같은 문항 n개가 되어 temperature
+                0.9로 방어하던 mode collapse가 되돌아온다(모듈 `generation_seed` docstring ②).
+                재현은 *기록된 시드를 되먹이는 쪽*이 담당하며, 고정 공급자를 주입하면 그 좌표로
+                재투입된다(`harness/generation_seed_replay_probe`).
         """
         if provider is None:
             # 표준 구성 재사용(LLMTutorPolicy·app.py 동형) — 지연 연결이라 구성만으로 네트워크 0.
@@ -308,12 +369,15 @@ class LLMEquivalentProblemGenerator:
         self._catalog = dict(misconception_catalog) if misconception_catalog is not None else None
         self._topic_hint = topic_hint
         self._subscription = subscription
+        self._budget_krw = budget_krw
         self._difficulty = difficulty
         self._temperature = temperature
         self._authoring_family = authoring_family
         # 배치용 지속 이벤트 루프(지연 생성) — asyncio.run의 루프 생성·종료 반복이 provider의
         # 캐시 커넥션 풀을 죽여 배치가 격회 실패하던 실측 회귀 방어(_invoke·_ensure_loop 참조).
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._generation_log_sink = generation_log_sink
+        self._seed_source = seed_source
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -324,16 +388,32 @@ class LLMEquivalentProblemGenerator:
     def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
         """스펙에 맞는 동등문제 후보 1건을 생성(실패 시 None·크래시 금지).
 
-        흐름: 프롬프트 조립 → 라우터 결정 → provider.generate(동기 경계) → JSON 관대 파싱 →
-        CandidateProblem 조립(저작권 메타 구조적 강제). 어느 단계든 실패하면 로그 + None을
-        돌려 오케스트레이터가 `generation_failed`로 정직히 처리하게 한다.
+        흐름: 프롬프트 조립 → 라우터 결정 → 시드 추출 → provider.generate(동기 경계) → JSON
+        관대 파싱 → CandidateProblem 조립(저작권 메타 구조적 강제). 어느 단계든 실패하면 로그 +
+        None을 돌려 오케스트레이터가 `generation_failed`로 정직히 처리하게 한다.
+
+        시드(EOS-73)는 결정 직후 *한 번만* 뽑아 provider 호출과 GenerationLog 기록이 **같은 값**을
+        보게 한다 — 종단마다 다시 뽑으면 기록된 좌표로 재투입해도 재현되지 않는다.
         """
         prompt = self._build_user_prompt(spec)
         decision = self._decide_routing(spec)
+        # LOCAL이면 시드 1개, 클라우드면 None(Messages API에 seed 파라미터 부재 — 구조적 불가).
+        seed = seed_for_decision(decision, source=self._seed_source)
         try:
-            generated = self._invoke(prompt, decision)
+            generated = self._invoke(prompt, decision, seed=seed)
         except Exception as exc:  # noqa: BLE001 — provider 장애 시 배치 크래시 금지·안전 폴백.
             _LOGGER.warning("동등문제 생성 provider 호출 실패 — None 폴백: %s", exc)
+            # 실패한 호출 *시도*도 Run 이력이다(EOS-55) — usage 미상(None)·정직 실패 기록.
+            self._emit_generation_log(
+                spec,
+                prompt,
+                decision,
+                usage=None,
+                success=False,
+                error_detail=f"provider.generate failed: {type(exc).__name__}: {exc}",
+                # 호출을 *시도한* 좌표는 남긴다 — 같은 시드로 재시도해 실패를 재현할 수 있다.
+                seed=seed,
+            )
             return None
         # LLM 호출 성공 = 비용 발생 — 하류 JSON 파싱·조립 성패와 무관하게 관측을 먼저 남긴다
         # ("모든 LLM 호출 → Langfuse 추적" — 추적 0이던 공백 보정·2026-07-21 정합성 검토).
@@ -343,6 +423,15 @@ class LLMEquivalentProblemGenerator:
         data = self._extract_json(raw)
         if data is None:
             _LOGGER.warning("동등문제 생성 응답 JSON 파싱 실패 — None 폴백.")
+            self._emit_generation_log(
+                spec,
+                prompt,
+                decision,
+                usage=generated.usage,
+                success=False,
+                error_detail="응답 JSON 파싱 실패",
+                seed=seed,
+            )
             return None
 
         try:
@@ -351,11 +440,34 @@ class LLMEquivalentProblemGenerator:
             # Problem/Provenance 불변식 위반(저작권 게이트가 생성 거부)·필수 결측·타입 오류.
             # 조용히 통과시키지 않고 로그 + None(게이트에 도달하기 전 정직한 생성 실패).
             _LOGGER.warning("동등문제 후보 조립 실패 — None 폴백: %s", exc)
+            self._emit_generation_log(
+                spec,
+                prompt,
+                decision,
+                usage=generated.usage,
+                success=False,
+                error_detail=f"후보 조립 실패: {type(exc).__name__}",
+                seed=seed,
+            )
             return None
+        self._emit_generation_log(
+            spec,
+            prompt,
+            decision,
+            usage=generated.usage,
+            success=True,
+            error_detail=None,
+            seed=seed,
+            # 조립된 후보의 안정 slug = 코퍼스 키(멱등 upsert·검수 타이머 cu_slug와 동일 축)
+            # — hit_cu_metrics CU당 토큰·비용 조인 정체성(#912 P1-2).
+            cu_slug=candidate.problem.slug,
+        )
         return candidate
 
     # ── 동기 경계(async provider.generate를 배치 sync 문맥에서 호출) ─────
-    def _invoke(self, prompt: str, decision: RoutingDecision) -> GenerationResult:
+    def _invoke(
+        self, prompt: str, decision: RoutingDecision, *, seed: int | None
+    ) -> GenerationResult:
         """provider.generate(async)를 sync 경계에서 실행 — 오프라인 배치 문맥 전용.
 
         오케스트레이터(`run_batch`)는 sync라 여기서 코루틴을 완주시킨다. **인스턴스 전용 지속
@@ -373,18 +485,36 @@ class LLMEquivalentProblemGenerator:
         format= 제약 디코딩으로 출력을 스키마에 맞는 JSON으로 문법 강제하고, 클라우드
         (Anthropic)는 문법 제약이 없어 스키마를 주면 명확히 거부하므로(조용한 무시 금지)
         클라우드 경로는 종전처럼 프롬프트+관대 파서(_extract_json)로 동작한다(이중 방어).
+
+        `seed`(EOS-73 생성 재현)는 **값이 있을 때만** 싣는다. 호출부가 `seed_for_decision`으로
+        뽑으므로 LOCAL이면 값이, 클라우드면 None이 온다 — 클라우드에 실으면 AnthropicProvider가
+        명확히 거부한다(seed 파라미터 부재·조용한 무시 금지). 기본값을 두지 않고 **키워드 필수**로
+        받는 이유: 호출부가 "이 호출의 재현 좌표를 기록했는가"를 매번 자문하게 하기 위함이다.
         """
         is_local = decision.cost_tier == CostTier.LOCAL.value
         schema = _OUTPUT_JSON_SCHEMA if is_local else None
         # provider 반환은 GenerationResult(text, usage) — 텍스트는 조립이, usage는 관측
         # (_record_trace: 실측 토큰·지연·비용)이 소비한다.
-        return self._ensure_loop().run_until_complete(
+        loop = self._ensure_loop()
+        if seed is None:
+            # 시드 미지원 경로(클라우드) — 실으면 provider가 명확히 거부한다(조용한 무시 금지).
+            return loop.run_until_complete(
+                self._provider.generate(
+                    prompt,
+                    _system_prompt(),
+                    decision,
+                    temperature=self._temperature,
+                    json_schema=schema,
+                )
+            )
+        return loop.run_until_complete(
             self._provider.generate(
                 prompt,
                 _system_prompt(),
                 decision,
                 temperature=self._temperature,
                 json_schema=schema,
+                seed=seed,
             )
         )
 
@@ -438,6 +568,102 @@ class LLMEquivalentProblemGenerator:
         except Exception as exc:  # noqa: BLE001 — 전송 확정 실패가 배치 결과를 깨면 안 됨
             _LOGGER.warning("동등문제 생성 관측 flush 실패(%s) — 무시하고 계속", type(exc).__name__)
 
+    # ── 생성 Run 재현 로그 (EOS-55 집행 별항 — Langfuse와 별개의 인프로세스 이중 회계) ──
+    def _input_snapshot(self, spec: EquivalenceSpec, prompt: str) -> dict[str, object]:
+        """호출 1건의 입력 스냅샷(전문+해시 — 자기완결) — 재현 계약의 accumulate측 조립.
+
+        담는 것(전부 JSON 원시형 — canonical 직렬화·JSONB 왕복 안정):
+          - `prompt`/`system`: 실제 전송 텍스트 **전문(verbatim)** — 스냅샷 자기완결의 핵심
+            (#912 P1-1: 해시만 남기면 정본 자산·스펙이 바뀐 뒤 모델 입력을 재구성할 수 없다.
+            자체 정본 템플릿+자체 스펙 조합이라 저작권 무관·행당 수 KB 허용).
+          - `prompt_sha256`/`system_sha256`: 전문의 sha256 병기 — 무결성 대조 축.
+          - `spec`: 이 경로가 실제로 가진 구조 입력 — 성취기준·오개념·난이도·답형태.
+            (전문과 중복되는 재료지만 명료성 우선 — 구조 신호로도, 문면으로도 복원 가능.)
+          - `topic_hint`/`temperature`: 프롬프트·샘플링에 실제 반영된 생성 신호.
+        라우터 결정은 담지 않는다 — spec에서 결정론 유도되는 파생물이고, 실행 모델은
+        `model_name` 컬럼이 별도 기록한다(pregenerate측 `input_snapshot_for_prewarm` 동형).
+        시드도 담지 않는다 — `GenerationLog.seed` 전용 컬럼이 정본이고, 스냅샷에 사본을 두면
+        둘이 갈라졌을 때 어느 쪽이 실제로 보낸 값인지 알 수 없게 된다(단일 진실 원천).
+        """
+        return {
+            "kind": "l3.equivalent.llm_generate",
+            "prompt": prompt,
+            "system": _system_prompt(),
+            "prompt_sha256": text_sha256(prompt),
+            "system_sha256": text_sha256(_system_prompt()),
+            "spec": {
+                "achievement_standard_codes": sorted(spec.achievement_standard_codes),
+                "target_misconception_ids": sorted(spec.target_misconception_ids),
+                "difficulty_overall": spec.difficulty_overall,
+                "answer_format": self._enum_value(spec.answer_format),
+            },
+            "topic_hint": self._topic_hint,
+            "temperature": self._temperature,
+        }
+
+    def _emit_generation_log(
+        self,
+        spec: EquivalenceSpec,
+        prompt: str,
+        decision: RoutingDecision,
+        *,
+        usage: Usage | None,
+        success: bool,
+        error_detail: str | None,
+        seed: int | None,
+        cu_slug: str | None = None,
+    ) -> None:
+        """호출 1건의 GenerationLog 조립·싱크 적재 — never-break(배치 비차단).
+
+        기록 원칙(날조 금지):
+          - `problem_id=None` — 배치 저작 후보는 DB problem 레코드가 아직 없다(JSONL 코퍼스
+            v0 단계·slug 기반). DB 적재 시점의 연결은 적재 파이프라인 소관.
+          - `cu_slug`(#912 P1-2): 후보 조립까지 도달한 성공 종단만 코퍼스 키와 동일 산식의
+            안정 slug(`_stable_slug` 산출물·`candidate.problem.slug`)를 전달한다 —
+            `ops/hit_cu_metrics --generation-log` CU 조인 정체성. 정체성이 생기기 전에
+            실패한 종단(provider 예외·파싱 실패·조립 실패)은 None=미기록(정직).
+          - `seed`(EOS-73): **이 호출에 실제로 실려 나간 시드**를 그대로 받는다(호출부가
+            `generate()`에서 한 번 뽑아 provider와 이 기록에 같은 값을 넘긴다). 여기서 다시
+            뽑지 않는 이유는 뽑은 값과 보낸 값이 갈라지는 순간 기록이 재현을 보장하지 못하기
+            때문이다. 클라우드 결정은 None=미기록이 정직하다(Anthropic Messages API에 seed
+            파라미터 부재 — 구조적 불가·날조 금지). 기본값 없는 키워드 필수 인자다.
+          - `prompt_version`: 정본 자산 내용 해시(`_prompt_version` — 실제 아는 값).
+          - `cost_usd`: 로컬 0원 확정 / 클라우드 토큰 미상 None(`actual_cost_usd_or_none`).
+        싱크·조립 예외는 흡수하되 **타입명을 로그에 남긴다**(침묵 실패 금지 —
+        `_record_trace` 동형).
+        """
+        if self._generation_log_sink is None:
+            return
+        try:
+            latency_ms: int | None = None
+            if usage is not None and usage.latency_ms is not None:
+                # 실측 float(ms) → 스키마 계약 int(ms) 반올림(provenance_bridge 동형).
+                latency_ms = int(round(usage.latency_ms))
+            log = GenerationLog(
+                model_name=model_name_for_decision(decision, settings=self._settings),
+                prompt_version=_prompt_version(),
+                seed=seed,  # 실려 나간 값만(클라우드=None 미기록·날조 금지)
+                input_tokens=usage.input_tokens if usage is not None else None,
+                output_tokens=usage.output_tokens if usage is not None else None,
+                # 프롬프트 캐시 2종(EOS-99) — 캐시 개념이 없는 로컬 경로는 provider가 채우지
+                # 않아 None(해당 없음)이고, 클라우드는 응답 usage 실측이 그대로 실린다.
+                cache_read_input_tokens=(
+                    usage.cache_read_input_tokens if usage is not None else None
+                ),
+                cache_creation_input_tokens=(
+                    usage.cache_creation_input_tokens if usage is not None else None
+                ),
+                cost_usd=actual_cost_usd_or_none(decision, usage),
+                latency_ms=latency_ms,
+                success=success,
+                error_detail=error_detail,
+                input_snapshot=self._input_snapshot(spec, prompt),
+                cu_slug=cu_slug,
+            )
+            self._generation_log_sink(log)
+        except Exception as exc:  # noqa: BLE001 — 관측 적재 장애는 저작 배치 비차단(타입명 로그)
+            _LOGGER.warning("동등문제 생성 로그 적재 실패(%s) — 무시하고 계속", type(exc).__name__)
+
     # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
     def _decide_routing(self, spec: EquivalenceSpec) -> RoutingDecision:
         """라우터 결정 + 저작 패밀리 선호 적용(S2-h).
@@ -475,6 +701,11 @@ class LLMEquivalentProblemGenerator:
             reason=f"{decision.reason} → 저작:{self._authoring_family.value}",
             est_latency_ms=decision.est_latency_ms,
             est_cost_krw=decision.est_cost_krw,
+            # 데이터 등급 게이트의 판정·발동 신호는 *승계*한다 — 여기서는 패밀리 축만
+            # 갈아탈 뿐 법적 판정을 다시 하지 않는다. 안 실어 보내면 원본 결정이 게이트에
+            # 막혔다는 사실이 관측에서 조용히 사라진다(발동률 과소집계·EOS-59 ②).
+            data_export_blocked=decision.data_export_blocked,
+            data_export_reason=decision.data_export_reason,
         )
 
     # ── 라우팅 신호 ────────────────────────────────────────────────────
@@ -492,8 +723,12 @@ class LLMEquivalentProblemGenerator:
             difficulty=difficulty,
             requires_reasoning=True,
             student_subscription=self._subscription,
-            budget_krw=_STUDENT_ESCALATION_DEFAULTS.budget_krw,  # 단일 좌석 값(OPS-18·회귀 0)
+            budget_krw=self._budget_krw,  # 기본값=단일 좌석(OPS-18·회귀 0)·호출자 명시 시 override
             sync=True,
+            # 등급: 프롬프트에는 비민감 스펙 요약(성취기준 코드·오개념 id·난이도·답 형태)만
+            # 싣고 원본 본문·풀이는 애초에 스펙에 없다(`_build_user_prompt` 참조) — 실리는
+            # 것은 자체 저작 메타뿐이다. 코퍼스 provenance가 바뀌면 단일 좌석에서 잠긴다.
+            data_licenses=SELF_AUTHORED_CORPUS,
         )
 
     @staticmethod

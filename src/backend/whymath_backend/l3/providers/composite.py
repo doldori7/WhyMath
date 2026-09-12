@@ -53,6 +53,7 @@ class CompositeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         """cost_tier로 로컬↔클라우드 디스패치 (LLMProvider 구현).
 
@@ -65,12 +66,15 @@ class CompositeProvider:
           하위 제공자 책임 — Ollama options·Anthropic API 인자).
         - `json_schema`(S2-j structured output)도 그대로 전달한다(제약 처리·거부는 각 하위
           제공자 책임 — Ollama format= 제약 디코딩·Anthropic 명확한 거부).
+        - `seed`(EOS-73 생성 재현)도 그대로 전달한다(전달·거부는 각 하위 제공자 책임 — Ollama
+          options.seed·Anthropic 명확한 거부). 이 디스패처는 seed를 **삼키지 않는다** — 삼키면
+          클라우드 경로에서 "요청했는데 조용히 무시됨"이 되어 거짓 재현 기록의 문이 열린다.
 
         반환은 위임받은 제공자의 `GenerationResult(text, usage)` *그대로*다(전파) — text는
         검증 전 원시 출력(각 제공자 docstring 경계 메모), usage는 하위 제공자가 포착한 실측.
         """
         cost = _as_cost_tier(decision.cost_tier)
-        # 선택 인자(images·temperature·json_schema)는 *있을 때만* 위임 호출에 싣는다 — 해당
+        # 선택 인자(images·temperature·json_schema·seed)는 *있을 때만* 위임 호출에 싣는다 — 해당
         # 인자 미지원 하위 제공자(기존 구현·가짜)는 인자 없이도 동작(하위호환). 전부 None이면
         # 종전과 동일하게 `target.generate(prompt, system, decision)`로 호출된다.
         target = self._local if cost is CostTier.LOCAL else self._cloud
@@ -88,6 +92,8 @@ class CompositeProvider:
             forward["temperature"] = temperature
         if json_schema is not None:
             forward["json_schema"] = json_schema
+        if seed is not None:
+            forward["seed"] = seed
         return await target.generate(prompt, system, decision, **forward)
 
     async def check_status(self) -> OllamaStatus:

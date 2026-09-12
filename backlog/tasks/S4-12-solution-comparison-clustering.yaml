@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - S4-10-multi-solution-generation
@@ -18,5 +19,5 @@ paths:
   - "src/backend/whymath_backend/whs/**"
   - "src/backend/whymath_backend/l3/**"
 session: null
-notes: "docs/architecture/solution_module_gap_review.md §3 D4 — 외부 EOS 틀(기능 27) 대조(코드 전무 갭). '최적 선택·자동 추천'은 §2-④ 미채택. preferred_solution_style·갤러리 UI는 §4-⑤⑥/Phase 3. 오프라인 리포트 축 — S3-01 비의존(ARCH-17 선례)"
-updated: 2026-07-29
+notes: "docs/architecture/solution_module_gap_review.md §3 D4 — 외부 EOS 틀(기능 27) 대조(코드 전무 갭). '최적 선택·자동 추천'은 §2-④ 미채택. preferred_solution_style·갤러리 UI는 §4-⑤⑥/Phase 3. 오프라인 리포트 축 — S3-01 비의존(ARCH-17 선례)\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

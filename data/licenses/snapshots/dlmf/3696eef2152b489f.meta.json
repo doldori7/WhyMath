@@ -1,0 +1,12 @@
+{
+  "bytes": 24047,
+  "content_type": "text/html",
+  "first_fetched_at": "2026-08-31T00:55:28Z",
+  "first_run_id": "20260831T005458Z-b0b14e",
+  "http_status": 200,
+  "license_label": "US Gov Work (퍼블릭 도메인)",
+  "name_ko": "DLMF",
+  "sha256": "3696eef2152b489fdc4ea11fb48cf97133af8bed69bbb9be27cfcb471c36dd95",
+  "source_id": "dlmf",
+  "url": "https://dlmf.nist.gov/about/notices"
+}

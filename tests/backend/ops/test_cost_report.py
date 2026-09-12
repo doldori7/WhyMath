@@ -418,3 +418,92 @@ def test_fetch_no_read_surface_returns_empty() -> None:
 
     events = cr.fetch_l3_events(days=1, limit=10, client=_NoSurface())  # type: ignore[arg-type]
     assert events == []
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 데이터 등급 게이트 발동률 — Langfuse 측 집계 (EOS-59 ②·관측 보조)
+#
+# 판정치는 `ops.cost_probe`가 in-process로 낸다. 여기서 지키는 것은 세 가지다:
+#   ① 발동/판정 이벤트를 정확히 센다.
+#   ② 판정이 안 실린 이벤트는 분모에서 빠지고 **notes로 경고**된다(조용히 희석 금지).
+#   ③ 판정 0건은 "0% 발동"이 아니라 **측정 불가(None)**다.
+# ══════════════════════════════════════════════════════════════════════
+def test_data_export_counts_and_rate() -> None:
+    events: list[dict[str, object]] = [
+        {
+            "cost_tier": "local",
+            "data_export_blocked": True,
+            "data_export_reason": "EXPORT_PROHIBITED",
+        },
+        {
+            "cost_tier": "local",
+            "data_export_blocked": True,
+            "data_export_reason": "EXPORT_UNVERIFIED",
+        },
+        {
+            "cost_tier": "cloud_mid",
+            "data_export_blocked": False,
+            "data_export_reason": "EXPORT_ALLOWED",
+        },
+        {
+            "cost_tier": "local",
+            "data_export_blocked": False,
+            "data_export_reason": "EXPORT_ALLOWED",
+        },
+    ]
+    report = cr.aggregate_l3_events(events)
+    assert report.data_export_blocked_count == 2
+    assert report.data_export_evaluated == 4
+    assert report.data_export_block_rate == pytest.approx(0.5)
+    assert report.data_export_reason_counts == {
+        "EXPORT_PROHIBITED": 1,
+        "EXPORT_UNVERIFIED": 1,
+        "EXPORT_ALLOWED": 2,
+    }
+
+
+def test_events_without_judgment_are_excluded_and_warned() -> None:
+    """게이트를 거치지 않은 이벤트가 분모를 조용히 희석하지 않는다 — notes가 말한다."""
+    events: list[dict[str, object]] = [
+        {
+            "cost_tier": "local",
+            "data_export_blocked": True,
+            "data_export_reason": "EXPORT_PROHIBITED",
+        },
+        {"cost_tier": "local"},  # 구 이벤트·라우터 미경유
+    ]
+    report = cr.aggregate_l3_events(events)
+    assert report.data_export_evaluated == 1
+    assert report.data_export_block_rate == pytest.approx(1.0)
+    assert any("라우터 게이트를 거치지 않은" in note for note in report.notes)
+
+
+def test_zero_judgment_events_is_unmeasurable_not_zero_percent() -> None:
+    report = cr.aggregate_l3_events([{"cost_tier": "local"}, {"cost_tier": "cloud_mid"}])
+    assert report.data_export_evaluated == 0
+    assert report.data_export_block_rate is None
+    assert any("측정 불가" in note for note in report.notes)
+
+
+def test_render_reports_measurement_failure_instead_of_a_fake_zero() -> None:
+    text = cr._render_stdout(cr.aggregate_l3_events([{"cost_tier": "local"}]))
+    assert "데이터 등급 게이트" in text
+    assert "측정 불가" in text
+
+
+def test_render_shows_block_rate_when_measured() -> None:
+    events: list[dict[str, object]] = [
+        {
+            "cost_tier": "local",
+            "data_export_blocked": True,
+            "data_export_reason": "EXPORT_PROHIBITED",
+        },
+        {
+            "cost_tier": "cloud_mid",
+            "data_export_blocked": False,
+            "data_export_reason": "EXPORT_ALLOWED",
+        },
+    ]
+    text = cr._render_stdout(cr.aggregate_l3_events(events))
+    assert "차단 발동: 1건 / 판정 이벤트 2건" in text
+    assert "발동률 50.0%" in text

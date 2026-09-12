@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 1
+eos_priority: P2
 owner: claude
 depends_on:
   - DP-01-event-storage-adr
@@ -19,5 +20,5 @@ paths:
   - "docs/data/**"
   - "tests/backend/schema/**"
 session: null
-notes: "EOS #84/#85 수정 계획 P0-2. 새 producer보다 먼저 완료해야 하는 개인정보·계약 게이트."
-updated: 2026-08-02
+notes: "EOS #84/#85 수정 계획 P0-2. 새 producer보다 먼저 완료해야 하는 개인정보·계약 게이트.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

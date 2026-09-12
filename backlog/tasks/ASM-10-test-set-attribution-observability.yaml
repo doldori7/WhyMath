@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -23,5 +24,5 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "tests/backend/harness/**"
 session: null
-notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D5. ASM-04가 '세트 시행·채점 폐루프는 범위 밖(구성까지)'이라 스스로 정직하게 자인했으나 후속 소유자가 붙지 않아 무주공산이 됐다(같은 artifacts가 자인한 partial_credit 호출자 0·멱등 창 미설정도 동일). 귀속이 없으면 외부 EOS 틀 모듈 51의 분석 축(문항별 정답률·성취도·교육과정 달성률)이 원천 불가이고 세트 단위 심리측정(신뢰도)도 정의 자체가 불가능하다 — r2 §5-⑦ 발화 조건의 근거."
-updated: 2026-08-11
+notes: "설계 정본 docs/architecture/assessment_module_gap_review_r2.md §3 D5. ASM-04가 '세트 시행·채점 폐루프는 범위 밖(구성까지)'이라 스스로 정직하게 자인했으나 후속 소유자가 붙지 않아 무주공산이 됐다(같은 artifacts가 자인한 partial_credit 호출자 0·멱등 창 미설정도 동일). 귀속이 없으면 외부 EOS 틀 모듈 51의 분석 축(문항별 정답률·성취도·교육과정 달성률)이 원천 불가이고 세트 단위 심리측정(신뢰도)도 정의 자체가 불가능하다 — r2 §5-⑦ 발화 조건의 근거.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

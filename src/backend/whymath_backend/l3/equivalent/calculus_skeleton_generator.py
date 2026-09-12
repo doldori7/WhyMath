@@ -45,7 +45,7 @@ from whymath_backend.l3.equivalent.difficulty import (
     estimate_difficulty_extremum_irrational,
 )
 from whymath_backend.l3.equivalent.generator import CandidateProblem
-from whymath_backend.l3.equivalent.josa import eul_reul
+from whymath_backend.lang.josa import eul_reul
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,

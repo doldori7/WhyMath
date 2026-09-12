@@ -144,6 +144,7 @@ class _ScriptedProvider:
         images: object = None,
         temperature: float | None = None,
         json_schema: object = None,
+        seed: int | None = None,  # EOS-73 계약 정합 — 스크립트 대역이라 시드는 쓰지 않는다
     ) -> GenerationResult:
         if self._index < len(self._responses):
             out = self._responses[self._index]

@@ -13,7 +13,8 @@ Python 네이티브)로 실현한다.
 - **`시각화조작.payload`**(내부)는 조작 종류별로 달라 자유형을 *의도적으로* 유지한다 —
   봉투(interaction·payload·client_at·concept_id·scene_id)만 계약하고 내부는 열어 둔다.
 
-강제 지점: 생산자(`api/coach.py`·`api/interactions.py`)가 `build_event_data`를 경유해 dict를
+강제 지점: 생산자(`api/coach.py`·`api/interactions.py`·`l2/attempt_skill_event.py`)가
+`build_event_data`를 경유해 dict를
 만든다 → extra="forbid" 모델이 stray key를 즉시 거부하므로 produce 좌석에서 드리프트가
 구조적으로 불가능해진다(런타임 재작성·validator·DB 제약 없이 seam 1곳에서 차단).
 """
@@ -232,8 +233,32 @@ class InteractionEventData(_EventPayload):
     scene_id: str | None = Field(default=None, description="조작이 일어난 학습 장면(선택)")
 
 
-# 생산되는 EventType → 페이로드 계약. 이 6종만 코드가 실제로 event_data를 쓴다(S3-16: 막힘·
-# 힌트요청·답입력 3종이 휴면에서 편입).
+class AttemptedEventData(_EventPayload):
+    """`문제시도` 페이로드 — 채점 확정 1건의 비식별 봉투(EOS-57).
+
+    **해소된 스킬 배열은 여기 담기지 않는다** — `attempt_event.skill_ids`(1급 컬럼)가 정본
+    좌석이다. 조인·집계 축을 JSONB에 묻으면 "작동한 비율" 집계가 매번 JSON 파싱이 되고,
+    12월 데이터의 소급 불가 축이 자유형에 섞인다. 이 페이로드는 그 컬럼을 *읽을 때 필요한
+    맥락*(어느 채점 경로에서·어떤 판정으로 나온 기록인가)만 계약한다.
+
+    `source`는 두 채점 경로를 가르는 폐쇄 라벨(`AttemptSource`)이다 — 한쪽 경로에만 writer가
+    배선되면 기록률 리포트가 경로별 분모로 그것을 즉시 드러낸다(한 경로 누락이 전체 평균에
+    희석돼 보이지 않는 것을 막는다). `is_correct`는 채점 결과 불리언(비식별 — 학생 답안 원문은
+    싣지 않는다·S4-19 관측 레코드 규약 동형).
+    """
+
+    is_correct: bool = Field(
+        ..., description="채점 결과(서버 판정 또는 클라 자가보고 — source로 구분)"
+    )
+    source: str = Field(
+        ...,
+        description="채점 경로 라벨(AttemptSource 값: attempt_submit=자가보고 v1 · "
+        "coach_completion=코치 서버검증). 경로별 기록률 분모.",
+    )
+
+
+# 생산되는 EventType → 페이로드 계약. 이 7종만 코드가 실제로 event_data를 쓴다(S3-16: 막힘·
+# 힌트요청·답입력 3종이 휴면에서 편입 · EOS-57: 문제시도 신규 편입).
 EVENT_DATA_CONTRACT: dict[EventType, type[_EventPayload]] = {
     EventType.검산결과: VerifyEventData,
     EventType.힌트제공: HintEventData,
@@ -241,6 +266,7 @@ EVENT_DATA_CONTRACT: dict[EventType, type[_EventPayload]] = {
     EventType.막힘: StuckEventData,
     EventType.힌트요청: DemandEventData,
     EventType.답입력: ResponseLatencyEventData,
+    EventType.문제시도: AttemptedEventData,
 }
 
 # 휴면(생산자 0) EventType — 페이로드 모양 미지라 계약에서 *의도적으로* 제외(premature 회피).

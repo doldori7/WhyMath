@@ -14,13 +14,19 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
+from _external_store_evidence import (
+    KNOWN_UNDEPLOYED_STORES,
+    assert_manifest_stores_are_deployed,
+)
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from whymath_backend.config import Settings
-from whymath_backend.db.models.activity import AttemptEvent
+from whymath_backend.db.models.activity import AttemptEvent, ProblemAttempt
+from whymath_backend.db.models.answer_submission import AnswerSubmission
 from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
+from whymath_backend.db.models.student_solution_step import StudentSolutionStep
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.privacy.export import (
     ExternalDataLocation,
@@ -50,6 +56,9 @@ _CATEGORIES = {
     "user_behavior_metrics",
     "dialogues",
     "attempt_events",
+    "answer_submissions",
+    "hint_usages",
+    "student_solution_steps",
     "dialogue_turns",
 }
 
@@ -145,19 +154,53 @@ def _run(session: _FakeSession, user_id: uuid.UUID) -> UserDataExport:
     return asyncio.run(export_user_data(cast(AsyncSession, session), user_id=user_id))
 
 
+# SEC-31: `problem_attempts`·`answer_submissions`·`student_solution_steps`는 이제 `_row_to_json`
+# (→ `_StubRow.to_schema()`)이 아니라 `_student_work_row_json`이 처리한다 — 그 함수는
+# `sa.inspect(type(row))`로 *실제* ORM 매퍼를 읽으므로 `_StubRow`(가짜 타입)로는 대체할 수 없다
+# (KeyError — `_STUDENT_WORK_MODELS`에 없는 타입). 그래서 이 세 카테고리만 실제 ORM 인스턴스를
+# 쓴다(암호화 컬럼 미설정 — cipher None 평문 passthrough이므로 `.to_schema()`와 동일 결과가
+# 기대값이 된다).
+_PA_ROW = ProblemAttempt(
+    attempt_id=uuid.UUID("00000000-0000-0000-0000-0000000000a1"),
+    user_id=uuid.UUID("00000000-0000-0000-0000-0000000000a2"),
+    is_correct=True,
+    student_answer="pa 원문",
+    # server_default('[]'::jsonb)는 실제 flush를 거쳐야 채워진다 — 이 행은 실 DB를 거치지 않는
+    # 순수 Python 인스턴스라 명시로 채운다(schema가 필수 list라 None이면 ValidationError).
+    step_times=[],
+)
+_ASB_ROW = AnswerSubmission(
+    submission_id=uuid.UUID("00000000-0000-0000-0000-0000000000b1"),
+    attempt_id=uuid.UUID("00000000-0000-0000-0000-0000000000b2"),
+    user_id=uuid.UUID("00000000-0000-0000-0000-0000000000b3"),
+    sequence_no=1,
+    response_type="text",
+    raw_response="asb 원문",
+)
+_SSS_ROW = StudentSolutionStep(
+    student_step_id=uuid.UUID("00000000-0000-0000-0000-0000000000c1"),
+    attempt_id=uuid.UUID("00000000-0000-0000-0000-0000000000c2"),
+    user_id=uuid.UUID("00000000-0000-0000-0000-0000000000c3"),
+    sequence_no=1,
+    expression="sss 원문",
+    concept_ids=[],  # server_default 미적용(순수 Python 인스턴스) — schema 필수 list라 명시.
+)
+
+
 class TestExportUserData:
     def test_assembles_categories_and_profile(self) -> None:
-        """17종 카테고리(+대화 턴 조인) 직렬화 + user_profile 단건 + exported_at + 읽기 전용."""
+        """20종 카테고리(+대화 턴 조인) 직렬화 + user_profile 단건 + exported_at + 읽기 전용."""
         uid = uuid.uuid4()
-        # _EXPORT_PLAN(16) + dialogue_turns 조인(1) + profile(1) = 18 execute. learning_sessions
+        # _EXPORT_PLAN(19) + dialogue_turns 조인(1) + profile(1) = 21 execute. learning_sessions
         # (0)·skill_mastery_history(4·Phase 2b-2 신규)·ability_snapshots(5)·parental_consents(6)·
         # misconception_hypotheses(10)·misconception_evidence(11)·daily_learning_metrics(12)·
-        # user_behavior_metrics(13)·dialogues(14)·attempt_events(15)·dialogue_turns(16)에 구분 행,
+        # user_behavior_metrics(13)·dialogues(14)·attempt_events(15)·answer_submissions(16·EOS-32)·
+        # hint_usages(17·EOS-45)·student_solution_steps(18·EOS-46)·dialogue_turns(19)에 구분 행,
         # 나머지 빈, 마지막 profile.
         fake = _FakeSession(
             [
                 [_StubRow({"cat": "ls"})],
-                [],
+                [_PA_ROW],  # problem_attempts(SEC-31 — 실 ORM 인스턴스, 암호화 복호 표면)
                 [],
                 [],
                 [],  # skill_mastery_history(Phase 2b-2·빈 구간)
@@ -172,6 +215,11 @@ class TestExportUserData:
                 [_StubRow({"cat": "ubm"})],
                 [_StubRow({"cat": "dlg"})],
                 [_StubRow({"cat": "aev"})],
+                # answer_submissions(EOS-32·SEC-31 — 실 ORM 인스턴스, 암호화 복호 표면)
+                [_ASB_ROW],
+                [_StubRow({"cat": "hus"})],  # hint_usages(EOS-45·힌트 사용 이력)
+                # student_solution_steps(EOS-46·SEC-31 — 실 ORM 인스턴스, 암호화 복호 표면)
+                [_SSS_ROW],
                 [
                     _StubRow(
                         {"cat": "dlt", "content": "평문 본문", "image_uri": "s3://x/h.png"},
@@ -187,6 +235,9 @@ class TestExportUserData:
         assert isinstance(out.exported_at, datetime)
         assert set(out.data.keys()) == _CATEGORIES
         assert out.data["learning_sessions"] == [{"cat": "ls"}]
+        # SEC-31: 암호화 컬럼 미설정(cipher None)이라 복호는 평문 passthrough — 결과는
+        # `.to_schema().model_dump(mode="json")`와 동일해야 한다(같은 인스턴스로 기대값 계산).
+        assert out.data["problem_attempts"] == [_PA_ROW.to_schema().model_dump(mode="json")]
         assert out.data["ability_snapshots"] == [{"cat": "ab"}]
         assert out.data["parental_consents"] == [{"cat": "pc"}]  # 증분 2 신규 카테고리
         assert out.data["misconception_hypotheses"] == [{"cat": "mh"}]  # 증분 3
@@ -195,6 +246,11 @@ class TestExportUserData:
         assert out.data["user_behavior_metrics"] == [{"cat": "ubm"}]  # 증분 4 신규
         assert out.data["dialogues"] == [{"cat": "dlg"}]  # 증분 5 신규(대화 세션 메타)
         assert out.data["attempt_events"] == [{"cat": "aev"}]  # 증분 7 신규(세부 시도 이벤트)
+        # EOS-32(답 제출 시퀀스)·SEC-31(암호화 복호 — cipher None 평문 passthrough)
+        assert out.data["answer_submissions"] == [_ASB_ROW.to_schema().model_dump(mode="json")]
+        assert out.data["hint_usages"] == [{"cat": "hus"}]  # EOS-45(힌트 사용 이력)
+        # EOS-46(풀이 step)·SEC-31(암호화 복호 — cipher None 평문 passthrough)
+        assert out.data["student_solution_steps"] == [_SSS_ROW.to_schema().model_dump(mode="json")]
         # 증분 6(대화 턴 본문·조인) + 감사상환 #2: 키 미설정이라 평문 passthrough 복호.
         # SEC-01: image_uri·image_analysis도 복호 표면에 올라 export에 실린다(이미지 없으면 None).
         assert out.data["dialogue_turns"] == [
@@ -208,11 +264,11 @@ class TestExportUserData:
         assert out.user_profile == {"cat": "profile"}
         assert len(out.not_included) >= 1  # 부분 export 정직 고지
         assert fake.commits == 0 and fake.flushes == 0  # 읽기 전용(저장소 패턴)
-        assert len(fake.executed) == 18
+        assert len(fake.executed) == 21
 
     def test_no_profile_yields_none(self) -> None:
         """프로필 행이 없으면 user_profile=None·각 카테고리 빈 리스트."""
-        fake = _FakeSession([[] for _ in range(18)])
+        fake = _FakeSession([[] for _ in range(21)])
         out = _run(fake, uuid.uuid4())
         assert out.user_profile is None
         assert all(rows == [] for rows in out.data.values())
@@ -220,19 +276,42 @@ class TestExportUserData:
 
     def test_multiple_rows_preserved(self) -> None:
         """카테고리당 다행 직렬화 보존(리스트 순서)."""
-        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 17)])
+        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 20)])
         out = _run(fake, uuid.uuid4())
         assert out.data["learning_sessions"] == [{"n": 1}, {"n": 2}]
 
 
 class TestExternalExportPending:
-    def test_three_stores_with_user_locator(self) -> None:
-        """ClickHouse·S3·Redis 3종·각 locator에 user_id 포함."""
+    """미포함 범위 고지의 진실성 — 선언한 store가 실재해야 한다(SEC-32·삭제권 매니페스트와 동형).
+
+    하드코딩 집합(`{"clickhouse","s3","redis"}`) 대신 배포 근거 대조로 바꾼다. 열람권 쪽이
+    삭제권 쪽보다 느슨하면 안 된다 — 같은 사실("데이터가 밖 어디에 있는가")을 두 권리가
+    서로 다르게 고지하게 된다.
+    """
+
+    def test_declared_stores_are_actually_deployed(self) -> None:
+        """선언된 store 전부에 배포 근거가 있고, 각 locator가 그 user를 가리킨다."""
         uid = uuid.uuid4()
         pending = external_export_pending(uid)
-        assert {t.store for t in pending} == {"clickhouse", "s3", "redis"}
+        assert_manifest_stores_are_deployed(
+            (t.store for t in pending), source="external_export_pending"
+        )
         assert all(str(uid) in t.locator for t in pending)
         assert all(isinstance(t, ExternalDataLocation) for t in pending)
+
+    def test_undeployed_stores_are_not_declared(self) -> None:
+        """미도입 store(ClickHouse·S3)는 미포함 고지에도 등장하지 않는다."""
+        declared = {t.store for t in external_export_pending(uuid.uuid4())}
+        assert not declared & set(KNOWN_UNDEPLOYED_STORES)
+
+    def test_mirrors_erasure_manifest_stores(self) -> None:
+        """삭제권 매니페스트와 *같은 store 집합*이다 — 한쪽만 고치면 두 고지가 모순된다."""
+        from whymath_backend.privacy.erasure import external_erasure_targets
+
+        uid = uuid.uuid4()
+        assert {t.store for t in external_export_pending(uid)} == {
+            t.store for t in external_erasure_targets(uid)
+        }
 
     def test_frozen(self) -> None:
         """ExternalDataLocation은 frozen(불변)."""

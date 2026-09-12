@@ -166,3 +166,82 @@ def test_generation_log_roundtrip() -> None:
     assert back.model_name == s.model_name
     assert back.input_tokens == s.input_tokens
     assert back.success is True
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 5) EOS-55 재현 좌석 — DDL·roundtrip·복원 계약 (acceptance ①·②의 영속측)
+# ──────────────────────────────────────────────────────────────────────────
+def test_generation_log_ddl_reproducibility_seats() -> None:
+    """재현 좌석 5컬럼(prompt_version·seed·input_sha256·input_snapshot·cu_slug) DDL 계약.
+
+    전부 nullable(구 행 NULL=미기록)·server_default 없음(날조 금지) — alembic
+    f4b2d8c1a3e5와 1:1(cu_slug는 #912 P1-2 보강).
+    """
+    table = OrmGenerationLog.__table__
+    ddl = _pg_ddl(table)
+    assert "prompt_version VARCHAR(128)" in ddl
+    assert "seed BIGINT" in ddl
+    assert "input_sha256 VARCHAR(64)" in ddl
+    assert "input_snapshot JSONB" in ddl
+    assert "cu_slug VARCHAR(128)" in ddl
+    for name in ("prompt_version", "seed", "input_sha256", "input_snapshot", "cu_slug"):
+        column = table.c[name]
+        assert column.nullable, f"{name}은 nullable이어야 한다(구 행 NULL=미기록)"
+        assert column.server_default is None, f"{name}에 server_default 금지(날조 금지)"
+
+
+def test_generation_log_reproducibility_roundtrip_and_restore() -> None:
+    """재현 필드 schema↔ORM 왕복 보존 + **왕복한 레코드만으로 입력 복원**(재현 계약 영속측).
+
+    to_schema는 model_validate를 다시 지나므로 스냅샷↔해시 봉인도 재통과한다 — DB에서
+    읽은 레코드가 복원 가능함을 동결한다(EOS-55 acceptance ②).
+    """
+    from whymath_backend.schema.provenance import (
+        input_snapshot_sha256,
+        restore_input_snapshot,
+    )
+
+    snapshot = {
+        "kind": "l3.pregenerate.prewarm",
+        # 전문(verbatim) + sha256 병기 — 스냅샷 자기완결(#912 P1-1). 해시만으로는 입력을
+        # 재구성할 수 없으므로 DB 왕복 후에도 전문이 그대로 나와야 재현 계약이 성립한다.
+        "prompt": "이차방정식 x^2-5x+6=0의 큰 근은?",
+        "system": "간결히 답하라.",
+        "prompt_sha256": "a" * 64,
+        "system_sha256": "b" * 64,
+        "request": {"task_type": "explain", "difficulty": "easy", "sync": True},
+    }
+    s = SchemaGenerationLog(
+        model_name="qwen2-math:1.5b",
+        prompt_version="l3.equivalent@sha256:abc123def456",
+        seed=None,  # 현행 경로 seed 미사용(실측) — NULL=미기록
+        input_snapshot=snapshot,
+        cu_slug="wm-gen-quad-abc123def456",  # CU 조인 정체성(#912 P1-2)
+    )
+    assert s.input_sha256 == input_snapshot_sha256(snapshot)  # 쓰기측 자동 봉인
+
+    orm = OrmGenerationLog.from_schema(s)
+    assert orm.prompt_version == "l3.equivalent@sha256:abc123def456"
+    assert orm.seed is None
+    assert orm.input_sha256 == s.input_sha256
+    assert orm.input_snapshot == snapshot
+    assert orm.cu_slug == "wm-gen-quad-abc123def456"
+
+    back = orm.to_schema()  # 무결성 validator 재통과(예외 없이 복원)
+    assert back.prompt_version == s.prompt_version
+    assert back.seed is None
+    assert back.input_sha256 == s.input_sha256
+    assert back.cu_slug == "wm-gen-quad-abc123def456"
+    # 재현 계약 본체: 왕복한 레코드만 보고 동일 입력 복원 + 해시 재계산 일치 + **전문 복원**.
+    restored = restore_input_snapshot(back)
+    assert restored == snapshot
+    assert input_snapshot_sha256(restored) == back.input_sha256
+    assert restored["prompt"] == "이차방정식 x^2-5x+6=0의 큰 근은?"  # 재투입 가능 전문
+
+
+def test_generation_log_seed_roundtrip_when_used() -> None:
+    """seed가 *실제로 쓰인* 미래 경로의 값 왕복 — 좌석 실재 계약(int64 폭)."""
+    s = SchemaGenerationLog(model_name="qwen2.5:7b", seed=2**53 + 7)
+    orm = OrmGenerationLog.from_schema(s)
+    assert orm.seed == 2**53 + 7
+    assert orm.to_schema().seed == 2**53 + 7

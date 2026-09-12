@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P1
 owner: claude
 depends_on:
   - S4-53
@@ -17,5 +18,5 @@ paths:
   - src/backend/whymath_backend/l3/statistical_claim.py
   - docs/architecture/verifier_v2_design.md
 session: null
-notes: "Codex #4/#5: 정확값·허용오차 정책, Decimal/정확분수 도입. 현재 float 비교(rel_tol=1e-9)는 대값 왜곡과 정수 데이터 정밀도 손실 가능."
-updated: 2026-08-25
+notes: "Codex #4/#5: 정확값·허용오차 정책, Decimal/정확분수 도입. 현재 float 비교(rel_tol=1e-9)는 대값 왜곡과 정수 데이터 정밀도 손실 가능.\n\n[정정 2026-09-01] eos_priority null → P1: 판정표 R/A3 — 12월 검증 관여(KPI·계약·앵커 자산). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -18,11 +18,14 @@ acceptance:
   - "⑤ 대장 무결성 — PostToolUse 훅·validate가 amend 산출 YAML을 정상으로 판정하는지, 그리고 amend가 status·session·artifacts 등 다른 필드를 건드리지 않는지 동결"
   - "⑥ CI 배선 실재성 — 신규 테스트가 tests/harness 잡에서 실제로 실행되는지 확인(OPS-10·OPS-12)"
   - "⑦ 범위 밖 — 태스크 삭제·ID 변경·acceptance 항목 개별 제거는 열지 않는다(대장 손편집 우회 표면이 된다). cancel+재등재 우회를 정본 경로로 승격하지도 않는다 — 그것은 태스크 ID 계보를 끊는다"
-artifacts: []
+artifacts:
+  - "PR #916 (https://github.com/doldori7/WhyMath/pull/916) — amend verb + 테스트 15건 + 뮤테이션 5종 검출 + ADMIN-02 실피해 상환"
+  - scripts/harness/backlog.py cmd_amend
+  - tests/harness/test_amend_cli.py
 paths:
   - scripts/harness/backlog.py
   - "tests/harness/*"
   - docs/standards/build_harness.md
 session: null
 notes: "docs/architecture/operations_platform_gap_review_r2.md §4 D8. operations_platform_gap_review.md §독립검증 ③이 이 공백을 정확히 예견하고 '실사례 1건(그것도 우회 성립)뿐이라 설계 근거가 얇다'며 등재를 미뤘는데, 2번째 사례가 발생했고 이번엔 우회가 실패했다. 일반형: '문서가 소유자'라는 우회는 착수 세션이 그 문서를 읽을 때만 성립한다 — 태스크 YAML은 반드시 읽히지만 참조 문서는 선택이다. 반복 실수 11회차(정정이 대장에 도달하지 못해 정정 전 지시가 그대로 집행됨)의 코드 축 대책."
-updated: 2026-08-11
+updated: 2026-08-31

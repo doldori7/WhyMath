@@ -7,6 +7,7 @@ subject: social
 layer: data-pipeline
 status: todo
 priority: 1
+eos_priority: P3
 owner: claude
 depends_on:
   - E3-01-biology-pack
@@ -21,5 +22,5 @@ paths:
   - "docs/data/**"
   - "tests/data_pipeline/**"
 session: null
-notes: "경제학·역사·세계사는 이 팩의 하위 코퍼스 (subject 세분: economics/history/world-history)"
-updated: 2026-07-08
+notes: "경제학·역사·세계사는 이 팩의 하위 코퍼스 (subject 세분: economics/history/world-history)\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

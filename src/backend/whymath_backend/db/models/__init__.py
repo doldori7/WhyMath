@@ -10,6 +10,9 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 도메인8 Provenance (§10.1): ContentProvenance·GenerationLog.
   - 도메인3 User (§5.1·§5.2): UserProfile·UserTrackHistory·UserPersonaHistory·UserStateSnapshot.
   - 도메인4 Activity (§6.1): LearningSession·ProblemAttempt·AttemptEvent.
+  - EOS-32 AnswerSubmission (attempt 내 다회 제출 시퀀스 정규화 — 32_learning_history §4).
+  - EOS-45 HintUsage (힌트 횟수·레벨·열람시간 1급 데이터화 — used_hint 병행·32 §4).
+  - EOS-46 StudentSolutionStep (학생 풀이 step 정규 기록 — ADR-002·WH-S SolutionNode와 무관).
   - 도메인5 Dialogue (§7.1): Dialogue·DialogueTurn.
   - 도메인6 Assessment (§8.1): Assessment·ConceptMasteryHistory.
   - 도메인7 TimeSeries (§9.1): DailyLearningMetrics·ProblemSolveTimeDistribution·
@@ -44,6 +47,7 @@ from whymath_backend.db.models.activity import (
     LearningSession,
     ProblemAttempt,
 )
+from whymath_backend.db.models.answer_submission import AnswerSubmission
 from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
@@ -90,6 +94,8 @@ from whymath_backend.db.models.formula_node import (
     FORMULA_REVIEW_STATUS_DEFAULT,
     FormulaNode,
 )
+from whymath_backend.db.models.hint_usage import HintUsage
+from whymath_backend.db.models.job_ownership import JobOwnership
 from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 from whymath_backend.db.models.misconception_crosslink import MisconceptionCrosslink
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
@@ -120,6 +126,7 @@ from whymath_backend.db.models.provenance import (
     GenerationLog,
 )
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
+from whymath_backend.db.models.review_timer_event import ReviewTimerEvent
 from whymath_backend.db.models.rights import (
     ContentRightsLink,
     ContentSourceLink,
@@ -141,6 +148,7 @@ from whymath_backend.db.models.strategy_node import (
     STRATEGY_REVIEW_STATUS_DEFAULT,
     StrategyNode,
 )
+from whymath_backend.db.models.student_solution_step import StudentSolutionStep
 from whymath_backend.db.models.textbook_mapping import (
     TextbookMapping,
     TextbookUnit,
@@ -184,6 +192,14 @@ __all__ = [
     "LearningSession",
     "ProblemAttempt",
     "AttemptEvent",
+    # EOS-32: AnswerSubmission (attempt 내 다회 제출 시퀀스 정규화 — evidence_links 1급 입력)
+    "AnswerSubmission",
+    # EOS-45: HintUsage (힌트 횟수·레벨·열람시간 1급 데이터화 — used_hint 병행·hint_rate 원천)
+    "HintUsage",
+    # EOS-46: StudentSolutionStep (학생 풀이 step 정규 기록 — ADR-002·WH-S SolutionNode와 무관)
+    "StudentSolutionStep",
+    # EOS-54: ReviewTimerEvent (HIT 검수 타이머 이벤트 — 검수자 텔레메트리·학생 축 없음)
+    "ReviewTimerEvent",
     # 도메인5 Dialogue
     "Dialogue",
     "DialogueTurn",
@@ -294,4 +310,6 @@ __all__ = [
     # CUR-07: AchievementLevelUnit (단원 단위 성취수준 등급 커버리지·자연키(school_level,subject,
     # unit)·FK 없음 — 개별 성취기준 연결은 실측 근거 부족으로 범위 밖)
     "AchievementLevelUnit",
+    # SEC-27: JobOwnership (비동기 QUALITY 작업 소유권·job_id(String) PK = Celery 태스크 id)
+    "JobOwnership",
 ]

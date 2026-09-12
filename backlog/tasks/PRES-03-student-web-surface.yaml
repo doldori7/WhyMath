@@ -7,6 +7,7 @@ subject: cross
 layer: backend
 status: todo
 priority: 5
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -18,5 +19,5 @@ paths:
   - docs/architecture/05_interaction.md
   - docs/architecture/06_application_modes.md
 session: null
-notes: "2026-08-12 표출 분석 P2-8. 표현≠의미 원칙상 코어는 UI-agnostic이라 기술 장벽은 없고, 결정은 제품 채널 전략 축. 슬라이스 85→86→89에서 '웹 1급'까지 갔다가 패드 중심으로 역전된 경위(MEMORY.md:180-184)를 판정 자료로 첨부"
-updated: 2026-08-13
+notes: "2026-08-12 표출 분석 P2-8. 표현≠의미 원칙상 코어는 UI-agnostic이라 기술 장벽은 없고, 결정은 제품 채널 전략 축. 슬라이스 85→86→89에서 '웹 1급'까지 갔다가 패드 중심으로 역전된 경위(MEMORY.md:180-184)를 판정 자료로 첨부\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

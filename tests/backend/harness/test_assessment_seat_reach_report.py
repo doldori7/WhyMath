@@ -37,6 +37,7 @@ def _counts(
     type_counts: dict[str, int] | None = None,
     concept_diagnosis_nonempty: int = 0,
     recommended_path_nonempty: int = 0,
+    strong_points_nonempty: int = 0,
 ) -> asrr.SeatCounts:
     return asrr.SeatCounts(
         table_row_counts={
@@ -48,6 +49,7 @@ def _counts(
         assessment_type_counts=type_counts or {},
         concept_diagnosis_nonempty_count=concept_diagnosis_nonempty,
         recommended_path_nonempty_count=recommended_path_nonempty,
+        strong_points_nonempty_count=strong_points_nonempty,
     )
 
 
@@ -93,10 +95,11 @@ def test_all_four_tables_report_uncalled_writer_when_empty() -> None:
 
 
 def test_writer_citations_anchor_measured_code_paths() -> None:
-    """인용 문자열이 2026-08-10 실측 앵커(핸들러·경로·행 번호)를 담는지 동결 — 드리프트 감시.
+    """인용 문자열이 실측 앵커(핸들러·경로·행 번호)를 담는지 동결 — 드리프트 감시.
 
-    기존 ability_snapshot 인용(api/me.py:965)도 드리프트해 :1030으로 재실측 정정됐다 — 이
-    테스트가 다음 드리프트 때 같은 방식의 재실측 갱신을 강제한다.
+    기존 ability_snapshot 인용(api/me.py:965)도 드리프트해 :1030으로 재실측 정정됐고,
+    EOS-57(2026-09-01)에서 5개 인용이 다시 전부 드리프트한 것을 재실측 갱신했다
+    (738→759·743→764·1030→1064) — 이 테스트가 그 갱신을 강제하는 장치다.
     """
     report = asrr.build_report(_counts())
     cmh = _seat(report, "concept_mastery_history").writer_citation
@@ -104,13 +107,13 @@ def test_writer_citations_anchor_measured_code_paths() -> None:
     asm = _seat(report, "assessment").writer_citation
     abs_ = _seat(report, "ability_snapshot").writer_citation
     assert cmh is not None and "record_problem_attempt_mastery" in cmh
-    assert cmh is not None and "api/me.py:738" in cmh
+    assert cmh is not None and "api/me.py:759" in cmh
     assert smh is not None and "record_problem_attempt_skill_mastery" in smh
-    assert smh is not None and "api/me.py:743" in smh
+    assert smh is not None and "api/me.py:764" in smh
     assert asm is not None and "capture_measurement_assessment" in asm
     assert asm is not None and "assemble_blueprint_assessment" in asm
     assert abs_ is not None and "capture_ability_snapshot" in abs_
-    assert abs_ is not None and "api/me.py:1030" in abs_
+    assert abs_ is not None and "api/me.py:1064" in abs_
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -193,6 +196,15 @@ def test_concept_diagnosis_and_recommended_path_nonempty_counts_pass_through() -
     assert "2" in rendered
     assert "concept_diagnosis" in rendered
     assert "recommended_path" in rendered
+
+
+def test_strong_points_nonempty_count_passes_through() -> None:
+    """ASM-13 — `strong_points`(강점 개념) writer 착지의 채운 비율 가시화 동결."""
+    report = asrr.build_report(_counts(strong_points_nonempty=4))
+    assert report.strong_points_nonempty_count == 4
+    rendered = asrr.render_report(report)
+    assert "strong_points" in rendered
+    assert "4" in rendered
 
 
 # ──────────────────────────────────────────────────────────────────────────

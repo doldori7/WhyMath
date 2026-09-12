@@ -60,6 +60,7 @@ from whymath_backend.harness.wh1_loop import (
     TurnState,
     VerifyStepAction,
 )
+from whymath_backend.l3.data_grade_defaults import SELF_AUTHORED_CORPUS
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.router import Router
@@ -370,6 +371,10 @@ class LLMTutorPolicy:
             requires_reasoning=False,
             student_subscription=self._subscription,
             sync=True,
+            # 등급: 이 프롬프트는 *구조화된 튜터링 상태 요약*이다 — `_build_state_prompt`가
+            # "학생 원문/정답 미포함"을 계약으로 못박고 있어(같은 파일) 학생 저작물이 실리지
+            # 않는다. 실리는 것은 우리 시스템이 만든 상태 JSON뿐 → 자체 저작(EOS-59).
+            data_licenses=SELF_AUTHORED_CORPUS,
         )
 
     # ── 파싱·매핑 ──────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/l3/visualization.py
   - "tests/backend/l3/*"
 session: null
-notes: "visualization_module_gap_review.md §8.4 — l3/visualization.py:14-16 자기 예고(「SymPy 검증은 후속」) 중 유일하게 남은 항(타입별 typed spec은 VIZ-03~06으로 착륙). OCR 축(l5/ocr/verify.py)은 SymPy 검산 실사용·시각화 축만 0인 비대칭. CLAUDE.md 「LLM 응답을 검증 없이 학생에게 제공 금지 — PRM 또는 도구 검증 필수」 압력이 근거. SymPy는 이미 프로젝트 표준 의존성이라 신규 의존 0."
-updated: 2026-08-10
+notes: "visualization_module_gap_review.md §8.4 — l3/visualization.py:14-16 자기 예고(「SymPy 검증은 후속」) 중 유일하게 남은 항(타입별 typed spec은 VIZ-03~06으로 착륙). OCR 축(l5/ocr/verify.py)은 SymPy 검산 실사용·시각화 축만 0인 비대칭. CLAUDE.md 「LLM 응답을 검증 없이 학생에게 제공 금지 — PRM 또는 도구 검증 필수」 압력이 근거. SymPy는 이미 프로젝트 표준 의존성이라 신규 의존 0.\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

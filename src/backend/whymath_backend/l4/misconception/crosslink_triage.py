@@ -59,6 +59,12 @@ __all__ = [
 
 # 4버킷 — auto_reject(기계 거부 가능)·corroborated(구조 신호 긍정)·thin_disagree·no_signal.
 TriageBucket = Literal["auto_reject", "corroborated", "thin_disagree", "no_signal"]
+_BUCKETS: tuple[TriageBucket, ...] = (
+    "auto_reject",
+    "corroborated",
+    "thin_disagree",
+    "no_signal",
+)
 
 # 링크 유형 우선순위 — 직접매핑을 인간 검토 앞에 둔다(신뢰 밴드 순).
 _LINK_TYPE_RANK: dict[str, int] = {"직접매핑": 0, "부분매핑": 1, "개념겹침": 2}
@@ -207,7 +213,7 @@ def _report_json(report: TriageReport) -> dict[str, object]:
                 }
                 for c in report.bucket(bucket)
             ]
-            for bucket in ("auto_reject", "corroborated", "thin_disagree", "no_signal")
+            for bucket in _BUCKETS
         },
     }
 

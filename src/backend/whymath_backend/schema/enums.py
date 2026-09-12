@@ -698,17 +698,44 @@ class DerivationType(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 검수 상태 (§3.1 review_status_enum 주석: pending/approved/rejected)
+# 검수 상태 (§3.1 review_status_enum 주석 3종 + quarantined — EOS-71)
 # ──────────────────────────────────────────────────────────────────────────
 class ReviewStatus(str, Enum):
-    """검수 상태 — §3.1 `review_status_enum` 주석(pending/approved/rejected).
+    """검수 상태 — §3.1 `review_status_enum` 주석 3종(pending/approved/rejected) + `quarantined`.
 
     §13.3: 모든 `problem`은 `review_status = approved` 후 노출.
+
+    `quarantined`는 v1.0 DDL 주석 *이후*에 더한 **운영 확장**(EOS-71)이다 — `EventType`이 §6.1
+    주석 8종에 검산결과·힌트제공·시각화조작·문제시도를 더한 것과 같은 방식으로, 스펙 스냅샷
+    (`schemas/v1.0/schema_v1.0.md`)은 원안 그대로 두고 확장은 이 docstring이 정본으로 이고 간다.
+
+    **격리는 삭제가 아니다(비파괴 원칙 — EOS-71 핵심)**: `quarantined`로 표시된 문항은 `problem`
+    레코드도, 그 문항에 딸린 `problem_attempt` 학습 기록도 **그대로 보존**한다. 끊는 것은 *노출*
+    뿐이다. 이 상태값이 없던 시기에 실중복 9건이 코퍼스 JSONL에서 **물리 제거**된 선례가 있고
+    (`docs/data/problem_duplicate_disposition_2026-08.md` §3 — "감사 도구는 review_status를
+    필터하지 않는다"가 제거의 직접 근거였다), 이 값은 그 파괴적 처분의 구조화된 대안이다.
+
+    계약 정본: `docs/standards/problem_quarantine_contract.md`.
     """
 
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+
+    quarantined = "quarantined"
+    """운영 중 **사후 결함 판정으로 회수**된 문항 — 레코드·학습 기록 보존, 노출만 차단(EOS-71).
+
+    `rejected`와 **절대 합치지 않는다**:
+      · `rejected` = *애초에 승인받지 못한* 문항. 검수 기준 미달로 판정됐고 학생에게 서빙된 적이
+        없다 — "들여보내지 않았다".
+      · `quarantined` = *한때 `approved`로 서빙되던* 문항의 사후 결함 판정(정답 오류·복수 정답·
+        모호 문장·실중복 등)에 따른 회수 — "들여보냈다가 되돌렸다".
+    합치면 "학생이 이미 풀어 본 결함 문항"과 "한 번도 나간 적 없는 탈락 문항"이 같은 글자가 되어,
+    딸린 `problem_attempt`를 재채점·θ 재계산 대상으로 볼지 사후에 구분할 수 없게 된다.
+
+    격리 사유·시각은 `problem.quarantine_reason`·`quarantined_at`에 **함께** 기록한다(계약 §3 —
+    상태값만 있고 사유가 없으면 "왜 회수됐는가"가 사람 기억에만 남아 해제 판단도 불가능해진다).
+    """
 
 
 def is_review_status_cleared(value: ReviewStatus | str | None) -> bool:
@@ -741,6 +768,40 @@ def is_review_status_cleared(value: ReviewStatus | str | None) -> bool:
       `approved`이면 True, 그 외 전부 False.
     """
     return value == ReviewStatus.approved
+
+
+def is_review_status_quarantined(value: ReviewStatus | str | None) -> bool:
+    """격리 여부의 **값 수준 단일 권위**(EOS-71) — `quarantined`만 True.
+
+    **왜 `is_review_status_cleared`와 합치지 않는가**(두 술어를 나란히 두는 이유):
+    `is_review_status_cleared`는 "`approved`만 통과"라 *검수 통과를 요구하는* 표면에만 쓸 수 있다.
+    그런데 `api/problems.py`의 공개 카탈로그 GET 4종(단건·목록·steps·relations)은 **검수 통과를
+    요구하지 않는 표면**이다 — 지금도 `pending`·`None` 문항이 그대로 나간다(SEC-07 D1의 공개
+    카탈로그 결정). 거기에 `is_review_status_cleared`를 걸면 노출 정책이 "카탈로그 전체 공개"에서
+    "승인분만 공개"로 바뀌는 **정책 변경**이 되고 현 클라·데모 경로를 광범위하게 깨뜨린다(EOS-71
+    범위 밖 — 격리 계약 §7). 그래서 그 표면에서는 *격리만 확실히 차단*하는 이 술어를 쓴다.
+
+    두 술어는 **방향이 다르다**:
+      · `is_review_status_cleared` — **허용 목록**(approved만 True). 새 상태값이 생기면 자동 배제.
+      · `is_review_status_quarantined` — **단일 값 지목**(quarantined만 True). 새 상태값이 생겨도
+        이 술어는 그 값을 격리로 보지 않는다.
+    따라서 이 술어는 `is_review_status_cleared`를 **대체하지 않는다**. 검수 통과를 요구하는 표면
+    (L6 6모드·blueprint 조립·기본 CAT 후보 풀·빌드타임 상속 필터)은 계속 `is_review_status_cleared`
+    를 쓰고, 거기서는 `quarantined`가 "approved가 아니다"라는 이유로 *이미* 차단된다 — fail-closed
+    허용목록이 새 값을 공짜로 처리한다. 이 술어가 필요한 곳은 승인을 요구하지 않는 공개 표면뿐이다.
+
+    `ReviewStatus`가 `str, Enum`이라 이 한 줄이 enum 멤버와 문자열 양쪽을 올바르게 판정한다
+    (`is_review_status_cleared`와 동일). **관대한 정규화는 하지 않는다** — `"QUARANTINED"`·
+    `"quarantined "`는 False다. 관대하게 받으면 Python 술어는 격리로 보는데 SQL 술어
+    (`api/problems.py::quarantine_exclusion_condition`)는 아닌 값이 생겨 기준이 이원화된다.
+
+    Args:
+      value: 판정 대상 `review_status`(enum 멤버·문자열·None 모두 허용).
+
+    Returns:
+      `quarantined`이면 True, 그 외(`None`·`pending`·`approved`·`rejected`) 전부 False.
+    """
+    return value == ReviewStatus.quarantined
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -811,6 +872,55 @@ class ReasoningType(str, Enum):
 
     BACKWARD = "BACKWARD"
     """역방향 — 결론에서 거꾸로 추론한다."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 풀이 접근 유형 (solution_path.schema.yaml `approach_type` · SolutionPath.approach_type)
+# ──────────────────────────────────────────────────────────────────────────
+class ApproachType(str, Enum):
+    """풀이 *경로 전체* 접근 유형 — 폐쇄 6종(`SolutionPath.approach_type`).
+
+    근거: `schemas/v1.1/solution_path.schema.yaml` `approach_type` enum(6종)·
+    `03_content_generation.md` solution_approaches. S4-10(D2)에서 `l3/solution_path.py`의
+    Literal 좌석을 이 단일 좌석으로 승격했다(`ReasoningType` 단일 좌석 규약 미러 —
+    `docs/architecture/solution_module_gap_review.md` §3 D2).
+
+    축 구분 주의(직교 3축 — `tests/backend/l1/test_strategy_governance.py` disjoint 동결):
+      - **ApproachType**(이 enum) — *완성된 풀이 경로 전체*의 유형("이 풀이는 기하적 풀이다").
+      - `ReasoningType` — *한 스텝*의 추론 유형(한 대수적 풀이 안에서도 스텝마다
+        치환·사례분류·귀납이 섞인다).
+      - `StrategyNode`(l1 strategy_graph) — 문제 공략 *계획 발상* heuristic(Polya 계획 단계 —
+        아직 풀이가 완성되기 전의 접근 아이디어).
+
+    ⚠️ 폐쇄집합(6종) — *제거는 어렵고 추가는 신중해야* 한다(무한 온톨로지 금지·관계 타입 폭발
+    방지). "비유적" 등 새 유형 제안은 오개념 개입·정의 레지스터 `analogy` 축과 혼동 위험이라
+    기각된 전례가 있다(§3 D2 — 프롬프트 정합에서 제거).
+
+    멤버명=값(소문자 영어) — yaml enum 키·DB TEXT 저장값·기존 Literal 값과 1:1 동일
+    (`ReviewStatus` 소문자 멤버 선례). `L2 MasteryState.preferred_solution_style`이 이 값을
+    그대로 취한다(yaml 관계 명세). use_enum_values=True 직렬화 시 소문자 값 보존
+    (예: approach_type="algebraic").
+    """
+
+    algebraic = "algebraic"
+    """대수적 — 식 변형·계산 중심."""
+
+    geometric = "geometric"
+    """기하적 — 도형·그래프 중심."""
+
+    combinatorial = "combinatorial"
+    """조합적 — 경우의 수·셈 중심."""
+
+    inductive = "inductive"
+    """귀납적 — 패턴·수학적 귀납법 중심."""
+
+    visual = "visual"
+    """시각적 — 그림·다이어그램으로 통찰."""
+
+    backward = "backward"
+    """역방향 — 결론에서 거꾸로 추론. (ReasoningType.BACKWARD와 *다른 축*이다 — 소문자
+    "backward"는 풀이 전체 축, 대문자 "BACKWARD"는 스텝 축. 거버넌스 disjoint 검사는
+    strategy slug 기준이라 이 두 축 간 표기 유사는 허용되며, 의미 구분은 타입이 지킨다.)"""
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -906,6 +1016,43 @@ class EdgeType(str, Enum):
     concept→concept(UUID FK)인데 misconception은 아직 그래프 노드가 아니라 카탈로그(kebab id)다.
     노드화 전까지 distractor→misconception 매핑은 op-code 카탈로그
     (`l4/misconception/distractor.py`)가 보유한다."""
+
+
+class RequiredStrength(str, Enum):
+    """선수학습 관계의 필요 강도 — §4.2 `required_strength_enum`.
+
+    EOS 6_개념 DB 검토 §13에 따른 prerequisite 메타. edge_type=PREREQUISITE일 때
+    이 관계가 얼마나 필수적인지를 나타낸다.
+    """
+
+    WEAK = "WEAK"
+    """약한 선호 — 없어도 학습이 가능하나 효율이 떨어진다."""
+
+    MODERATE = "MODERATE"
+    """중간 — 복습을 권장한다."""
+
+    STRONG = "STRONG"
+    """강함 — 거의 필수이며, 미흡 시 상위 개념 학습에 장애가 크다."""
+
+    CRITICAL = "CRITICAL"
+    """필수 — 없으면 상위 개념 진행이 불가능하다."""
+
+
+class DependencyLevel(str, Enum):
+    """선수학습 관계의 의존 수준 — §4.2 `dependency_level_enum`.
+
+    EOS 6_개념 DB 검토 §13에 따른 prerequisite 메타. edge_type=PREREQUISITE일 때
+    의존이 권장/기대/필수인지를 구분한다.
+    """
+
+    RECOMMENDED = "RECOMMENDED"
+    """권장 — 도움이 되나 강제하지 않는다."""
+
+    EXPECTED = "EXPECTED"
+    """기대됨 — 일반적으로 요구된다."""
+
+    REQUIRED = "REQUIRED"
+    """필수 — 반드시 충족해야 한다."""
 
 
 class ConceptRole(str, Enum):
@@ -1138,6 +1285,25 @@ class EventType(str, Enum):
     학생이 파라미터·식을 바꿔 본질을 탐색하는 행동. 둘을 한 enum으로 뭉개면 L2 행동 지표가
     오염되므로 전용 라벨로 분리한다. 약점개념 흐름엔 problem/attempt가 없어 컨텍스트는
     concept_id/scene_id(event_data)로 싣고 attempt_id/problem_id는 NULL로 둔다(거짓 연결 금지).
+    """
+
+    문제시도 = "문제시도"
+    """채점 확정 시점의 *문제 시도* 이벤트(EOS-57, 계획서 표기 `problem_attempted`).
+
+    **이 값의 존재 이유는 `attempt_event.skill_ids`(해소된 스킬 배열)의 영속 좌석**이다 — 채점이
+    확정된 순간 `l2.skill_mastery_tracking`이 concept→skill로 *해소한* 스킬 목록을 런타임에서
+    버리지 않고 이벤트에 남긴다(W2 "되돌릴 수 없는 스키마" ① — 12월 데이터에 남길 소급 불가 축.
+    지금 적재하지 않으면 과거 시도의 스킬 귀속은 영원히 재구성 불가다).
+
+    `답입력`(코치 대화의 서버 응답 지연 신호)과 혼동 금지 — 저 이벤트는 *대화 턴* 텔레메트리이고
+    이 이벤트는 *채점 확정 1건*에 대응한다. 두 채점 경로(`api/me.py::submit_attempt`의 클라
+    자가보고 v1 경로·`api/coach.py::_complete_problem`의 서버 검증 경로)가 같은 writer
+    (`l2.attempt_skill_event.record_attempt_skill_event`)를 경유해 적재하며 `event_data.source`가
+    둘을 구분한다.
+
+    스킬 배열은 `event_data`가 아니라 **1급 컬럼 `attempt_event.skill_ids`** 에 싣는다(조인·집계
+    축이라 JSONB에 묻지 않는다). NULL=미기록(구판 이벤트·writer 미도달)·`{}`=해소를 실행했으나
+    매핑 0건 — 둘을 구분한다(S3-07 None≠0 규약).
     """
 
 
@@ -1376,21 +1542,26 @@ class AuditResourceType(str, Enum):
 
 
 class AuditEventKind(str, Enum):
-    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 폐쇄 택소노미(현 4종).
+    """`privacy_audit.event_kind` — SEC-09 개인정보 감사 폐쇄 택소노미(현 5종).
 
     `docs/architecture/account_security_gap_review.md` D3의 경계 확정: `security_privacy.md:
     88-100`의 "모든 PII 접근 로그"는 **채택하지 않는다**(본인 조회 29개 엔드포인트 전수 감사는
     미성년 프로파일링 자산화·볼륨 소음 — 정정 경위는 `docs/standards/security_privacy.md` §감사
     로그 편집자 부기 참조). 감사 대상은 "시스템 밖으로 나가는 사건"·"본인 아닌 주체의 접근"·
-    **"계정 권한 자체의 변경"**이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와
-    정확히 일치시킨다(부기에 값을 추가할 때 이 enum도 함께 늘린다 — 단일 진실원천).
+    "계정 권한 자체의 변경"·**"전역 콘텐츠 리소스의 CUD"**(SEC-29가 추가한 4번째 축 — 학생
+    개인정보가 아니라 개념·문항 같은 공유 콘텐츠 대상이라 D3의 "모든 PII 접근 로그" 거부와
+    무관하다)이며, 값은 그 편집자 부기의 pseudo-schema(`action` 필드)와 정확히 일치시킨다
+    (부기에 값을 추가할 때 이 enum도 함께 늘린다 — 단일 진실원천).
 
-    **4번째 값 `role_change`는 ADMIN-01(2026-08-11 회수)이 추가**했다. SEC-09 시점의 "3종"은
-    그 시점 실측이었을 뿐 상한이 아니다 — 폐쇄 택소노미의 뜻은 "임의 문자열 금지"이지
-    "영원히 3개"가 아니다.
+    **4번째 값 `role_change`는 ADMIN-01(2026-08-11 회수)이, 5번째 값 `content_mutation`은
+    SEC-29(2026-09-11)가 추가**했다. SEC-09 시점의 "3종"은 그 시점 실측이었을 뿐 상한이 아니다
+    — 폐쇄 택소노미의 뜻은 "임의 문자열 금지"이지 "영원히 3개"가 아니다.
 
-    `deletion_audit`(별도 테이블·`DeletionAudit`)이 삭제 감사의 **단일 권위**를 유지하므로
-    `resource_type`류의 삭제 이벤트는 여기 포함하지 않는다(이중 진실원천 금지 — D3 판단 근거).
+    `deletion_audit`(별도 테이블·`DeletionAudit`)이 **학생 소유 데이터 삭제** 감사의 단일
+    권위를 유지하므로 그 도메인의 `resource_type`류 삭제 이벤트는 여기 포함하지 않는다(이중
+    진실원천 금지 — D3 판단 근거). `content_mutation`의 `resource_type`(개념·문항)은 학생
+    소유 데이터가 아닌 *전역 콘텐츠*를 가리키므로 이 경계와 겹치지 않는다(`PrivacyAuditResourceType`
+    docstring 참조 — `AuditResourceType`과 값 공간을 분리한 이유).
     """
 
     export_data = "export_data"
@@ -1418,6 +1589,57 @@ class AuditEventKind(str, Enum):
     (`ops/role_grant_cli.py` 모듈 docstring 참조). HTTP 미노출 — 순수 ops CLI, 운영자 직접 실행
     (`retention_purge_cli` 컨벤션 미러).
     """
+
+    content_mutation = "content_mutation"
+    """`Role.CONTENT_ADMIN`이 콘텐츠 리소스(개념·문항)를 생성·수정·삭제(SEC-29).
+
+    **5번째 값 — `record_admin_access_audit`이 겨냥한 "관리자가 학생 개인정보를 봄"과는
+    다른 축이다.** `admin_access`는 여전히 호출부 0곳(관리자 콘솔 Phase B 전제, ADMIN-06
+    미착지)이지만, "콘텐츠 CUD에 감사 로그가 없다"(누가 어떤 문항을 승인·격리·삭제했는지
+    흔적 없음 — `docs/reviews/eos_one_subject_completion_review_2026-09-03.md` §S3)는
+    ADMIN-06과 무관하게 *오늘* 실재하는 별도 갭이고, `RequireContentAdmin`이 이미 게이팅하는
+    `POST/PATCH/DELETE /v1/concepts`·`/v1/problems` 6라우터가 그 실제 호출부다.
+
+    `target_user_id`는 채우지 않는다(개인정보 대상이 아니라 콘텐츠 리소스 대상 — `resource_type`/
+    `resource_id`가 그 역할). `user_id`는 행위자(관리자). `PrivacyAuditAction`(action 컬럼)이
+    create/update/delete를 구분한다. `reason`류 자유텍스트는 넣지 않는다(`PrivacyAudit`
+    모델 docstring의 "자유텍스트 필드는 두지 않는다" 불변식 — 무엇을 했는지는 action+resource로
+    충분히 특정된다).
+    """
+
+
+class PrivacyAuditResourceType(str, Enum):
+    """`privacy_audit.resource_type` — `event_kind=content_mutation` 전용 콘텐츠 리소스
+    도메인(SEC-29).
+
+    `AuditResourceType`(`deletion_audit` 전용 — 학생 연결 데이터 삭제 도메인)과는 별개의 폐쇄
+    택소노미다. 값은 해당 ORM `__tablename__`과 일치(concept·problem — `AuditResourceType`과
+    동일 명명 관례). 두 enum을 분리한 이유: `deletion_audit`은 "학생이 소유한 데이터의 영구
+    삭제"만 다루는 단일 권위(`AuditEventKind` docstring D3 — 이중 진실원천 금지)인 반면,
+    `content_mutation`은 *학생이 소유하지 않는 전역 콘텐츠*(개념·문항)의 생성·수정·삭제라
+    범주 자체가 다르다 — 같은 이름의 컬럼을 재사용해도 값 공간을 섞지 않는다.
+    """
+
+    concept = "concept"
+    """`Concept`(`db/models/concept.py`) — `/v1/concepts` CUD."""
+
+    problem = "problem"
+    """`Problem`(`db/models/problem.py`) — `/v1/problems` CUD."""
+
+
+class PrivacyAuditAction(str, Enum):
+    """`privacy_audit.action` — `event_kind=content_mutation` 전용 CRUD 동작 폐쇄 택소노미(SEC-29).
+
+    `resource_type`+`resource_id`가 *무엇을*, 이 값이 *무엇을 했는지*를 특정한다. 자유텍스트
+    `reason`을 두지 않는 대신(`PrivacyAudit` 모델 docstring 참조) 이 3값만으로 "생성/수정/삭제"
+    사실을 충분히 감사한다 — 상세 diff·사유는 이 테이블의 책임이 아니다(1차 기록은 애플리케이션
+    로그·PG 자체의 데이터, 이 행은 "그 시각 그 사건이 있었다"는 2차 감사 신호 — `record_role_
+    change_audit` docstring과 동일 철학).
+    """
+
+    create = "create"
+    update = "update"
+    delete = "delete"
 
 
 class DefectCategory(str, Enum):
@@ -1661,3 +1883,44 @@ class ContentPool(str, Enum):
 
     EXTERNAL_LICENSED = "external-licensed"
     """등급3 협상 타결분 — 계약 범위 내에서만 사용."""
+
+
+class GenerationFailureCode(str, Enum):
+    """AI 생성 CU(콘텐츠 단위)의 실패코드 F1~F8 — EOS 검증설계서 v1 동결 계약.
+
+    정본: `docs/standards/eos_verification_design_v1.md` §4 (EOS-51 · 2026-08-30 동결).
+    모든 생성 실패·검수 반려는 이 8코드 중 하나로 강제 분류된다(자유 텍스트 사유 금지 —
+    F-Ⅲ 실패분포 판정("F3+F6+F7 판단형 합 60% 초과 = 실패")이 이 분류 위에서만 성립한다).
+
+    ⚠️ 폐쇄 8종 — G0(9/6) 동결 후 12월까지 추가·삭제·의미 변경 금지(검증 중 분류 체계가
+    바뀌면 실패분포 시계열이 무효가 된다). 값은 `F1`~`F8` 코드 문자열(집계·이벤트 적재용).
+
+    정본화≠집행: 이 enum의 실제 소비 지점(생성 파이프라인 실패 분류·검수 반려 코드 입력
+    강제)은 후속 태스크 몫이다 — 자동 부여는 ARCH-23(QA 게이트 CI 강제)·D2 축, 검수 입력
+    강제는 EOS-54(HIT 타이머·반려코드), 이벤트 적재는 EOS-54 ①. 여기서는 분류 계약만
+    동결한다(`test_generation_failure_code.py`가 값집합을 동결).
+    """
+
+    F1 = "F1"
+    """수식·파싱 실패 — LaTeX/AST 파싱 불가, 수식 문법 오류(기계 검출)."""
+
+    F2 = "F2"
+    """정답 불일치 — SymPy/수치 검증에서 정답·해설 모순(기계 검출)."""
+
+    F3 = "F3"
+    """풀이 논리 비약 — 인접 단계 비동치·근거 없는 도약(판단형 — F-Ⅲ 축)."""
+
+    F4 = "F4"
+    """성취기준 이탈 — 지정 성취기준 코드 범위 밖 내용."""
+
+    F5 = "F5"
+    """난이도 미스 — 요청 난이도와 실제 난이도의 불일치."""
+
+    F6 = "F6"
+    """오개념 오연결 — 예상 오답의 op-code/오개념 매핑 오류(판단형 — F-Ⅲ 축)."""
+
+    F7 = "F7"
+    """언어 수준 부적합 — 학교급 어휘·문장 수준 불일치(판단형 — F-Ⅲ 축)."""
+
+    F8 = "F8"
+    """힌트 정답 누설 — L1·L2 힌트에 최종 정답 포함(무관용 — KPI 누설률 0%)."""

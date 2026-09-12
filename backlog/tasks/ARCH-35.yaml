@@ -7,6 +7,7 @@ subject: cross
 layer: docs
 status: todo
 priority: 3
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - docs/strategy/status_roadmap_2026-07.md
   - docs/standards/eos_identity_layer_011_1_decision.md
 session: null
-notes: 011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 External ID Mapping/Provenance를 Phase 2로 이관.
-updated: 2026-08-17
+notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 External ID Mapping/Provenance를 Phase 2로 이관.\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

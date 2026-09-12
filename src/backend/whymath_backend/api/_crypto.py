@@ -152,14 +152,29 @@ def build_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
 
 
 def encrypt_secret_for_storage(
-    cipher: SupportsEnvelope | None, secret_plain: str
+    cipher: SupportsEnvelope | None,
+    secret_plain: str,
+    *,
+    allow_plaintext_fallback: bool = False,
 ) -> tuple[str | None, bytes | None, bytes | None]:
     """slice 73: register용 — `(secret_plain, secret_encrypted, nonce)` 저장 3-튜플 결정.
 
-    cipher 있으면 `(None, ciphertext, nonce)`(평문 컬럼 비우고 암호화 저장), 없으면
-    `(secret_plain, None, None)`(평문 폴백·기존 동작). 셋 중 *정확히 한 표현*만 채워진다.
+    cipher 있으면 `(None, ciphertext, nonce)`(평문 컬럼 비우고 암호화 저장).
+
+    cipher 없으면:
+      - `allow_plaintext_fallback=True` → `(secret_plain, None, None)`(평문 폴백·개발/CI 전용).
+      - `allow_plaintext_fallback=False` → `RuntimeError`(prod-like 추정 환경에서 조용한
+        평문 저장 금지 — SEC-28 fail-closed).
+
+    셋 중 *정확히 한 표현*만 채워진다.
     """
     if cipher is None:
+        if not allow_plaintext_fallback:
+            raise RuntimeError(
+                "device secret 암호화기가 미설정입니다 — "
+                "`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`를 설정하거나 개발 모드에서만 "
+                "평문 폴백을 명시적으로 허용하세요."
+            )
         return secret_plain, None, None
     ciphertext, nonce = cipher.encrypt(secret_plain)
     return None, ciphertext, nonce
@@ -204,7 +219,9 @@ def encrypt_dialogue_content(
     """
     if content is None:
         return None, None, None
-    return encrypt_secret_for_storage(cipher, content)
+    # 대화 본문은 개발·CI에서 cipher 미설정 시에도 평문 폴백을 허용(SEC-01·SEC-28).
+    # prod-like 환경은 `require_dialogue_content_cipher`가 부팅 시 미리 차단한다.
+    return encrypt_secret_for_storage(cipher, content, allow_plaintext_fallback=True)
 
 
 def resolve_dialogue_content(
@@ -282,6 +299,33 @@ def resolve_evidence_payload(
     return None
 
 
+def require_device_secret_cipher(settings: Any) -> MultiKeyCipher | None:
+    """SEC-28: device secret cipher를 만들되, **프로덕션 추정 환경에서 키가 없으면 거부**한다.
+
+    `build_secret_cipher`는 키가 없으면 조용히 `None`(평문 폴백)을 돌려준다. 이 폴백은
+    개발·CI에서는 편의지만 프로덕션에서는 **CLAUDE.md 절대 금기("디바이스 secret 평문 저장")를
+    조용히 위반**한다 — 그리고 조용하기 때문에 아무도 모른다. 이 게이트는 잊어도 작동한다.
+
+    **프로덕션 판별**: `config.is_production_like`(단일 좌석)에 위임한다.
+
+    Raises:
+        RuntimeError: prod 추정 환경인데 `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY` 미설정.
+    """
+    from whymath_backend.config import is_production_like
+
+    cipher = build_secret_cipher(settings)
+    if cipher is not None:
+        return cipher
+    if is_production_like(settings):
+        raise RuntimeError(
+            "프로덕션 추정 환경(실 OAuth provider 구성)인데 device secret 암호화 키가 "
+            "미설정입니다 — "
+            "`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`를 설정하세요. 디바이스 secret을 "
+            "평문으로 저장하는 것은 절대 금기라 평문 폴백을 허용하지 않습니다."
+        )
+    return None
+
+
 def require_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
     """SEC-01: cipher를 만들되, **프로덕션 추정 환경에서 키가 없으면 거부**한다(fail-closed).
 
@@ -309,6 +353,83 @@ def require_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
             "평문으로 저장하는 것은 절대 금기라 평문 폴백을 허용하지 않습니다."
         )
     return None
+
+
+def build_student_work_cipher(settings: Any) -> MultiKeyCipher | None:
+    """`Settings`에서 학생 답안/풀이 본문(SEC-31 — `problem_attempt`·`answer_submission`·
+    `student_solution_step` 3테이블) 저장용 `MultiKeyCipher` 생성.
+
+    `build_dialogue_content_cipher`·`build_evidence_payload_cipher`와 *동일 조립 로직*
+    (`_multikey_from_raw`)이나 **키 소스가 분리**된다(`student_work_encryption_key`·
+    `student_work_decryption_fallback_keys`) — dialogue·evidence·device secret 키와 별개라 한
+    키 유출의 폭발 반경을 자산 간 격리한다. 3테이블은 *이 키 하나를* 공유한다 — 한 답안 제출
+    흐름 안에서 같은 데이터 주체(그 학생)의 같은 논리적 사건으로 함께 적재되는 관계라, 테이블별로
+    쪼개도 폭발 반경이 실질적으로 줄지 않는 반면 "미설정→평문 폴백" 함정만 3배가 된다(dialogue_turn
+    내부 3축 공유 결정과 동일 근거). primary 키 미설정이면 None(평문 폴백·CI·기존 배포 무영향·
+    점진 도입).
+
+    `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
+    """
+    return _multikey_from_raw(
+        settings.student_work_encryption_key.get_secret_value(),
+        settings.student_work_decryption_fallback_keys.get_secret_value(),
+    )
+
+
+def require_student_work_cipher(settings: Any) -> MultiKeyCipher | None:
+    """SEC-31: cipher를 만들되, **프로덕션 추정 환경에서 키가 없으면 거부**한다(fail-closed).
+
+    `build_student_work_cipher`는 키가 없으면 조용히 `None`(평문 폴백)을 돌려준다. 그 폴백은
+    개발·CI에서는 옳지만 프로덕션에서는 **CLAUDE.md 절대 금기("학생 데이터는 민감 정보로 분류 —
+    암호화 저장")를 조용히 위반**한다 — 그리고 조용하기 때문에 아무도 모른다.
+    `require_dialogue_content_cipher`(SEC-01)와 동일한 게이트 형태.
+
+    **프로덕션 판별**: `config.is_production_like`(단일 좌석)에 위임한다.
+
+    Raises:
+        RuntimeError: prod 추정 환경인데 `WHYMATH_STUDENT_WORK_ENCRYPTION_KEY` 미설정.
+    """
+    from whymath_backend.config import is_production_like
+
+    cipher = build_student_work_cipher(settings)
+    if cipher is not None:
+        return cipher
+    if is_production_like(settings):
+        raise RuntimeError(
+            "프로덕션 추정 환경(실 OAuth provider 구성)인데 학생 답안/풀이 암호화 키가 "
+            "미설정입니다 — `WHYMATH_STUDENT_WORK_ENCRYPTION_KEY`를 설정하세요. 학생 답안·풀이 "
+            "본문을 평문으로 저장하는 것은 절대 금기라 평문 폴백을 허용하지 않습니다."
+        )
+    return None
+
+
+def encrypt_student_solution_step_expression(
+    cipher: SupportsEnvelope | None, expression: str
+) -> tuple[str | None, bytes | None, bytes | None]:
+    """`student_solution_step.expression` 저장용 3-튜플 — **NOT NULL** 전용(schema min_length=1).
+
+    다른 5개 학생 답안/풀이 필드(nullable)는 `encrypt_dialogue_content`(값 없음 분기 포함)를
+    그대로 재사용하지만, `expression`은 값이 *항상* 있어(빈 문자열 없음) 그 분기가 필요 없다 —
+    "값이 항상 있고 cipher 없으면 평문 폴백"인 `encrypt_secret_for_storage`(device secret 계약)
+    를 재사용한다.
+    """
+    return encrypt_secret_for_storage(cipher, expression, allow_plaintext_fallback=True)
+
+
+def resolve_student_solution_step_expression(
+    cipher: SupportsEnvelope | None,
+    expression_plain: str | None,
+    expression_encrypted: bytes | None,
+    expression_nonce: bytes | None,
+) -> str:
+    """저장 표현에서 `expression` 평문 복원 — 항상 `str` 반환(schema 계약 `min_length=1`).
+
+    `resolve_dialogue_content`와 달리 *평문·암호문 둘 다 없는 상태는 정상이 아니다* — expression은
+    NOT NULL 계약이라 `resolve_stored_secret`(device secret과 동일 계약: 암호행인데 cipher
+    미설정이면 RuntimeError, 평문·암호문 둘 다 없으면 데이터 무결성 오류 RuntimeError)을
+    재사용한다 — 조용히 빈 문자열/None을 만들지 않는다.
+    """
+    return resolve_stored_secret(cipher, expression_plain, expression_encrypted, expression_nonce)
 
 
 def encrypt_dialogue_image_uri(
@@ -384,15 +505,20 @@ __all__ = [
     "build_dialogue_content_cipher",
     "build_evidence_payload_cipher",
     "build_secret_cipher",
+    "build_student_work_cipher",
     "encrypt_dialogue_content",
     "encrypt_dialogue_image_analysis",
     "encrypt_dialogue_image_uri",
     "encrypt_evidence_payload",
     "encrypt_secret_for_storage",
+    "encrypt_student_solution_step_expression",
+    "require_device_secret_cipher",
     "require_dialogue_content_cipher",
+    "require_student_work_cipher",
     "resolve_dialogue_content",
     "resolve_dialogue_image_analysis",
     "resolve_dialogue_image_uri",
     "resolve_evidence_payload",
     "resolve_stored_secret",
+    "resolve_student_solution_step_expression",
 ]

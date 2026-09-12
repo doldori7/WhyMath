@@ -72,6 +72,7 @@ class _FakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         self.prompts.append(prompt)
         self.systems.append(system)

@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 3
+eos_priority: P3
 owner: claude
 depends_on: []
 requires_gates: []
@@ -20,5 +21,5 @@ paths:
   - src/backend/whymath_backend/schema/enums.py
   - docs/architecture/subject_expansion_readiness.md
 session: null
-notes: 011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 parent_subject_id 기반 ontology를 수학 외 과목 확장에 적용.
-updated: 2026-08-17
+notes: "011_1 EOS Identity 수용 결정 후속. 첨부 설계안의 parent_subject_id 기반 ontology를 수학 외 과목 확장에 적용.\n\n[정정 2026-09-01] eos_priority null → P3: 판정표 N/E축 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

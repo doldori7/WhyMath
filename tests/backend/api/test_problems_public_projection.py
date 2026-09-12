@@ -38,6 +38,7 @@ from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Role
 from whymath_backend.schema.problem import (
     PUBLIC_HIDDEN_ANSWER_FIELDS,
+    PUBLIC_HIDDEN_OPS_FIELDS,
     PUBLIC_HIDDEN_STEP_ANSWER_FIELDS,
     PublicProblem,
     PublicProblemStep,
@@ -163,17 +164,33 @@ class TestSchemaLevelSeal:
         assert missing == set(), f"내부 정본에서 사라진 필드: {sorted(missing)}"
 
     def test_classification_is_total(self) -> None:
-        """분류_완전성 — 내부 정본 = 공개 투영 + 정답류(잔여·중복 0).
+        """분류_완전성 — 내부 정본 = 공개 투영 + 정답류 + **운영 메타**(잔여·중복 0).
 
         `Problem`에 새 필드가 붙으면: 기반(`PublicProblem`)에 붙으면 자동 공개(의도 확인
-        후), 서브클래스에 붙으면 자동 비공개이나 이 단언이 red가 되어 `PUBLIC_HIDDEN_
-        ANSWER_FIELDS` 등재(분류 명시)를 강제한다 — 미분류 필드가 조용히 지나가지 못한다.
+        후), 서브클래스에 붙으면 자동 비공개이나 이 단언이 red가 되어 두 분류 집합 중 하나에
+        등재(분류 명시)를 강제한다 — 미분류 필드가 조용히 지나가지 못한다.
+
+        **EOS-71 갱신**: 격리 운영 메타 2필드(`quarantine_reason`·`quarantined_at`)가 내부 정본에
+        추가되면서 이 가드가 설계대로 red를 냈고, 그래서 `PUBLIC_HIDDEN_OPS_FIELDS`라는 **두 번째
+        분류 집합**을 만들어 등재했다. 정답류에 밀어 넣지 않은 이유는 축이 다르기 때문이다 —
+        정답류는 "교수학·보안상 학생에게 주면 안 되는 것", 운영 메타는 "운영자만 알면 되는 것".
+        집합을 합치면 한 축의 완화 압력이 다른 축까지 조용히 연다(상수 주석 참조).
         """
-        assert (
-            set(ProblemSchema.model_fields) - set(PublicProblem.model_fields)
-            == PUBLIC_HIDDEN_ANSWER_FIELDS
+        assert set(ProblemSchema.model_fields) - set(PublicProblem.model_fields) == (
+            PUBLIC_HIDDEN_ANSWER_FIELDS | PUBLIC_HIDDEN_OPS_FIELDS
         )
         assert set(PublicProblem.model_fields) <= set(ProblemSchema.model_fields)
+        # 두 분류 집합은 서로 겹치지 않는다(한 필드가 두 축으로 이중 등재되면 분류가 흐려진다).
+        assert PUBLIC_HIDDEN_ANSWER_FIELDS & PUBLIC_HIDDEN_OPS_FIELDS == set()
+
+    def test_public_model_has_no_ops_metadata_fields(self) -> None:
+        """공개 모델에 격리 운영 메타가 없다(EOS-71) — 키 부재가 계약.
+
+        `quarantine_reason`은 운영 판단 메모(실중복 판정·출제 오류 서술 등)라 무인증 GET에
+        자리를 만드는 순간 그대로 공개된다. 애초에 샐 표면을 만들지 않는다.
+        """
+        leaked = set(PublicProblem.model_fields) & PUBLIC_HIDDEN_OPS_FIELDS
+        assert leaked == set(), f"공개 모델에 운영 메타 필드가 남아 있습니다: {sorted(leaked)}"
 
     def test_step_classification_is_total(self) -> None:
         """steps도_동일_계약 — expected_answer·common_mistakes·common_errors만 내부 전용.

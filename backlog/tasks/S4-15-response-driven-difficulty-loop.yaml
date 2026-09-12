@@ -7,6 +7,7 @@ subject: math
 layer: backend
 status: todo
 priority: 4
+eos_priority: P2
 owner: claude
 depends_on:
   - S3-01-pilot-cohort
@@ -18,5 +19,5 @@ paths:
   - "src/backend/whymath_backend/l2/**"
   - "src/backend/whymath_backend/harness/**"
 session: null
-notes: "docs/architecture/problem_bank_gap_review.md §3 D9 — 외부 틀 기능 19 자동 업데이트 루프의 미가동 절반(IRT JMLE는 기배선). 실학생 응답 0이라 S3-01 잠금(입력 없는 파이프라인 금지). 구 S4-12에서 재번호(2026-07-29)"
-updated: 2026-07-29
+notes: "docs/architecture/problem_bank_gap_review.md §3 D9 — 외부 틀 기능 19 자동 업데이트 루프의 미가동 절반(IRT JMLE는 기배선). 실학생 응답 0이라 S3-01 잠금(입력 없는 파이프라인 금지). 구 S4-12에서 재번호(2026-07-29)\n\n[정정 2026-09-01] eos_priority null → P2: 판정표 N/이월 — 2027 이월(폐기 아님·선언 §6-5). EOS-80 일괄 백필"
+updated: 2026-09-01

@@ -237,11 +237,22 @@ Master Key → KEK → DEK → Data
 - AES-256-GCM(96-bit nonce, AEAD) 필드 수준 암호화
 - `MultiKeyCipher`: primary + fallback 다중 키 + 버전 기반 복호화
 - 자산별 키 소스 분리: device secret, dialogue content, evidence payload
-- dialogue content에 한해 prod 추정 환경에서 암호화 키 미설정 시 부팅 거부(fail-closed)
+- device secret·dialogue content 모두 prod 추정 환경에서 암호화 키 미설정 시 부팅 거부(fail-closed) — 판정은 `config.is_production_like` 단일 좌석
 
 현재 구현은 **자산별 마스터 키를 직접 사용하는 필드 암호화**이며, §7.2에서 정의한 KEK/DEK 봉투 암호화나 KMS는 아직 도입되지 않았다. EOS는 이를 P0 암호화 기반선으로 삼고, KEK/DEK/KMS로의 이행은 P1/P2에서 `TBD-48-02`로 결정한다.
 
-> ⚠️ 알려진 갭: `WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`가 없을 때 device secret은 평문 폴백(`secret_plain`)될 수 있다. 이 갭은 SEC-01 범위 밖이므로 별도로 추적해야 한다.
+> **[SEC-28 해소·2026-08-30]** 위 갭(`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY` 미설정 시 device
+> secret 평문 폴백)은 닫혔다. `require_device_secret_cipher`가 prod 추정 환경에서 키가 없으면
+> `RuntimeError`로 **부팅을 거부**하고(집행 지점 = `_device_store.build_device_store_from_settings`),
+> `encrypt_secret_for_storage`는 `allow_plaintext_fallback=True`를 명시받지 않으면 평문 저장을
+> 거부한다. 개발/CI에서만 그 플래그가 켜지며, 그 값은 `cipher is None and not
+> settings.production_like`로 계산된다 — 즉 **prod-like에서는 켤 수 없다**.
+>
+> 하위 호환: 기존 평문 행의 읽기(`resolve_stored_secret` dual-read)는 그대로다 — 이 변경은
+> *새 secret의 저장*만 막는다. 기존 평문 행의 재암호화 배치는 여전히 후속이다(슬라이스 73 한계 ①).
+>
+> 변별력 실측: prod-like 거부 가드와 부팅 배선을 각각 무력화하는 뮤테이션에서 테스트 4건이 red로
+> 전환됨을 확인했다(`TestRequireDeviceSecretCipher`·`TestBuildDeviceStoreFromSettings`).
 
 ### 7.4 Key Lifecycle
 
@@ -802,7 +813,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 
 ---
 
-# 제2부. 현행 WhyMath 매핑 (2026-08-25 실측)
+# 제2부. 현행 WhyMath 매핑 (2026-08-25 최초 실측 · 2026-09-11 SEC-26/27/29 반영 갱신)
 
 | EOS 영역 | WhyMath 현행 | 파일/자산 | 판정 |
 |---|---|---|---|
@@ -813,12 +824,12 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 | 필드 수준 암호화 | AES-256-GCM, 3개 자산별 키, MultiKeyCipher 회전, dialogue content만 prod fail-closed; device secret 평문 폴백 갭 있음 | `api/_crypto.py` | 🟡 부분 |
 | Log PII 스크러버 | 시크릿/이메일/전화번호/학생 발화 마스킹, 예외 타입명 보존 | `ops/log_scrubber.py` | ✅ 충족 |
 | 감사 테이블 | DeletionAudit, PrivacyAudit, DefectReport | `db/models/audit.py` | ✅ 구조 충족 |
-| 관리자 접근 감사 | `record_admin_access_audit` 호출부 0곳 | — | ⬜ 미착지 |
+| 관리자 접근 감사 | `record_admin_access_audit`(관리자→학생 개인정보 열람) 호출부 여전히 0곳(ADMIN-06 콘솔 선행 대기) — 콘텐츠 CUD(개념·문항)는 신설 5번째 event_kind `content_mutation`으로 별도 배선(SEC-29, `api/concepts.py`·`api/problems.py` 6라우터) | `privacy/audit.py`, `api/concepts.py`, `api/problems.py` | 🟡 부분(콘텐츠축 충족·개인정보열람축 미착지) |
 | Rate Limiting | 슬라이딩 윈도우, 메모리/Redis, 카테고리별 | `api/_rate_limit.py` | ✅ 충족 |
-| CORS/보안 헤더 미들웨어 | 없음 | — | ⬜ 미착지 |
+| CORS/보안 헤더 미들웨어 | TrustedHost→CORS→보안헤더 순 상시 등록, allowlist 비면 deny-by-default(네이티브 앱 무영향), prod에서 HSTS/CSP 추가(SEC-26) | `app.py::create_app`, `config.py` | ✅ 충족 |
 | 테넌시/RLS | 없음 | — | ⬜ 미착지(EOS 단계) |
 | Service-to-Service 인증 | 내부망 신뢰 가정 | — | ⬜ 미착지(EOS 단계) |
-| Job 소유권 검사 | `/v1/jobs/{id}` 폴링에 인증은 있으나 job↔user 매핑 없음 | — | ⬜ 미착지 |
+| Job 소유권 검사 | `/v1/jobs/{id}` job↔user 매핑 적재·대조(`JobOwnership`, SEC-27) — 매핑 부재·타인 소유 둘 다 404로 통일 | `db/models/job_ownership.py`, `app.py` | ✅ 충족 |
 | access_matrix 런타임 소비 | `data/access_matrix.json`은 계약 테스트만 읽음 | `tests/backend/schema/test_access_matrix.py` | 🟡 부분 |
 | 비밀번호 인증 | 미채택(OAuth 전용), passlib 제거 | `pyproject.toml:38` | N/A |
 | Secret 관리 | env 주입, 이미지 시크릿 0 | `Dockerfile`, CI | 🟡 부분 |
@@ -870,7 +881,7 @@ EOS-SEC-TEST-001   새 기능은 인가 회귀 테스트를 통과해야 한다.
 
 권장 착지 단계:
 
-1. **48-P0 현행 강화**(독립 가능): CORS/보안 헤더, admin access 감사 배선, job 소유권 검사, `access_matrix.json` 런타임 소비, expires_at writer.
+1. **48-P0 잔여**(독립 가능): `access_matrix.json` 런타임 소비, expires_at writer, `record_admin_access_audit`(관리자→학생 개인정보 열람 — ADMIN-06 콘솔 선행 대기). CORS/보안 헤더(SEC-26)·job 소유권 검사(SEC-27)·콘텐츠 CUD 감사(SEC-29)는 착지 완료.
 2. **46 먼저**: 인증·역할·MFA/Passkey 결정.
 3. **47 먼저**: 동의·보호자 관계·데이터 처리 근거·보존기간.
 4. **48-P1 EOS 확장**: ReBAC/ABAC, tenant_id, RLS, 관리자 콘솔.

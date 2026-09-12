@@ -117,7 +117,7 @@ class TestGetMyTargetProgress:
 
     def test_school_type_set_computes_coverage_percent(self) -> None:
         """CUR-04 원자 축 — 스코프는 `(norm_id, official_code)`, 관측은 `(concept_id,
-        standard_codes)` 2-tuple(FakeSession은 실제 SQL을 보지 않고 큐잉된 결과만 반환하므로
+        standard_codes, concept_id)` 3-tuple(FakeSession은 실제 SQL을 보지 않고 큐잉된 결과만 반환하므로
         shape만 새 조인과 맞추면 된다·`test_target_progress.py` 단위테스트와 동일 관례)."""
         profile = UserProfile.from_schema(
             UserProfileSchema(
@@ -131,7 +131,9 @@ class TestGetMyTargetProgress:
             profile,
             [
                 [("N1", "STD-1"), ("N2", "STD-2"), ("N3", "STD-3"), ("N4", "STD-4")],  # 스코프 4건
-                [(c1, ["STD-1"]), (c2, ["STD-2"])],  # 관측 2개념 — 둘 다 원자 축 매칭+스코프 내.
+                # 관측 2개념 — 둘 다 원자 축 매칭+스코프 내. 행 모양은 CUR-12 통합 함수의
+                # 원자 축 SELECT 열 순서 `(atom_code, standard_codes, concept_id)`.
+                [("A1", ["STD-1"], c1), ("A2", ["STD-2"], c2)],
             ],
         )
         resp = client.get("/v1/me/target-progress")

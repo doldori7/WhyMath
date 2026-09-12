@@ -61,6 +61,67 @@ fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=D
 | `CREATE EXTENSION vector` 실패 | 순정 postgres:16엔 pgvector 없음 | 수정 완료(`pgvector/pgvector:pg16`) → `git pull` |
 | `UnicodeDecodeError: 'cp949' codec ...` (alembic) | Alembic이 ini를 OS 로케일로 읽음(하드코딩·우회 불가) | 수정 완료(alembic.ini ASCII화) → `git pull` |
 | `ConnectionError: unexpected connection_lost()` (alembic/asyncpg) | Windows asyncpg SSL 협상 버그 | 수정 완료(데모 URL `?ssl=disable`) → `git pull` |
+| **W1** · `ConnectionRefusedError [WinError 1225]` 또는 `bind: An attempt was made to access a socket in a way forbidden by its access permissions` — 컨테이너는 `Up`이고 `pg_isready`도 통과하는데 호스트에서만 못 붙음 | **Windows Hyper-V/WinNAT의 동적 포트 제외 범위**가 그 포트를 삼켰다(2026-09-08 실측: `5368~5467`이 5433을 포함). 컨테이너 문제가 아니다 — 아무도 안 쓰는 5434로 `docker run -p`를 해도 같은 오류가 난다 | §W1 절차 |
+
+#### §W1 — 호스트 포트를 Windows가 예약해 Docker가 게시하지 못할 때
+
+> **먼저 진단부터.** 이 증상은 `docker ps`로는 정상으로 보인다 — `Ports` 칸이 화살표 없이
+> `5432/tcp`만 나오는 것이 유일한 단서이고, 그마저 놓치기 쉽다. 그래서 판정은 도구에 맡긴다.
+
+```powershell
+# [Windows PowerShell · Phaiakes9]
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+$env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5433/whymath?ssl=disable"
+$env:PYTHONPATH = (Resolve-Path "src\backend").Path
+& src\backend\.venv\Scripts\python.exe -m whymath_backend.ops.db_host_reachability
+"EXIT=$LASTEXITCODE"
+```
+
+판정(`exit 0` 도달 가능 / `1` 도달 불가 / `2` 측정 불가)과 상태별 대책이 함께 출력된다.
+`NOT_PUBLISHED`(설정은 있는데 게시가 성립하지 않음)면 아래로 간다.
+
+```powershell
+# [Windows PowerShell · Phaiakes9] — 예약 구간에 그 포트가 있는지 확인
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+포트를 포함하는 구간이 보이면 **영구 조치**를 한다. `winnat`을 내렸다 올리면 동적 예약이
+반납되고, 그 틈에 포트를 *관리 포트 제외*로 등록하면 다음에 Hyper-V가 그 대역을 다시 잡을 때
+건너뛴다(지정 예약은 동적 할당에서만 빼는 것이라 명시적 bind는 그대로 된다).
+
+> **창**: 관리자 권한 PowerShell **새 창**. **선행**: Docker Desktop 종료(트레이 → Quit).
+> **영향**: `winnat`은 이 PC의 NAT 전반이라 내렸다 올리는 몇 초간 WSL·Docker 네트워크가 끊긴다.
+
+```powershell
+# [관리자 권한 Windows PowerShell · Phaiakes9 · 새 창]
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+"IS_ADMIN=$IsAdmin"
+$Docker = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
+"DOCKER_DESKTOP_RUNNING=" + [bool]$Docker
+if ($IsAdmin -and -not $Docker) {
+  net stop winnat
+  "STOP_EXIT=$LASTEXITCODE"
+  netsh int ipv4 add excludedportrange protocol=tcp startport=5433 numberofports=1
+  "RESERVE_EXIT=$LASTEXITCODE"
+  net start winnat
+  "START_EXIT=$LASTEXITCODE"
+  netsh interface ipv4 show excludedportrange protocol=tcp
+}
+```
+
+**자가검증**: `IS_ADMIN=True` · `DOCKER_DESKTOP_RUNNING=False` · 세 `*_EXIT`가 0 · 마지막 표에
+`5433  5433  *`(관리 지정)이 보이고 그 포트를 삼키던 구간이 사라짐. 조건이 안 맞으면 블록은
+**아무것도 하지 않는다**(의도) — 권한 경고를 산문으로만 두면 일반 창에 붙여넣어진다(실측).
+
+Docker Desktop 재실행 후 `docker restart whymath-pg` → 위 진단 CLI를 다시 돌려 `exit 0` 확인.
+
+**주의 — 재시작만으로 붙는 수가 있다(그리고 그것은 해결이 아니다)**: 동적 예약은 스스로
+반납되기도 해서, Docker Desktop 재기동만으로 포트가 열릴 수 있다. 2026-09-09에 실제로 그랬다.
+그 상태는 **운이고 재부팅·WSL 재시작마다 재발한다** — 관리 지정 예약을 넣기 전까지 해결로
+치지 않는다.
+
+⛔ 어떤 경우에도 `docker system prune --volumes`·`docker volume prune`은 실행하지 않는다 —
+prod DB 볼륨을 날릴 수 있다.
 
 ### C. Flutter / 빌드
 | 증상 | 원인 | 해법 |
@@ -88,4 +149,4 @@ fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=D
 - 전체 런북: `scripts/demo/README.md` (§A Windows 경로·함정표)
 - 시연 대본: `docs/architecture/s1_e2e_demo_script.md`
 - 실측 기록: `MEMORY.md` 2026-07-09~10 결정 로그
-- 정리: `.\scripts\demo\stop_demo.ps1` · 게이트: `python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "https://..."`
+- 정리: `.\scripts\demo\stop_demo.ps1` · 게이트: `python scripts\harness\backlog.py gates clear G-kiki-device-demo --as kiki --evidence "https://..." --no-base "시연 녹화 링크 — 판정 근거가 커밋·PR이 아니라 실기기 시연 영상이다"`

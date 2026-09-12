@@ -260,6 +260,7 @@ class OllamaProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         """라우터 결정에 따라 로컬 Ollama로 생성 (LLMProvider 구현).
 
@@ -276,6 +277,15 @@ class OllamaProvider:
           스키마 dict를 그대로 실어 출력을 *문법 수준에서 제약*한다(제약 디코딩 — 자유 텍스트·
           코드펜스·필드 누락을 원천 차단). None(기본)이면 format을 싣지 않아 자유 텍스트 생성
           — *기존 동작 무변경*. 문법 제약은 형식만 보장하며 수학적 진실 검증은 하류 게이트 소관.
+        - `seed`(EOS-73 생성 재현)가 주어지면 ollama generate의 `options=`에 시드를 실어
+          llama.cpp 샘플러 시드를 고정한다 — **Ollama가 seed를 물리적으로 받는 유일한 경로**다
+          (Anthropic Messages API에는 seed 파라미터가 없다·`l3/generation_seed` 경로별 표).
+          None(기본)이면 시드를 싣지 않아 Ollama가 매 호출 임의 시드를 쓴다 — *기존 동작 무변경*.
+          온도와 같은 options dict를 공유하므로 둘 다 주면 함께 실린다.
+          경고: 시드 고정이 곧 출력 동일을 **보증하지는 않는다** — 배치 크기·컨텍스트 길이·양자화
+          커널·서버 재시작에 따라 부동소수 누적 순서가 달라질 수 있다. "같은 seed → 같은 출력"이
+          이 배포에서 실제로 성립하는지는 라이브 측정 대상이며(`harness/generation_seed_replay_
+          probe`), 측정 전에는 *미측정*이지 성립이 아니다(EOS-73 acceptance ③ 자인).
 
         주의: QUALITY(MoE)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
@@ -307,9 +317,15 @@ class OllamaProvider:
         }
         if images is not None:
             call_kwargs["images"] = images
+        # options는 온도(S2-g)·시드(EOS-73)가 공유하는 단일 dict — 지정된 것만 담고, 아무것도
+        # 지정되지 않으면 키 자체를 싣지 않는다(하위호환·기존 동작 무변경).
+        options: dict[str, Any] = {}
         if temperature is not None:
-            # 기존 options가 없으므로 새 dict; 있으면 병합(현재는 온도만 실음).
-            call_kwargs["options"] = {"temperature": temperature}
+            options["temperature"] = temperature
+        if seed is not None:
+            options["seed"] = seed
+        if options:
+            call_kwargs["options"] = options
         if json_schema is not None:
             # S2-j structured output — 스키마 dict를 format=으로 실어 제약 디코딩(ollama 0.5+).
             call_kwargs["format"] = dict(json_schema)
@@ -392,6 +408,7 @@ class FixedModelOllamaProvider(OllamaProvider):
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,
     ) -> GenerationResult:
         """고정 모델 ID로 생성한다 — `resolve_model`을 생략한다(그 외는 부모와 동일)."""
         cost = _as_cost_tier(decision.cost_tier)
@@ -415,6 +432,9 @@ class FixedModelOllamaProvider(OllamaProvider):
             options["num_predict"] = self._num_predict
         if temperature is not None:
             options["temperature"] = temperature
+        if seed is not None:
+            # EOS-73 — 강등전에서도 시드 고정 재현이 가능해야 한다(부모와 같은 options 좌석).
+            options["seed"] = seed
         if options:
             call_kwargs["options"] = options
         if json_schema is not None:

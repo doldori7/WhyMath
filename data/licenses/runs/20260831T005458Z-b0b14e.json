@@ -1,0 +1,134 @@
+{
+  "exit_code": 3,
+  "failed": 1,
+  "finished_at": "2026-08-31T00:55:29Z",
+  "ok": 19,
+  "planned": [
+    "ncic",
+    "kogl-license-types",
+    "aihub",
+    "schoolinfo",
+    "openstax",
+    "siyavula",
+    "illustrative-mathematics",
+    "numinamath-cot",
+    "numinamath-tir",
+    "prm800k",
+    "phet",
+    "metamath-set-mm",
+    "omnimath",
+    "minif2f",
+    "olymmath",
+    "mathlib4",
+    "gsm8k",
+    "math-hendrycks",
+    "openmathinstruct-1",
+    "dlmf"
+  ],
+  "results": {
+    "aihub": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "27cc91a3cb9cf247de3e4444d63784c7654c5cbc57af0c77d3e34df69ed67cf2"
+    },
+    "dlmf": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "3696eef2152b489fdc4ea11fb48cf97133af8bed69bbb9be27cfcb471c36dd95"
+    },
+    "gsm8k": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "86bbb73e855821d7c401912fd4bf82e34313e6e3b6fd6f909f2b6cc9e209a53b"
+    },
+    "illustrative-mathematics": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "46845eab5092f74cb358ddb8e820c10311369e905ba7dc60c3d6b397e4b3b2df"
+    },
+    "kogl-license-types": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "57fc0b2c23eecb4dbfd36ff0e044fbaf9d5a1e22d4ae5e90dbafe8c22915ebae"
+    },
+    "math-hendrycks": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "8f6401fb0b1fbfcac17aac8d61e4e1b0d2de9aa190d8aa655fedc5fd783b2ace"
+    },
+    "mathlib4": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+    },
+    "metamath-set-mm": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "8a5f6a2b110cdecd3543c2b18c4d17fa2f08d16ca61c1fe0a1e41b1343464b5c"
+    },
+    "minif2f": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "9b6de2b0a301c31809f62e1b6bd2154c83f8e8b25b76c37e7ddc7b1a0126f21a"
+    },
+    "ncic": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "6e336cf82be321335970f36e4ea724802c6ebfd53d94b9631916ed4c00be4b58"
+    },
+    "numinamath-cot": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "f0fc2858fff16acd0a2cf40592dfac3176806b3a34a4f6db49e930fa4f58dba5"
+    },
+    "numinamath-tir": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "b1cfcfe5a4952e6cfeba54308ed9664c2099b1303deeb071ea2610ee4cf4e3c2"
+    },
+    "olymmath": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "980ae59f20976f8f1cb2f47c4a13b064cdf417f2116d5047f4ec2baa4310d709"
+    },
+    "omnimath": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "0ce15131bdf78d92a55258b712769d70c5de920df7b642918c3cb5c1d98239c1"
+    },
+    "openmathinstruct-1": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "79057c1eed8b9a3c78d5b72c08b781953d48d9ecd2c4b2db1453780c763a252f"
+    },
+    "openstax": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "5bc80fa3355e547b870110f9d0a9c1bbecc983dc778f7a56dafde7b1b3042834"
+    },
+    "phet": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "91bfa0a06e9f58a690085a6debc13a86492cb8bc5423e15e27dccba910ac4da7"
+    },
+    "prm800k": {
+      "error_type": null,
+      "event": "unchanged",
+      "sha256": "22d61a2226e035da51c56149c3358c36d1f61716435866bc6e6fe0e54c7270db"
+    },
+    "schoolinfo": {
+      "error_type": null,
+      "event": "new",
+      "sha256": "c31a4c81162681aca94b0b02b021dd9de229cf9962f98544ba65ff6a390405be"
+    },
+    "siyavula": {
+      "error_type": "HTTP404",
+      "event": "fetch_failed",
+      "sha256": null
+    }
+  },
+  "run_id": "20260831T005458Z-b0b14e",
+  "started_at": "2026-08-31T00:54:58Z",
+  "status": "completed",
+  "timeout_s": 30.0
+}

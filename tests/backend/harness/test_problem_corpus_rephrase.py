@@ -35,6 +35,7 @@ class _EchoRephraseProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
+        seed: int | None = None,  # EOS-73 — LLMProvider 계약 정합(대역은 시드를 쓰지 않는다)
     ) -> GenerationResult:
         # 프롬프트의 '원 발문: ...' 줄에서 발문을 되읽어 접미사를 붙인다(방정식 보존).
         for line in prompt.splitlines():

@@ -138,6 +138,10 @@ class GenerationLog(Base):
 
     __tablename__ = "generation_log"
 
+    # EOS-55 메모: 재현 좌석 5컬럼(prompt_version·seed·input_sha256·input_snapshot·
+    # cu_slug)이 추가되면서 schema.GenerationLog에 스냅샷↔해시 정합 validator가 생겼다 —
+    # to_schema()가 model_validate를 거치므로 DB 읽기도 그 무결성 봉인을 지난다.
+
     log_id: Mapped[uuid.UUID] = mapped_column(
         sa.Uuid,
         primary_key=True,
@@ -154,6 +158,11 @@ class GenerationLog(Base):
     prompt_template_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
     input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     output_tokens: Mapped[int | None] = mapped_column(sa.Integer)
+    # 프롬프트 캐시 2종(EOS-99) — nullable·server_default 없음(구 행 NULL=미기록·소급 날조
+    # 금지, run_id/EOS-55 재현 좌석과 같은 방침). 여기 컬럼이 없으면 `from_schema`의
+    # mapped_keys 필터가 값을 **조용히 버려** DB 경로만 캐시 축을 잃는다(침묵 실패 금지).
+    cache_read_input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
+    cache_creation_input_tokens: Mapped[int | None] = mapped_column(sa.Integer)
     cost_usd: Mapped[float | None] = mapped_column(sa.Numeric(8, 4))
     latency_ms: Mapped[int | None] = mapped_column(sa.Integer)
     success: Mapped[bool | None] = mapped_column(sa.Boolean)
@@ -162,8 +171,29 @@ class GenerationLog(Base):
         sa.DateTime(timezone=True), server_default=sa.func.now()
     )
 
+    # ── 생성 Run 재현 좌석 (EOS-55) — 전부 nullable·server_default 없음(구 행 NULL=미기록).
+    # 값 의미·불변식(스냅샷↔해시 정합)은 schema.GenerationLog가 강제한다(본 파일 방침:
+    # ORM은 컬럼만 — from_schema/to_schema seam이 검증을 경유).
+    prompt_version: Mapped[str | None] = mapped_column(sa.String(128))
+    # BigInteger 좌석 — 실제 추출 범위는 [0, 2**31-1](llama.cpp 샘플러 시드가 uint32라
+    # 좌석보다 좁게 뽑는다·`l3/generation_seed`). EOS-73부터 LOCAL 경로는 값이 실리고,
+    # 클라우드(seed 파라미터 부재)·호출 없는 항목은 NULL=미기록이다(날조 금지).
+    seed: Mapped[int | None] = mapped_column(sa.BigInteger)
+    input_sha256: Mapped[str | None] = mapped_column(sa.String(64))
+    input_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    # 생산 CU 조인 정체성(#912 P1-2) — 코퍼스 키·review_timer cu_slug와 동일 산식(폭 128
+    # schema 강제 동형). 정체성 없는 종단(파싱 실패·pregenerate 시드)은 NULL=미기록.
+    cu_slug: Mapped[str | None] = mapped_column(sa.String(128))
+    # 리콜 조인 축(EOS-97) — "이 회차로 만든 산출물"을 기계가 특정하는 키. 회차 개념이
+    # 없는 경로(pregenerate 단발 인제스트)는 NULL=미기록(날조 금지·EOS-55 좌석 동형).
+    run_id: Mapped[str | None] = mapped_column(sa.String(64))
+
     # ── 인덱스 (§10.1 CREATE INDEX) ──
-    __table_args__ = (sa.Index("idx_generation_problem", "problem_id"),)
+    # idx_generation_run_id: 리콜은 회차 단위 선별이 주 질의라 인덱스를 둔다(EOS-97).
+    __table_args__ = (
+        sa.Index("idx_generation_problem", "problem_id"),
+        sa.Index("idx_generation_run_id", "run_id"),
+    )
 
     @classmethod
     def from_schema(cls, schema: SchemaGenerationLog) -> GenerationLog:

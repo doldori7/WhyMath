@@ -69,6 +69,7 @@ from whymath_backend.l3.solution_set import (
 )
 from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status_detail
 from whymath_backend.schema.enums import StepType
+from whymath_backend.schema.verification_capabilities import VerificationOutcome
 
 __all__ = [
     "VerifyStepReasonCode",
@@ -78,21 +79,12 @@ __all__ = [
 ]
 
 
-class VerifyStepState(str, Enum):
-    """풀이 한 단계 검증의 3상태 — §3.1 verify_step.
-
-    `str, Enum`이라 멤버가 문자열 값과 동등 비교된다(`schema/enums.py` 컨벤션 답습).
-    """
-
-    correct = "correct"
-    """대수 단계가 SymPy 심볼릭 동치로 *참* — 올바른 변형(evidence_weight 1.0)."""
-
-    incorrect = "incorrect"
-    """대수 단계가 *항등식 아님*으로 증명 — 동치 아닌 변형(0-아님 확정 또는 0-아닌 다항식·1.0)."""
-
-    unverifiable = "unverifiable"
-    """검증 불가 — 비대수 단계·판정 불가·파싱 불가·빈 입력(evidence_weight 0.5·정직 회피)."""
-
+# EOS-69: 3상태 어휘를 schema의 중립 enum과 **공유**한다(별칭 — 새 enum 정의 금지).
+# 어댑터가 자기 enum을 따로 두면 경계에서 매핑이 필요해지고, 그 매핑이 곧
+# "unverifiable을 incorrect로 접는" 상태 붕괴 지점이 된다(설계 규칙 3).
+# 이름은 유지한다 — 기존 호출부·테스트가 그대로 읽는다(동작 변경 0).
+VerifyStepState = VerificationOutcome
+"""풀이 한 단계 검증의 3상태 — `VerificationOutcome`의 별칭(§3.1 verify_step)."""
 
 # correct/incorrect는 결정론 검증이라 충분한 증거(가중치 1.0)·unverifiable은 *판정을 못 한*
 # 상태라 절반으로 할인(설계 §3.1) — 후속 PRM·다중풀이 집계가 이 가중치를 곱해 쓴다.
