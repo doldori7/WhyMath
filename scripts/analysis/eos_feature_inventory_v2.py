@@ -727,9 +727,13 @@ CATALOG: tuple[Spec, ...] = (
     _o("WM-O-901", "개인정보 삭제권·이동권·PEP·감사 writer", "Student", "Security", "P0",
        "R11·SEC-09 — me 라우터가 소비", "privacy.erasure", "privacy.export",
        "privacy.authorize", "privacy.audit", status="Production"),
-    _o("WM-O-902", "PII 보존기한 파기·대화 봉투 암호화 백필", "Admin", "Security", "P0",
+    _o("WM-O-902", "PII 보존기한 파기·대화·학생답안 봉투 암호화 백필", "Admin", "Security", "P0",
        "security_privacy.md 보존·파기 정본", "privacy.retention", "privacy.retention_purge_cli",
-       "privacy.dialogue_content_backfill"),
+       "privacy.dialogue_content_backfill",
+       # SEC-31: 학생 답안/풀이 3테이블(problem_attempt·answer_submission·
+       # student_solution_step) 봉투 암호화 백필 — dialogue_content_backfill과 동일 성격
+       # (평문→암호화 전환 ops CLI)이라 같은 좌석에 귀속한다.
+       "privacy.student_work_backfill"),
     _o("WM-O-903", "서비스 헬스 딥체크·프리플라이트·DB 도달성 진단·로그 스크러버", "Admin",
        "Operations", "P0", "OPS-01·SEC-05·SEC-11·OPS-72", "ops.service_health",
        "ops.live_preflight", "ops.dialogue_encryption_preflight", "ops.log_scrubber",
