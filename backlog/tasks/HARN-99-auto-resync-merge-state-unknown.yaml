@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: math
 layer: infra
-status: todo
+status: done
 priority: 1
 eos_priority: P2
 owner: claude
@@ -16,7 +16,8 @@ acceptance:
   - "② 해소 배선 — 실측 결과에 따라 스크립트를 고친다. 유력안: list로 후보를 좁힌 뒤(open + auto-merge 켜짐) **UNKNOWN인 것만 단건 조회로 재확인**하고, 그래도 UNKNOWN이면 짧게 재시도한다. 전건을 단건 조회하면 열린 PR 수만큼 API 호출이 늘어나므로 후보 축소가 선행이다. auto-merge 필터는 list 응답으로 이미 판정 가능하다(`autoMergeRequest`)."
   - "③ 변별력 — 미판정을 주입해 RED를 확인한다. 스텁 `gh`가 list에서는 UNKNOWN을, 단건 조회에서는 BEHIND를 돌려주도록 만들고 **update-branch 호출이 실제로 나는지**로 판정한다(현행 코드는 이 입력에서 호출 0건이므로 이 테스트가 지금 RED여야 한다 — 그 RED를 먼저 확인한 뒤 고친다). 기존 계약(UNKNOWN이 끝까지 UNKNOWN이면 건드리지 않고 출력에 남긴다)은 유지·동결한다."
   - "④ 호출 비용 기록 — 고친 뒤 1회 실행의 API 호출 수를 로그에 남긴다. 열린 PR이 17건인 현재 규모에서 단건 조회가 몇 회 추가되는지 실측치를 남겨야 HARN-87 ③(주기·비용 재판정)이 근거를 갖는다."
-artifacts: []
+artifacts:
+  - "a114fc59 (#1098)"
 paths:
   - ".github/scripts/pr_auto_resync.sh"
   - tests/infra/test_pr_auto_resync.py

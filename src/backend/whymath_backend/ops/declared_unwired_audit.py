@@ -1065,6 +1065,21 @@ _MANIFEST: dict[str, dict[str, str]] = {
         ),
         # 운영 집계 배치 — COLLAB-03(done)이 신설한 일별 학습지표 롤업 실행기
         "harness.learning_metrics_rollup_cli": _OPERATIONS_BATCH,
+        # OPS-56(2026-09-11): 주간 KPI 6종 집계 cron — `ci_executed_modules()`가 `.github/
+        # workflows/ci.yml`만 스캔하는데(함수 docstring 참조), 이 모듈은 **별도** 워크플로
+        # `.github/workflows/weekly-metrics.yml`이 `python -m whymath_backend.ops.
+        # weekly_metrics_report`로 실행한다 — 탐지기의 스캔 범위 밖일 뿐 실제 미배선이
+        # 아니다(harness.learning_metrics_rollup_cli의 실 배치 실행과 달리 이쪽은 실제로
+        # 매주 스케줄 발화가 있다). 그 별도 워크플로의 배선 실재성(cron 값·fail-open 아님·
+        # 최소 경보)은 tests/infra/test_weekly_metrics_cron_wiring.py가 결함 주입 8종으로
+        # 상시 검증한다 — "안 도는 코드"가 아니라 "이 축이 보지 않는 워크플로 파일에서 도는
+        # 코드"다.
+        "ops.weekly_metrics_report": (
+            "by-design:주간 KPI 6종 집계 cron(OPS-56) — ci.yml이 아니라 전용 workflow "
+            "weekly-metrics.yml이 스케줄 실행한다(ci_executed_modules()의 스캔 범위가 "
+            "ci.yml 한정이라 이 축에서는 미도달로 보인다). 실 배선·fail-open 아님은 "
+            "tests/infra/test_weekly_metrics_cron_wiring.py가 별도로 동결"
+        ),
         # 라이브 의존 — CI에 키·GPU·실 PG가 없어 원리적으로 못 돈다
         "ops.cost_probe": _LIVE_DEPENDENT,
         "ops.cost_report": _LIVE_DEPENDENT,

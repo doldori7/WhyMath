@@ -95,6 +95,7 @@ from whymath_backend.db.models.formula_node import (
     FormulaNode,
 )
 from whymath_backend.db.models.hint_usage import HintUsage
+from whymath_backend.db.models.job_ownership import JobOwnership
 from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 from whymath_backend.db.models.misconception_crosslink import MisconceptionCrosslink
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
@@ -309,4 +310,6 @@ __all__ = [
     # CUR-07: AchievementLevelUnit (단원 단위 성취수준 등급 커버리지·자연키(school_level,subject,
     # unit)·FK 없음 — 개별 성취기준 연결은 실측 근거 부족으로 범위 밖)
     "AchievementLevelUnit",
+    # SEC-27: JobOwnership (비동기 QUALITY 작업 소유권·job_id(String) PK = Celery 태스크 id)
+    "JobOwnership",
 ]

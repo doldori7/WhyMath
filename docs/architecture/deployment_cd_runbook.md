@@ -162,7 +162,11 @@ try {
   $r = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:18080/health/ready"
   "ready HTTP $($r.StatusCode)"
 } catch {
-  "ready HTTP $($_.Exception.Response.StatusCode.value__) - 실패(503 = DB 미도달)"
+  if ($_.Exception.Response) {
+    "ready HTTP $($_.Exception.Response.StatusCode.value__) - 실패(503 = DB 미도달)"
+  } else {
+    "ready 연결 실패(DNS·TLS·연결거부 등 전송 계층) - $($_.Exception.Message)"
+  }
 }
 ```
 

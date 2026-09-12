@@ -198,7 +198,13 @@ jobs:
           # 22분+)에 붙어 있어 무거운 3축을 얹으면 타임아웃 리스크가 실재한다.
           # 코퍼스 자체의 *상시* 게이트(표기 커버리지)는 별개로 위 be 필터가 담당한다 —
           # 두 축은 대체재가 아니라 서로 다른 게이트다.
-          if printf '%s\n' "$files" | grep -qE '^(data/corpus/|\.github/workflows/ci\.yml$)'; then
+          #
+          # ARCH-23: 검사기 소스(harness/·provenance_audit.py·l3/equivalent/)만 바뀌고
+          # data/corpus/는 무변경인 PR에서는 이 플래그가 안 켜져 qa_pipeline 게이트가 한
+          # 번도 안 돈다 — "검사기가 바뀌어도 안 돌던 구멍"(같은 코퍼스에 다른 판정 로직을
+          # 적용하는 변경이 게이트를 건너뛴다). 세 경로를 추가해 검사기 변경도 이 플래그를
+          # 깨우게 한다.
+          if printf '%s\n' "$files" | grep -qE '^(data/corpus/|src/backend/whymath_backend/harness/|src/backend/whymath_backend/ops/provenance_audit\.py$|src/backend/whymath_backend/l3/equivalent/|\.github/workflows/ci\.yml$)'; then
             cp=true
           fi
           # PB-13: 결정론 저작 도구(스켈레톤 생성기·적재 배치)와 그 테스트를 건드리면
@@ -292,24 +298,17 @@ jobs:
       # corpus 플래그 경유). harness/의 기존 검사 자산 9종(corpus_audit·수식동치·개념그래프·
       # 오개념crosswalk·코치프로즈누설·저작권·결함주입강등전·금칙어PII(ARCH-24)·
       # 학생결함신고수집(RPT-01) + wilson 경계)을 조립해 단일 JSON 리포트 + exit 0/1 게이트를
-      # 낸다. 축 9(defect_report_intake)는 DB를 읽는데 이 잡엔 Postgres 서비스가 없어 상시
-      # error로 보고되지만, 이 스텝은 continue-on-error: true라 CI를 막지 않는다.
+      # 낸다. 축 9(defect_report_intake)는 DB를 읽는데 이 잡엔 Postgres 서비스가 없어 이
+      # 축만 상시 no_snapshot(검사 미수행 — 집계 제외, ARCH-23)으로 보고된다.
       # 이 스텝만 레포 루트로 working-directory를
       # 오버라이드한다 — 잡 기본값(defaults.run.working-directory: src/data-pipeline)에서는
       # `-m whymath_backend.harness.qa_pipeline`이 backend 패키지를 못 찾는다.
+      # ARCH-23: S3-28 판정 반영(equivalence_canonicalize 축의 사전 존재 결함/오탐 해소) +
+      # 축 9의 환경 판정 분리(DB 도달 불가 → no_snapshot, 위 참조) 완료로 continue-on-error를
+      # 제거한다 — 이제 이 게이트는 실제로 PR을 막는 강제 게이트다.
       - name: 게이트 — QA 파이프라인 오케스트레이터 (코퍼스 변경 시만·qa_pipeline)
         if: needs.changes.outputs.corpus == 'true'
         working-directory: .
-        # continue-on-error(임시): 첫 실행에서 equivalence_canonicalize 축이 코퍼스 전수(2647건
-        # 중 130건)에서 사전 존재 결함/오탐을 실측 발견했다(condition_dsl_violation이 확률·통계
-        # 미니 DSL을 검증 대상으로 상정하지 않았을 가능성 — S3-28로 등재·Kiki 판정 대기). 이
-        # 축이 해소되기 전까지 이 신규 게이트를 무음 실패시키지 않으면서도(리포트는 그대로
-        # 남는다) 다른 PR의 CI를 막지 않는다. S3-28 완료 시 이 줄을 제거해 강제 게이트로 전환.
-        # OPS-29 강제 상태 선언(tests/infra/test_ci_enforcement_declaration_contract.py 계약)
-        # — 이 줄의 continue-on-error 실제 제거는 ARCH-23이 소유한다(S3-28은 ARCH-23의 선행
-        # 의존일 뿐 직접 소유자가 아니다):
-        # pending-task:ARCH-23-qa-gate-enforcement
-        continue-on-error: true
         run: python -m whymath_backend.harness.qa_pipeline --json qa_report.json
 
   # ─────────────────────────────────────────────────────────────────
