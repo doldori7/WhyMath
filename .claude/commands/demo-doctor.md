@@ -100,18 +100,33 @@ $Docker = Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue
 "DOCKER_DESKTOP_RUNNING=" + [bool]$Docker
 if ($IsAdmin -and -not $Docker) {
   net stop winnat
-  "STOP_EXIT=$LASTEXITCODE"
-  netsh int ipv4 add excludedportrange protocol=tcp startport=5433 numberofports=1
-  "RESERVE_EXIT=$LASTEXITCODE"
+  $StopExit = $LASTEXITCODE
+  "STOP_EXIT=$StopExit"
+  netsh int ipv4 add excludedportrange protocol=tcp startport=5433 numberofports=1 store=persistent
+  $ReserveExit = $LASTEXITCODE
+  "RESERVE_PERSISTENT_EXIT=$ReserveExit"
+  if ($ReserveExit -ne 0) {
+    netsh int ipv4 add excludedportrange protocol=tcp startport=5433 numberofports=1
+    "RESERVE_ACTIVE_FALLBACK_EXIT=$LASTEXITCODE"
+  }
   net start winnat
   "START_EXIT=$LASTEXITCODE"
   netsh interface ipv4 show excludedportrange protocol=tcp
 }
 ```
 
-**자가검증**: `IS_ADMIN=True` · `DOCKER_DESKTOP_RUNNING=False` · 세 `*_EXIT`가 0 · 마지막 표에
-`5433  5433  *`(관리 지정)이 보이고 그 포트를 삼키던 구간이 사라짐. 조건이 안 맞으면 블록은
-**아무것도 하지 않는다**(의도) — 권한 경고를 산문으로만 두면 일반 창에 붙여넣어진다(실측).
+**자가검증**: `IS_ADMIN=True` · `DOCKER_DESKTOP_RUNNING=False` · `STOP_EXIT`·`START_EXIT`가 0 ·
+`RESERVE_PERSISTENT_EXIT=0` · 마지막 표에 `5433  5433  *`(관리 지정)이 보이고 그 포트를 삼키던
+구간이 사라짐. 조건이 안 맞으면 블록은 **아무것도 하지 않는다**(의도) — 권한 경고를 산문으로만
+두면 일반 창에 붙여넣어진다(실측).
+
+**`store=persistent`가 핵심이다 (2026-09-12 보강)**: 이 절의 존재 이유가 "재부팅·WSL 재시작마다
+재발한다"를 끝내는 것인데, `store` 없이 등록한 제외는 **active 저장소에만 들어가 재부팅에서
+사라진다** — 그러면 이 절차 자체가 아래 「주의」가 경계하는 *운*과 같아진다. 이 netsh 빌드가
+`store=persistent`를 받는지는 **미측정**이므로 블록이 거부(비0 종료)를 감지해 인자 없는 형태로
+폴백한다. `RESERVE_ACTIVE_FALLBACK_EXIT` 줄이 출력됐다면 **영구 조치가 아니라 임시 조치**이며,
+다음 재부팅 뒤 `netsh interface ipv4 show excludedportrange protocol=tcp`로 `5433`이 남아 있는지
+반드시 재확인한다.
 
 Docker Desktop 재실행 후 `docker restart whymath-pg` → 위 진단 CLI를 다시 돌려 `exit 0` 확인.
 
