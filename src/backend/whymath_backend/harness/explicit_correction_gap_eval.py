@@ -60,6 +60,7 @@ from whymath_backend.l4.misconception.models import Misconception
 
 __all__ = [
     "CORRECTION_PHRASES",
+    "FOREIGN_CORRECTION_PREFIXES",
     "CorrectionProbe",
     "GapReport",
     "ProbeResult",
@@ -67,6 +68,7 @@ __all__ = [
     "evaluate",
     "format_report",
     "main",
+    "measure_over_suppression",
 ]
 
 _EXIT_OK = 0
@@ -160,6 +162,62 @@ def _evaluate_one(probe: CorrectionProbe) -> ProbeResult:
     return ProbeResult(probe.kebab_id, None, reaches_when_refuted=False)
 
 
+#: 앞절이 **이 오개념과 무관한 다른 것**을 정정하는 접두 — 오억제 측정용 (MISC-28).
+#:
+#: 세 연결어미(`-지만`·`-어서`·`-는데`)를 밟되 **정정 어휘는 `잘못` 하나로 고정**한다.
+#: 어휘를 함께 바꾸면 연결어미의 효과와 어휘의 효과가 섞여 측정이 무의미해진다 — 1차
+#: 측정에서 실제로 그랬다(`-는데` 접두만 정정 어휘가 없어 오억제 0%가 나왔고, 그것을
+#: "연결어미 차이"로 읽을 뻔했다). 마지막 항목은 **대조군**이다: 정정 어휘가 없으면
+#: 억제가 일어나지 않아야 한다. 없으면 "무엇이든 억제"라는 과잉 억제와 구별되지 않는다.
+FOREIGN_CORRECTION_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("-지만", "부호를 잘못 옮겨 적었지만 "),
+    ("-어서", "부호를 잘못 옮겨 적어서 "),
+    ("-는데", "부호를 잘못 옮겨 적었는데 "),
+    ("[대조군] 정정어휘 없음", "부호를 다시 확인했는데 "),
+)
+
+#: 대조군 접두의 라벨 — 이 항목만 "억제되지 않아야 정상"이다.
+_CONTROL_PREFIX_LABEL = "[대조군] 정정어휘 없음"
+
+
+@dataclass(frozen=True)
+class OverSuppressionResult:
+    """항목 1개 × 접두 1개의 오억제 측정 결과."""
+
+    kebab_id: str
+    prefix_label: str
+    suppressed: bool
+
+
+def measure_over_suppression() -> tuple[OverSuppressionResult, ...]:
+    """**반대 방향**을 잰다 — 진단돼야 하는데 억제되는가 (MISC-28 acceptance ④).
+
+    이 모듈의 원래 축(사각)은 "정정했는데 진단이 나가는가"만 본다. 그 축만 보면 **과잉
+    억제가 개선으로 보인다** — 무엇이든 억제하면 사각은 0%가 되기 때문이다. 그래서
+    반대 방향을 같은 화면에 낸다.
+
+    형태: `<다른 것을 정정하는 앞절> <연결어미> <이 오개념 주장>`. 정정 대상이 *다른
+    것*이므로 이 오개념은 **진단돼야 한다**. 억제되면 오억제다.
+
+    대조군(`_control_text`만)이 서빙 게이트에 도달하지 못하는 항목은 애초에 억제를 잴 수
+    없으므로 결과에서 빠진다 — 사각 축의 `unmeasurable`과 같은 이유다.
+    """
+    results: list[OverSuppressionResult] = []
+    for misconception in CATALOG:
+        base = _control_text(misconception)
+        if not _reaches_student(misconception.id, base):
+            continue  # 대조군 미발화 — 억제 여부를 물을 수 없다
+        for label, prefix in FOREIGN_CORRECTION_PREFIXES:
+            results.append(
+                OverSuppressionResult(
+                    kebab_id=misconception.id,
+                    prefix_label=label,
+                    suppressed=not _reaches_student(misconception.id, prefix + base),
+                )
+            )
+    return tuple(results)
+
+
 @dataclass(frozen=True)
 class GapReport:
     """전수 측정 결과 — 분모를 항상 함께 낸다."""
@@ -224,6 +282,22 @@ def format_report(report: GapReport) -> str:
         lines.append("  [측정 불가] 분모에서 제외 — 사유별:")
         for r in unmeasurable:
             lines.append(f"    · {r.kebab_id:<44} {r.unmeasurable_reason}")
+
+    # ── 반대 방향 (MISC-28) ───────────────────────────────────────────────
+    # 사각만 보면 **과잉 억제가 개선으로 보인다**. 무엇이든 억제하면 사각은 0%가 되기
+    # 때문이다. 그래서 같은 화면에 반대 방향을 낸다 — 한쪽만 보고 "해결됐다"고 적는 일이
+    # 없게. 이 표가 없던 동안 "사각 0%"는 그 자체로는 참이었지만 오억제 100%를 가렸다.
+    over = measure_over_suppression()
+    if over:
+        lines.append("")
+        lines.append("  [반대 방향] 오억제 — 다른 것을 정정했는데 이 오개념까지 억제되는가:")
+        for label, _prefix in FOREIGN_CORRECTION_PREFIXES:
+            rows = [r for r in over if r.prefix_label == label]
+            hit = sum(1 for r in rows if r.suppressed)
+            note = " ← 억제되면 안 된다" if label == _CONTROL_PREFIX_LABEL else ""
+            lines.append(
+                f"    · {label:<22} {hit:>3}/{len(rows):<3} ({hit / len(rows):6.1%}){note}"
+            )
     lines.append("=" * 70)
     return "\n".join(lines)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from whymath_backend.harness import explicit_correction_gap_eval as gap_eval
 from whymath_backend.l4.misconception import (
     MisconceptionMatch,
     correct_form_present,
@@ -1137,3 +1138,60 @@ class TestExplicitCorrectionNearSignals:
         assert "root-loss-by-dividing" not in [
             m.misconception.id for m in diagnose("양변을 x로 나누면 x=2인 것은 아니다")
         ]
+
+
+class TestOverSuppressionIsMeasured:
+    """MISC-28 — 반대 방향(오억제)이 측정되고 보고서에 **함께** 나온다.
+
+    왜 필요한가: 사각 축만 보면 **과잉 억제가 개선으로 보인다**. 무엇이든 억제하면 사각은
+    0%가 되기 때문이다. 실제로 그 상태였다 — `explicit_correction_gap_eval`이 "사각 0%"를
+    내는 동안 오억제는 **100%**였고, 그 사실이 어느 화면에도 없었다.
+
+    측정 설계의 핵심은 **변수 통제**다. 1차 측정은 연결어미마다 정정 어휘를 다르게 써서
+    `-는데`만 오억제 0%가 나왔고, 그것을 "연결어미 차이"로 읽을 뻔했다 — 실제 원인은 그
+    접두에만 정정 어휘가 없었던 것이다. 그래서 어휘를 `잘못` 하나로 고정하고 연결어미만
+    바꾼다. 대조군(정정 어휘 없음)이 그 통제가 실제로 걸렸는지 보여 준다.
+    """
+
+    def test_every_connective_prefix_holds_the_correction_word_constant(self) -> None:
+        """세_연결어미_접두가_같은_정정_어휘를_쓴다 — 변수 통제가 코드에 고정돼 있다
+
+        이 단언이 없으면 누군가 접두 하나를 "자연스럽게" 고치다가 어휘를 바꿔 버리고,
+        그러면 측정이 다시 두 변수를 섞는다(1차 측정에서 실제로 일어난 일이다).
+        """
+        connective = [
+            prefix
+            for label, prefix in gap_eval.FOREIGN_CORRECTION_PREFIXES
+            if not label.startswith("[대조군]")
+        ]
+        assert len(connective) == 3, "연결어미 3종(-지만·-어서·-는데)을 전부 밟아야 한다"
+        assert all("잘못" in p for p in connective), "정정 어휘가 접두마다 다르면 변수가 섞인다"
+
+    def test_control_prefix_carries_no_correction_word(self) -> None:
+        """대조군_접두에는_정정_어휘가_없다 — 이것이 없으면 '무엇이든 억제'와 구별되지 않는다"""
+        control = [
+            prefix
+            for label, prefix in gap_eval.FOREIGN_CORRECTION_PREFIXES
+            if label.startswith("[대조군]")
+        ]
+        assert len(control) == 1
+        assert not any(w in control[0] for w in ("잘못", "틀리", "틀렸", "오답", "아니"))
+
+    def test_control_prefix_is_not_suppressed(self) -> None:
+        """[대조군] 정정_어휘가_없으면_억제되지_않는다
+
+        억제가 *정정 어휘* 때문임을 보인다. 대조군까지 억제되면 그것은 귀속 문제가 아니라
+        접두 문장 자체가 진단을 죽이는 것이고, 그러면 이 측정 전체가 무의미하다.
+        """
+        control = [
+            r for r in gap_eval.measure_over_suppression() if r.prefix_label.startswith("[대조군]")
+        ]
+        assert control, "대조군 측정이 0건 — 스캔 0건은 실패다"
+        assert not any(r.suppressed for r in control)
+
+    def test_report_shows_both_directions(self) -> None:
+        """보고서가_사각과_오억제를_한_화면에_낸다 — 한쪽만 보고 '해결됐다'고 적지 못하게"""
+        rendered = gap_eval.format_report(gap_eval.evaluate())
+        assert "사각" in rendered
+        assert "오억제" in rendered, "반대 방향이 빠지면 과잉 억제가 개선으로 보인다"
+        assert "억제되면 안 된다" in rendered, "대조군 행의 기대 방향이 화면에 없다"
