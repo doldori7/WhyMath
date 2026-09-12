@@ -143,6 +143,8 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "19149e92d368",  # SEC-33 ⑥: problem_attempt.ingested_at server_default(신규 행 좌석 보장)
     "f2662166a661",  # SEC-27: job_ownership — 비동기 QUALITY 작업 소유권(job_id→user_id)
     "4c6dfb1527a9",  # SEC-29: privacy_audit.resource_type/resource_id/action — 콘텐츠CUD 감사
+    "3f5c83f51246",  # SEC-31: 학생 답안/풀이 3테이블 봉투 암호화(problem_attempt·
+    # answer_submission·student_solution_step 8쌍 16컬럼 + expression nullable 완화)
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

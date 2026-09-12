@@ -63,6 +63,10 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser, RequireContentAdmin
+from whymath_backend.api._crypto import (
+    encrypt_dialogue_content,
+    require_student_work_cipher,
+)
 from whymath_backend.api._growth_evidence_state import (
     get_growth_evidence_counters,
     get_growth_evidence_exposure_counters,
@@ -806,13 +810,25 @@ async def submit_attempt(
                 "없습니다. 기기 시계를 확인하거나 값을 생략하십시오(생략 시 NULL=미측정)."
             ),
         )
+    # SEC-31: 학생 답안 3축(student_answer·handwriting_uri·ocr_result) 봉투 암호화 — cipher
+    # 있으면 평문 컬럼은 NULL·암호화 컬럼에 저장(dialogue_turn._build_dialogue_turn 패턴 동형·
+    # 순수 seam인 ProblemAttempt() 생성자엔 cipher를 넣지 않고 이 handler 층에서 결정한다).
+    # `AttemptSubmitRequest`에 handwriting_uri·ocr_result가 아직 없어(v1 계약) 그 두 축은
+    # 현재 항상 None이지만, 세 축을 *함께* 암호화 경로에 태워야 후속 writer가 그 필드를 채우기
+    # 시작해도 곧바로 암호화 대상이 된다(부분 배선 방지 — EOS-32 §4-6 판정 근거와 동형).
+    student_work_cipher = require_student_work_cipher(get_settings())
+    student_answer_plain, student_answer_encrypted, student_answer_nonce = encrypt_dialogue_content(
+        student_work_cipher, body.student_answer
+    )
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
         user_id=user.user_id,
         problem_id=body.problem_id,
         session_id=body.session_id,
         is_correct=body.is_correct,
-        student_answer=body.student_answer,
+        student_answer=student_answer_plain,
+        student_answer_encrypted=student_answer_encrypted,
+        student_answer_nonce=student_answer_nonce,
         duration_seconds=body.duration_seconds,
         confidence_self_reported=body.confidence_self_reported,
         # PED-37: 클라 신고 발생 시각을 *그대로* 적재. 미신고면 None이 그대로 들어가 NULL로 남는다
